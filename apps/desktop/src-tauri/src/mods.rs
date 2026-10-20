@@ -10,7 +10,7 @@ use std::path::Path;
 use std::sync::Mutex as SyncMutex;
 use std::time::{Duration, Instant};
 
-use mod_engine::installer::{self, Installer, Paths, Progress, Target};
+use mod_engine::installer::{self, Installer, Paths, Progress, Target, Update};
 use mod_engine::launch::{self, LaunchTarget, PendingOp, ProcessWatcher};
 use mod_engine::state::{InstalledMod, State as ModState};
 use serde::Serialize;
@@ -239,6 +239,26 @@ pub async fn installed_mods(
         .await
         .list(&game_key(app_id))
         .map_err(|e| e.to_string())
+}
+
+/// Mises à jour disponibles pour les mods du jeu. Rien n'est installé :
+/// l'utilisateur choisit (SPEC §3.5). Mettre à jour = `install_mod`.
+#[tauri::command]
+pub async fn check_updates(
+    library: State<'_, Library>,
+    catalog: State<'_, Catalog>,
+    mods: State<'_, Mods>,
+    app_id: u32,
+) -> Result<Vec<Update>, String> {
+    let game = library.game(app_id).ok_or(UNKNOWN_GAME)?;
+    // La base n'est pas gardée pendant les appels réseau.
+    let installed = mods
+        .state
+        .lock()
+        .await
+        .list(&game_key(app_id))
+        .map_err(|e| e.to_string())?;
+    Ok(installer::available_updates(&catalog.thunderstore, &game.community, &installed).await)
 }
 
 #[derive(Clone, Serialize)]

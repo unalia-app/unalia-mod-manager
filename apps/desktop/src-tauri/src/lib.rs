@@ -398,6 +398,7 @@ pub fn run() {
             mods::uninstall_mod,
             mods::restore_mod,
             mods::cancel_pending,
+            mods::check_updates,
             mods::game_status,
             mods::play_game,
         ])

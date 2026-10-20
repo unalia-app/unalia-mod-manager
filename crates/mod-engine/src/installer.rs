@@ -166,7 +166,13 @@ impl<S: ModSource> Installer<'_, S> {
             .into_iter()
             .map(|d| {
                 let mut record = d.record;
-                record.explicit = record.id == mod_id || d.previous.is_some_and(|p| p.explicit);
+                // Un mod déjà là garde son statut (une dépendance mise à jour
+                // reste une dépendance) ; un nouveau est volontaire s'il est
+                // celui que l'utilisateur a demandé.
+                record.explicit = match &d.previous {
+                    Some(previous) => previous.explicit,
+                    None => record.id == mod_id,
+                };
                 record
             })
             .collect();
@@ -350,6 +356,43 @@ fn list_files(dir: &Path) -> std::io::Result<Vec<String>> {
     walk(dir, dir, &mut out)?;
     out.sort();
     Ok(out)
+}
+
+/// Mise à jour disponible pour un mod installé.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Update {
+    pub mod_id: String,
+    pub current: String,
+    pub latest: String,
+}
+
+/// Mises à jour disponibles parmi `installed`. Rien n'est installé : on
+/// prévient, l'utilisateur valide (SPEC §3.5). Un mod que la source ne
+/// trouve plus, ou une source injoignable, n'empêche pas de vérifier les
+/// autres.
+pub async fn available_updates<S: ModSource>(
+    source: &S,
+    community: &str,
+    installed: &[InstalledMod],
+) -> Vec<Update> {
+    let mut updates = Vec::new();
+    for m in installed {
+        let Ok(latest) = source.get(community, &m.id).await else {
+            continue;
+        };
+        if let Some(version) = latest.latest()
+            && resolver::compare_versions(&version.number, &m.version)
+                == std::cmp::Ordering::Greater
+        {
+            updates.push(Update {
+                mod_id: m.id.clone(),
+                current: m.version.clone(),
+                latest: version.number.clone(),
+            });
+        }
+    }
+    updates
 }
 
 /// Active ou désactive un mod : ses fichiers quittent le jeu (ou y

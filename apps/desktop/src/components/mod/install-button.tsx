@@ -1,12 +1,12 @@
 "use client";
 
 import { Button, cn } from "@modalia/ui";
-import { Check, Clock, Download, RotateCw } from "lucide-react";
+import { ArrowUp, Check, Clock, Download, RotateCw } from "lucide-react";
 
 import { toast } from "@/components/toaster";
 import { type InstallProgress, cancelPending } from "@/lib/engine";
 import { usePendingOp } from "@/lib/game-status";
-import { clearError, install, overallProgress, useActiveInstall, useInstalled } from "@/lib/installs";
+import { clearError, install, overallProgress, useActiveInstall, useInstalled, useModUpdate } from "@/lib/installs";
 
 /**
  * Un clic : le bouton devient lui-même la barre de progression
@@ -26,6 +26,7 @@ export function InstallButton({
 	const installed = useInstalled(appId)?.find((m) => m.id === modId);
 	const active = useActiveInstall(appId, modId);
 	const pending = usePendingOp(appId, modId);
+	const update = useModUpdate(appId, modId);
 
 	// Le résultat (réussite ou erreur) arrive par le store, que le bouton suit.
 	const start = () => void install(appId, modId);
@@ -74,6 +75,18 @@ export function InstallButton({
 						Cancel
 					</button>
 				</span>
+			</div>
+		);
+	}
+
+	// Pas de mise à jour automatique (SPEC §3.5) : on propose, on n'impose pas.
+	if (installed && update) {
+		return (
+			<div className="flex flex-col items-end gap-2">
+				<Button size="lg" leftIcon={<ArrowUp className="size-4" />} onClick={start}>
+					{`Update to v${update.latest}`}
+				</Button>
+				<span className="text-[11px] text-fg-subtle">You have v{update.current}</span>
 			</div>
 		);
 	}
@@ -151,17 +164,24 @@ export function InstallStateBadge({ appId, modId, className }: { appId: number; 
 	const installed = useInstalled(appId)?.some((m) => m.id === modId);
 	const active = useActiveInstall(appId, modId);
 	const pending = usePendingOp(appId, modId)?.type === "install";
+	const update = useModUpdate(appId, modId);
 	const running = active?.status === "queued" || active?.status === "running";
 	if (!installed && !running && !pending) return null;
+	const accent = running || pending || Boolean(update);
 	return (
 		<span
 			className={cn(
 				"inline-flex items-center gap-1 rounded-full border px-2 py-0.5 font-tight text-[11px] font-semibold tracking-wide backdrop-blur-md",
-				running || pending ? "border-accent/30 bg-black/50 text-accent" : "border-success/30 bg-black/50 text-success",
+				accent ? "border-accent/30 bg-black/50 text-accent" : "border-success/30 bg-black/50 text-success",
 				className,
 			)}
 		>
-			{pending ? "Queued" : running ? "Installing…" : (
+			{pending ? "Queued" : running ? "Installing…" : update ? (
+				<>
+					<ArrowUp className="size-3" />
+					Update
+				</>
+			) : (
 				<>
 					<Check className="size-3" />
 					Installed

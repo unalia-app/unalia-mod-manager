@@ -3,6 +3,8 @@ import { useEffect, useSyncExternalStore } from "react";
 import {
 	type InstallProgress,
 	type InstalledMod,
+	type ModUpdate,
+	checkUpdates,
 	installMod,
 	installedMods,
 	onInstallProgress,
@@ -26,13 +28,19 @@ export type ActiveInstall =
 type Snapshot = {
 	installed: Map<number, InstalledMod[]>;
 	active: Map<string, ActiveInstall>;
+	/** Mises à jour disponibles par jeu (vérifiées une fois par session). */
+	updates: Map<number, ModUpdate[]>;
 };
 
-let snapshot: Snapshot = { installed: new Map(), active: new Map() };
+let snapshot: Snapshot = { installed: new Map(), active: new Map(), updates: new Map() };
 const listeners = new Set<() => void>();
 
 function update(change: (draft: Snapshot) => void) {
-	const draft = { installed: new Map(snapshot.installed), active: new Map(snapshot.active) };
+	const draft = {
+		installed: new Map(snapshot.installed),
+		active: new Map(snapshot.active),
+		updates: new Map(snapshot.updates),
+	};
 	change(draft);
 	snapshot = draft;
 	for (const listener of listeners) listener();
@@ -78,7 +86,12 @@ export function install(appId: number, modId: string): Promise<void> {
 		(outcome) =>
 			update((s) => {
 				// Mis en attente : la file du jeu (game-status) prend le relais.
-				if (outcome.status === "done") s.installed.set(appId, outcome.value);
+				if (outcome.status === "done") {
+					s.installed.set(appId, outcome.value);
+					// Installé à sa dernière version : plus de mise à jour en attente.
+					const updates = s.updates.get(appId);
+					if (updates) s.updates.set(appId, updates.filter((u) => u.modId !== modId));
+				}
 				s.active.delete(k);
 			}),
 		(error: unknown) =>
@@ -153,4 +166,34 @@ export function overallProgress(progress: InstallProgress): number {
 		case "installing":
 			return (progress.index + 0.92) / progress.total;
 	}
+}
+
+const checking = new Set<number>();
+
+/** Mises à jour disponibles pour le jeu (`undefined` tant que la vérification tourne). */
+export function useUpdates(appId: number): ModUpdate[] | undefined {
+	const list = useSyncExternalStore(subscribe, () => snapshot.updates.get(appId), () => undefined);
+	useEffect(() => {
+		if (snapshot.updates.has(appId) || checking.has(appId)) return;
+		checking.add(appId);
+		void checkUpdates(appId)
+			.then(
+				(updates) =>
+					update((s) => {
+						s.updates.set(appId, updates);
+					}),
+				() => {},
+			)
+			.finally(() => checking.delete(appId));
+	}, [appId]);
+	return list;
+}
+
+export function useModUpdate(appId: number, modId: string): ModUpdate | undefined {
+	return useUpdates(appId)?.find((u) => u.modId === modId);
+}
+
+/** Met à jour plusieurs mods, l'un après l'autre (le moteur les traite en file). */
+export function updateAll(appId: number, updates: ModUpdate[]) {
+	for (const u of updates) void install(appId, u.modId);
 }

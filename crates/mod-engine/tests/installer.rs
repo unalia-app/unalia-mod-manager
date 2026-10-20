@@ -384,3 +384,82 @@ async fn state_survives_a_restart() {
             .any(|f| f.ends_with("Knight.dll"))
     );
 }
+
+#[tokio::test]
+async fn updates_are_detected_then_applied_in_one_click() {
+    let mut w = World::new().await;
+    w.publish_knight().await;
+    w.install(KNIGHT).await.0.unwrap();
+    let game = "steam:1030300";
+    let old_dll = plugin(&w.game, KNIGHT, "Knight.dll");
+    assert!(old_dll.is_file());
+
+    // Rien de neuf : aucune mise à jour.
+    let installed = w.state.list(game).unwrap();
+    assert!(
+        installer::available_updates(&w.source, COMMUNITY, &installed)
+            .await
+            .is_empty()
+    );
+
+    // L'auteur publie la 0.7.0, avec un fichier renommé.
+    w.server.reset();
+    w.publish(LOADER, "1.0.3", &[], loader_zip()).await;
+    w.publish(
+        PREPATCHER,
+        "1.4.0",
+        &["silksong_modding-BepInExPack_Silksong-1.0.0"],
+        mod_zip("Prepatcher"),
+    )
+    .await;
+    w.publish(
+        KNIGHT,
+        "0.7.0",
+        &[
+            "silksong_modding-BepInExPack_Silksong-1.0.3",
+            "silksong_modding-SilksongPrepatcher-1.3.0",
+        ],
+        mod_zip("KnightV7"),
+    )
+    .await;
+
+    let updates = installer::available_updates(&w.source, COMMUNITY, &installed).await;
+    assert_eq!(
+        updates,
+        [installer::Update {
+            mod_id: KNIGHT.into(),
+            current: "0.6.7".into(),
+            latest: "0.7.0".into(),
+        }]
+    );
+
+    // Mettre à jour = installer à nouveau : l'ancienne version quitte le jeu.
+    let (result, _) = w.install(KNIGHT).await;
+    let after = result.unwrap();
+    let knight = after.iter().find(|m| m.id == KNIGHT).unwrap();
+    assert_eq!(knight.version, "0.7.0");
+    assert!(knight.explicit);
+    assert!(
+        !old_dll.exists(),
+        "les fichiers de l'ancienne version doivent avoir été retirés"
+    );
+    assert!(plugin(&w.game, KNIGHT, "KnightV7.dll").is_file());
+    assert_eq!(after.len(), 3, "les dépendances à jour ne bougent pas");
+}
+
+#[tokio::test]
+async fn updating_a_dependency_keeps_it_a_dependency() {
+    let mut w = World::new().await;
+    w.publish_knight().await;
+    w.install(KNIGHT).await.0.unwrap();
+
+    w.server.reset();
+    w.publish(LOADER, "1.0.3", &[], loader_zip()).await;
+    w.publish(PREPATCHER, "1.5.0", &[], mod_zip("PrepatcherV15"))
+        .await;
+
+    w.install(PREPATCHER).await.0.unwrap();
+    let prepatcher = w.state.get("steam:1030300", PREPATCHER).unwrap().unwrap();
+    assert_eq!(prepatcher.version, "1.5.0");
+    assert!(!prepatcher.explicit);
+}

@@ -1,7 +1,7 @@
 "use client";
 
-import { Badge, Button, Skeleton, Switch, cn } from "@modalia/ui";
-import { Layers, Package, Trash2 } from "lucide-react";
+import { Badge, Button, Skeleton, Spinner, Switch, cn } from "@modalia/ui";
+import { ArrowUp, Layers, Package, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
@@ -10,11 +10,22 @@ import { toast } from "@/components/toaster";
 import { type InstalledMod, cancelPending, splitError } from "@/lib/engine";
 import { usePendingOp } from "@/lib/game-status";
 import { modHref } from "@/lib/games-store";
-import { remove, restore, toggle, useInstalled } from "@/lib/installs";
+import {
+	install,
+	remove,
+	restore,
+	toggle,
+	updateAll,
+	useActiveInstall,
+	useInstalled,
+	useModUpdate,
+	useUpdates,
+} from "@/lib/installs";
 
 /** Onglet Mes mods (SPEC §3.5) : activer, désactiver, retirer avec « Undo ». */
 export function MyMods({ appId, onDiscover }: { appId: number; onDiscover: () => void }) {
 	const mods = useInstalled(appId);
+	const updates = useUpdates(appId) ?? [];
 
 	if (mods === undefined) {
 		return (
@@ -48,9 +59,22 @@ export function MyMods({ appId, onDiscover }: { appId: number; onDiscover: () =>
 
 	return (
 		<div className="max-w-3xl">
-			<p className="mb-3 text-xs text-fg-subtle">
-				{active} active mod{active === 1 ? "" : "s"} · changes apply the next time you launch the game
-			</p>
+			<div className="mb-3 flex items-center justify-between gap-4">
+				<p className="text-xs text-fg-subtle">
+					{active} active mod{active === 1 ? "" : "s"} · changes apply the next time you launch the game
+				</p>
+				{updates.length > 0 && (
+					// Contour : « Play » reste la seule action principale de l'écran.
+					<Button
+						size="sm"
+						variant="outline"
+						leftIcon={<ArrowUp className="size-3.5" />}
+						onClick={() => updateAll(appId, updates)}
+					>
+						{`Update all (${updates.length})`}
+					</Button>
+				)}
+			</div>
 			<ul className="overflow-hidden rounded-xl border border-line bg-surface">
 				{mods.map((m, i) => (
 					<li key={m.id} className={cn(i > 0 && "border-t border-line")}>
@@ -70,6 +94,9 @@ function ModRow({ mod: m, appId }: { mod: InstalledMod; appId: number }) {
 	const pending = usePendingOp(appId, m.id);
 	const removing = pending?.type === "uninstall";
 	const enabled = pending?.type === "setEnabled" ? pending.enabled : m.enabled;
+	const update = useModUpdate(appId, m.id);
+	const active = useActiveInstall(appId, m.id);
+	const updating = active?.status === "queued" || active?.status === "running";
 
 	const fail = (error: unknown) => {
 		const { message, details } = splitError(error);
@@ -118,6 +145,7 @@ function ModRow({ mod: m, appId }: { mod: InstalledMod; appId: number }) {
 						{loader && <Badge tone="accent">Loader</Badge>}
 						{!loader && !m.explicit && <Badge>Dependency</Badge>}
 						{pending && <Badge tone="accent">Pending</Badge>}
+						{update && !pending && <Badge tone="accent">v{update.latest} available</Badge>}
 					</span>
 					<span className="block truncate text-xs text-fg-subtle">
 						by {m.author} · v{m.version}
@@ -125,6 +153,19 @@ function ModRow({ mod: m, appId }: { mod: InstalledMod; appId: number }) {
 				</span>
 			</button>
 
+			{updating ? (
+				<span className="flex items-center gap-1.5 text-[11px] text-accent">
+					<Spinner className="size-3" />
+					Updating…
+				</span>
+			) : (
+				update &&
+				!pending && (
+					<Button size="sm" variant="outline" onClick={() => void install(appId, m.id)}>
+						Update
+					</Button>
+				)
+			)}
 			{removing ? (
 				<span className="text-[11px] text-fg-subtle">Removed when you close the game</span>
 			) : loader ? (

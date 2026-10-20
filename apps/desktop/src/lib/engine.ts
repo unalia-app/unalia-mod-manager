@@ -211,6 +211,13 @@ export function restoreMod(appId: number, modId: string): Promise<InstalledMod> 
 	return invoke("restore_mod", { appId, modId });
 }
 
+export type ModUpdate = { modId: string; current: string; latest: string };
+
+export function checkUpdates(appId: number): Promise<ModUpdate[]> {
+	if (!isTauri()) return Promise.resolve([]);
+	return invoke("check_updates", { appId });
+}
+
 export function onInstallProgress(handler: (event: InstallEvent) => void): Promise<UnlistenFn> {
 	if (!isTauri()) return Promise.resolve(() => {});
 	return listen<InstallEvent>("install-progress", (e) => handler(e.payload));
