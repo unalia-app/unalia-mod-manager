@@ -84,6 +84,7 @@ Avant de créer un composant, vérifier qu'il n'existe pas dans Unalia (`compone
 
 - Pas de barre de titre système sous macOS (`titleBarStyle: Overlay`). L'en-tête (`AppHeader`) est la zone de déplacement (`data-tauri-drag-region` sur l'élément lui-même, ses boutons restent cliquables). Il reste collé en haut, avec un fond flouté une fois la page défilée. Son contenu commence après les feux tricolores (`pl-22`).
 - Un élément `fixed` (barre flottante, menu) se rend dans `document.body` via `createPortal` : un ancêtre animé en `transform` (les entrées `animate-fade-up`) devient sinon sa référence, et l'élément sort de l'écran.
+- Cartes de mods : petit bouton « Install » toujours visible, sans mode sélection ni changement de mode. Le moteur installe dépendances et loader tout seul.
 - `overflow-clip` plutôt que `overflow-hidden` sur les conteneurs d'écran : `hidden` crée un conteneur de défilement et casse `position: sticky`.
 - Un texte tronqué (`truncate`) coupe aussi les jambages (g, j, p) : lui donner un `pb-1`.
 - Sous Windows : effets Mica/acrylique à évaluer.
