@@ -229,8 +229,14 @@ export function onInstallProgress(handler: (event: InstallEvent) => void): Promi
  */
 export function splitError(error: unknown): { message: string; details: string | null } {
 	const text = String(error);
-	const [message, ...rest] = text.split("\n");
-	return { message: message ?? text, details: rest.length ? rest.join("\n") : null };
+	const [first, ...rest] = text.split("\n");
+	const message = first ?? text;
+	// Les messages Rust commencent par une minuscule ; l'interface suit la
+	// casse de phrase.
+	return {
+		message: message.charAt(0).toUpperCase() + message.slice(1),
+		details: rest.length ? rest.join("\n") : null,
+	};
 }
 
 // Lancement et file d'attente (moteur : launch).

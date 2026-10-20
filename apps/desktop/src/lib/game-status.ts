@@ -27,18 +27,13 @@ function listenOnce() {
 	if (listening) return;
 	listening = true;
 	void onGameStatus(set);
-	void onPendingApplied(({ appId, applied, failed }) => {
+	// Réussite : l'écran se met à jour, pas besoin de toast. Seuls les
+	// échecs sont signalés, faute d'autre endroit où les montrer.
+	void onPendingApplied(({ appId, failed }) => {
 		void refreshInstalled(appId);
-		if (applied > 0) {
-			toast({
-				title: `${applied} change${applied > 1 ? "s" : ""} applied`,
-				description: "Your mods are ready for the next session.",
-				tone: "success",
-			});
-		}
 		for (const f of failed) {
 			const { message, details } = splitError(f.message);
-			toast({ title: message, description: details ?? undefined, tone: "error", duration: 10000 });
+			toast({ title: message, details: details ?? undefined, tone: "error", duration: 8000 });
 		}
 	});
 }
@@ -67,6 +62,6 @@ export async function play(appId: number) {
 		await playGame(appId);
 	} catch (error) {
 		const { message, details } = splitError(error);
-		toast({ title: message, description: details ?? undefined, tone: "error" });
+		toast({ title: message, details: details ?? undefined, tone: "error" });
 	}
 }

@@ -46,7 +46,7 @@ export function GamePicker({
 			if (appId !== null) router.push(gameHref(appId));
 		} catch (error) {
 			const { message, details } = splitError(error);
-			toast({ title: message, description: details ?? undefined, tone: "error", duration: 8000 });
+			toast({ title: message, details: details ?? undefined, tone: "error", duration: 8000 });
 		} finally {
 			setAdding(false);
 		}

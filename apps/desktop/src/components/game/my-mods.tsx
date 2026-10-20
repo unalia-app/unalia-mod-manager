@@ -7,7 +7,7 @@ import { useState } from "react";
 
 import { Notice } from "@/components/notice";
 import { toast } from "@/components/toaster";
-import { type InstalledMod, cancelPending, splitError } from "@/lib/engine";
+import { type InstalledMod, splitError } from "@/lib/engine";
 import { usePendingOp } from "@/lib/game-status";
 import { modHref } from "@/lib/games-store";
 import {
@@ -100,7 +100,7 @@ function ModRow({ mod: m, appId }: { mod: InstalledMod; appId: number }) {
 
 	const fail = (error: unknown) => {
 		const { message, details } = splitError(error);
-		toast({ title: message, description: details ?? undefined, tone: "error" });
+		toast({ title: message, details: details ?? undefined, tone: "error" });
 	};
 
 	const onToggle = (value: boolean) => {
@@ -111,17 +111,14 @@ function ModRow({ mod: m, appId }: { mod: InstalledMod; appId: number }) {
 		setBusy(true);
 		try {
 			const outcome = await remove(appId, m.id);
-			toast(
-				outcome === "queued"
-					? {
-							title: `${m.name} will be removed when you close the game`,
-							action: { label: "Undo", onClick: () => cancelPending(appId, m.id).catch(fail) },
-						}
-					: {
-							title: `${m.name} removed`,
-							action: { label: "Undo", onClick: () => restore(appId, m.id).catch(fail) },
-						},
-			);
+			// En attente (jeu lancé) : le bandeau d'attente le montre déjà, avec
+			// de quoi annuler. Sinon, le toast offre « Undo » (SPEC §3.5).
+			if (outcome === "done") {
+				toast({
+					title: `${m.name} removed`,
+					action: { label: "Undo", onClick: () => restore(appId, m.id).catch(fail) },
+				});
+			}
 		} catch (error) {
 			fail(error);
 		} finally {

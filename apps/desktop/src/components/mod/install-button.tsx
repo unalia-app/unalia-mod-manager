@@ -3,7 +3,6 @@
 import { Button, cn } from "@modalia/ui";
 import { ArrowUp, Check, Clock, Download, RotateCw } from "lucide-react";
 
-import { toast } from "@/components/toaster";
 import { type InstallProgress, cancelPending } from "@/lib/engine";
 import { usePendingOp } from "@/lib/game-status";
 import { clearError, install, overallProgress, useActiveInstall, useInstalled, useModUpdate } from "@/lib/installs";
@@ -120,13 +119,10 @@ export function InstallButton({
 				</Button>
 				<span className="text-[11px] leading-snug text-danger">{active.message}</span>
 				{active.details && (
-					<button
-						type="button"
-						className="cursor-pointer text-[11px] text-fg-faint underline-offset-2 hover:underline"
-						onClick={() => toast({ title: active.message, description: active.details ?? undefined, tone: "error", duration: 10000 })}
-					>
-						Technical details
-					</button>
+					<details className="text-[11px] text-fg-faint">
+						<summary className="cursor-pointer select-none hover:text-fg-subtle">Technical details</summary>
+						<p className="mt-1 font-mono break-words text-fg-subtle">{active.details}</p>
+					</details>
 				)}
 			</div>
 		);

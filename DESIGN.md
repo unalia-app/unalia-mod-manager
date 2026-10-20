@@ -80,6 +80,13 @@ Une couleur d'état s'emploie toujours en **contour 20 % + fond 10 % + texte ple
 
 Avant de créer un composant, vérifier qu'il n'existe pas dans Unalia (`components/ui/`) : on le porte ici plutôt que d'en dessiner un nouveau.
 
+## Toasts
+
+- **Rares.** Seulement pour ce qui n'a pas d'autre place à l'écran : « Undo » après un retrait, ou une erreur sans endroit où s'afficher. Jamais pour confirmer une réussite que l'écran montre déjà.
+- Pastille sombre opaque, en bas au centre, sans flou ni liseré coloré. Action en texte à l'accent (« Undo »). Erreur : petite icône rouge, détail technique replié derrière « Details ».
+- Pas de croix : le toast part seul après 4 s, le survol met le minuteur en pause. Deux au plus à l'écran.
+- Les détails d'une erreur liée à un élément (bouton Install…) se déplient sur place, pas dans un toast.
+
 ## Fenêtre
 
 - Pas de barre de titre système sous macOS (`titleBarStyle: Overlay`). L'en-tête (`AppHeader`) est la zone de déplacement (`data-tauri-drag-region` sur l'élément lui-même, ses boutons restent cliquables). Il reste collé en haut, avec un fond flouté une fois la page défilée. Son contenu commence après les feux tricolores (`pl-22`).

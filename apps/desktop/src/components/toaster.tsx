@@ -1,22 +1,29 @@
 "use client";
 
 import { cn } from "@modalia/ui";
-import { CircleAlert, CircleCheck, X } from "lucide-react";
-import { useEffect, useSyncExternalStore } from "react";
+import { CircleAlert } from "lucide-react";
+import { useEffect, useRef, useState, useSyncExternalStore } from "react";
 
 /**
- * Toasts : jamais de popup qui coupe le flow (SPEC §2.5). Style des toasts
- * d'Unalia : verre sombre, liseré coloré à gauche selon le ton.
+ * Toasts : rares, courts, jamais bloquants (SPEC §2.5). Seulement pour ce
+ * qui n'a pas d'autre place à l'écran : annuler un retrait, ou une erreur
+ * sans endroit où s'afficher. Une pastille sombre en bas au centre ; pas de
+ * croix, elle part seule (le survol met le minuteur en pause).
  */
 
 type Toast = {
 	id: number;
 	title: string;
-	description?: string;
-	tone: "success" | "error" | "neutral";
+	/** Détail technique, replié derrière « Details ». */
+	details?: string;
+	tone: "neutral" | "error";
 	action?: { label: string; onClick: () => void };
 	duration: number;
 };
+
+type ToastInput = Omit<Toast, "id" | "duration" | "tone"> & Partial<Pick<Toast, "tone" | "duration">>;
+
+const MAX_VISIBLE = 2;
 
 let toasts: Toast[] = [];
 let nextId = 1;
@@ -26,9 +33,12 @@ function emit() {
 	for (const l of listeners) l();
 }
 
-export function toast(t: Omit<Toast, "id" | "duration" | "tone"> & Partial<Pick<Toast, "tone" | "duration">>) {
+export function toast(input: ToastInput) {
 	const id = nextId++;
-	toasts = [...toasts.slice(-2), { tone: "neutral", duration: 5000, ...t, id }];
+	// Même message déjà affiché : on le remplace plutôt que de l'empiler.
+	const others = toasts.filter((t) => t.title !== input.title);
+	const next: Toast = { tone: "neutral", duration: 4000, ...input, id };
+	toasts = [...others, next].slice(-MAX_VISIBLE);
 	emit();
 	return id;
 }
@@ -49,7 +59,10 @@ export function Toaster() {
 	);
 
 	return (
-		<div className="pointer-events-none fixed right-5 bottom-5 z-50 flex w-80 flex-col gap-2" aria-live="polite">
+		<div
+			aria-live="polite"
+			className="pointer-events-none fixed inset-x-0 bottom-6 z-50 flex flex-col items-center gap-2 px-6"
+		>
 			{list.map((t) => (
 				<ToastItem key={t.id} toast={t} />
 			))}
@@ -58,46 +71,67 @@ export function Toaster() {
 }
 
 function ToastItem({ toast: t }: { toast: Toast }) {
+	const [leaving, setLeaving] = useState(false);
+	const [open, setOpen] = useState(false);
+	const [paused, setPaused] = useState(false);
+	const remaining = useRef(t.duration);
+
 	useEffect(() => {
-		const timer = window.setTimeout(() => dismiss(t.id), t.duration);
+		if (paused || open) return;
+		const started = Date.now();
+		const timer = window.setTimeout(() => setLeaving(true), remaining.current);
+		return () => {
+			window.clearTimeout(timer);
+			remaining.current = Math.max(remaining.current - (Date.now() - started), 800);
+		};
+	}, [paused, open]);
+
+	useEffect(() => {
+		if (!leaving) return;
+		const timer = window.setTimeout(() => dismiss(t.id), 160);
 		return () => window.clearTimeout(timer);
-	}, [t.id, t.duration]);
+	}, [leaving, t.id]);
 
 	return (
 		<div
-			role="status"
+			role={t.tone === "error" ? "alert" : "status"}
+			onMouseEnter={() => setPaused(true)}
+			onMouseLeave={() => setPaused(false)}
 			className={cn(
-				"pointer-events-auto flex animate-row-in items-start gap-3 rounded-xl border border-l-2 border-line bg-black/70 p-3.5 shadow-[0_8px_32px_rgba(0,0,0,0.45)] backdrop-blur-xl",
-				t.tone === "success" && "border-l-success/80",
-				t.tone === "error" && "border-l-danger/80",
+				"pointer-events-auto max-w-md rounded-xl border border-line-strong bg-[#18181b] px-4 py-2.5 shadow-[0_12px_40px_rgba(0,0,0,0.5)] transition-opacity duration-150",
+				leaving ? "opacity-0" : "animate-row-in",
 			)}
 		>
-			{t.tone === "success" && <CircleCheck className="mt-0.5 size-4 shrink-0 text-success" />}
-			{t.tone === "error" && <CircleAlert className="mt-0.5 size-4 shrink-0 text-danger" />}
-			<div className="min-w-0 flex-1">
-				<p className="text-sm font-medium tracking-tight text-fg">{t.title}</p>
-				{t.description && <p className="mt-0.5 text-xs text-fg-subtle">{t.description}</p>}
+			<div className="flex items-center gap-3">
+				{t.tone === "error" && <CircleAlert className="size-4 shrink-0 text-danger" />}
+				<p className="min-w-0 text-sm text-fg">{t.title}</p>
+				{t.details && (
+					<button
+						type="button"
+						onClick={() => setOpen((o) => !o)}
+						className="shrink-0 cursor-pointer text-xs text-fg-subtle transition-colors hover:text-fg"
+					>
+						{open ? "Hide" : "Details"}
+					</button>
+				)}
+				{t.action && (
+					<button
+						type="button"
+						onClick={() => {
+							t.action?.onClick();
+							setLeaving(true);
+						}}
+						className="shrink-0 cursor-pointer text-sm font-medium text-accent transition-opacity hover:opacity-80"
+					>
+						{t.action.label}
+					</button>
+				)}
 			</div>
-			{t.action && (
-				<button
-					type="button"
-					onClick={() => {
-						dismiss(t.id);
-						t.action?.onClick();
-					}}
-					className="shrink-0 cursor-pointer rounded-md bg-white px-2.5 py-1 text-xs font-medium text-bg transition-colors hover:bg-white/85"
-				>
-					{t.action.label}
-				</button>
+			{open && t.details && (
+				<p className="mt-2 border-t border-line pt-2 font-mono text-[11px] leading-relaxed break-words text-fg-subtle">
+					{t.details}
+				</p>
 			)}
-			<button
-				type="button"
-				aria-label="Dismiss"
-				onClick={() => dismiss(t.id)}
-				className="shrink-0 cursor-pointer rounded-md p-0.5 text-fg-faint transition-colors hover:text-fg"
-			>
-				<X className="size-3.5" />
-			</button>
 		</div>
 	);
 }
