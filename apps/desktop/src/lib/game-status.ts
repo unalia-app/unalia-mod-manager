@@ -10,7 +10,7 @@ import {
 	playGame,
 	splitError,
 } from "@/lib/engine";
-import { refreshInstalled } from "@/lib/installs";
+import { refreshInstalled, settleBackgroundInstalls } from "@/lib/installs";
 
 /** État des jeux (en cours, en démarrage, changements en attente), poussé par le moteur. */
 
@@ -30,7 +30,7 @@ function listenOnce() {
 	// Réussite : l'écran se met à jour, pas besoin de toast. Seuls les
 	// échecs sont signalés, faute d'autre endroit où les montrer.
 	void onPendingApplied(({ appId, failed }) => {
-		void refreshInstalled(appId);
+		void refreshInstalled(appId).finally(() => settleBackgroundInstalls(appId));
 		for (const f of failed) {
 			const { message, details } = splitError(f.message);
 			toast({ title: message, details: details ?? undefined, tone: "error", duration: 8000 });

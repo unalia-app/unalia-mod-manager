@@ -54,6 +54,14 @@ function subscribe(listener: () => void) {
 
 const key = (appId: number, modId: string) => `${appId}:${modId}`;
 
+/**
+ * Installations lancées par l'interface et pas encore terminées. Les autres
+ * (file d'attente appliquée par le moteur à la fermeture du jeu) envoient
+ * aussi leur progression, mais leur fin arrive par `pending-applied` : voir
+ * `settleBackgroundInstalls`.
+ */
+const inFlight = new Set<string>();
+
 let listening = false;
 function listenOnce() {
 	if (listening) return;
@@ -82,23 +90,40 @@ export function install(appId: number, modId: string): Promise<void> {
 	update((s) => {
 		s.active.set(k, { status: "queued" });
 	});
-	return installMod(appId, modId).then(
-		(outcome) =>
-			update((s) => {
-				// Mis en attente : la file du jeu (game-status) prend le relais.
-				if (outcome.status === "done") {
-					s.installed.set(appId, outcome.value);
-					// Installé à sa dernière version : plus de mise à jour en attente.
-					const updates = s.updates.get(appId);
-					if (updates) s.updates.set(appId, updates.filter((u) => u.modId !== modId));
-				}
-				s.active.delete(k);
-			}),
-		(error: unknown) =>
-			update((s) => {
-				s.active.set(k, { status: "error", ...splitError(error) });
-			}),
-	);
+	inFlight.add(k);
+	return installMod(appId, modId)
+		.finally(() => inFlight.delete(k))
+		.then(
+			(outcome) =>
+				update((s) => {
+					// Mis en attente : la file du jeu (game-status) prend le relais.
+					if (outcome.status === "done") {
+						s.installed.set(appId, outcome.value);
+						// Installé à sa dernière version : plus de mise à jour en attente.
+						const updates = s.updates.get(appId);
+						if (updates) s.updates.set(appId, updates.filter((u) => u.modId !== modId));
+					}
+					s.active.delete(k);
+				}),
+			(error: unknown) =>
+				update((s) => {
+					s.active.set(k, { status: "error", ...splitError(error) });
+				}),
+		);
+}
+
+/**
+ * La file d'attente du jeu vient d'être appliquée : les installations
+ * qu'elle a faites sont terminées (ou ont échoué, signalé à part). On
+ * efface leur progression, et on revérifie les mises à jour du jeu.
+ */
+export function settleBackgroundInstalls(appId: number) {
+	update((s) => {
+		for (const k of s.active.keys()) {
+			if (k.startsWith(`${appId}:`) && !inFlight.has(k)) s.active.delete(k);
+		}
+		s.updates.delete(appId);
+	});
 }
 
 export function clearError(appId: number, modId: string) {
