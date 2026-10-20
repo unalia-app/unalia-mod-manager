@@ -5,17 +5,21 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Mutex;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use mod_engine::artwork::{self, ArtworkKind};
-use mod_engine::detect::{self, Engine, SteamGame};
-use mod_engine::games::GameProfile;
+use mod_engine::detect::{self, Engine, SteamGame, detect_engine};
+use mod_engine::download;
+use mod_engine::games::{GameProfile, manual_app_id};
+use mod_engine::state::ManualGame;
 use serde::Serialize;
 use tauri::http::{Request, Response, StatusCode, header};
 use tauri::{AppHandle, Manager, State, UriSchemeContext, UriSchemeResponder, Wry};
 
 use crate::catalog::Catalog;
+use crate::mods::Mods;
 
-/// Ce que l'appli sait de la bibliothèque Steam pendant la session.
+/// Ce que l'appli sait de la bibliothèque de jeux pendant la session.
 #[derive(Default)]
 struct Library {
     steam_root: Mutex<Option<PathBuf>>,
@@ -25,12 +29,25 @@ struct Library {
     /// reçoivent qu'un identifiant de l'interface : le dossier du jeu vient
     /// toujours d'ici, jamais de la webview.
     games: Mutex<HashMap<u32, KnownGame>>,
+    /// Images publiées par Thunderstore pour chaque jeu connu (jaquette,
+    /// bannière) : repli quand le cache de Steam n'a rien, notamment pour
+    /// les jeux ajoutés à la main.
+    remote_art: Mutex<HashMap<u32, RemoteArt>>,
+    /// Une image téléchargée à la fois : deux demandes simultanées de la
+    /// même image n'écrivent pas le même fichier en parallèle.
+    art_downloads: tauri::async_runtime::Mutex<()>,
 }
 
 #[derive(Clone)]
 struct KnownGame {
     dir: PathBuf,
     community: String,
+}
+
+#[derive(Clone, Default)]
+struct RemoteArt {
+    cover: Option<String>,
+    hero: Option<String>,
 }
 
 impl Library {
@@ -57,6 +74,8 @@ struct GameScan {
 struct GameEntry {
     #[serde(flatten)]
     game: SteamGame,
+    /// `steam`, ou `manual` pour un jeu ajouté à la main.
+    source: &'static str,
     /// Profil Thunderstore du jeu, s'il est connu.
     profile: Option<GameProfile>,
     /// Modalia sait-il modder ce jeu ?
@@ -68,6 +87,7 @@ async fn list_games(
     app: AppHandle,
     library: State<'_, Library>,
     catalog: State<'_, Catalog>,
+    mods: State<'_, Mods>,
 ) -> Result<GameScan, String> {
     let root = steam_root();
     *library.steam_root.lock().unwrap() = root.clone();
@@ -77,17 +97,13 @@ async fn list_games(
         root.map(|r| detect::scan_steam(&r)).transpose()
     });
     let (scan, games_catalog) = tokio::join!(scan, catalog.games(&app));
-    let Some(games) = scan
+    let steam = scan
         .map_err(|e| e.to_string())?
-        .map_err(|e| e.to_string())?
-    else {
-        return Ok(GameScan {
-            steam_found: false,
-            games: Vec::new(),
-        });
-    };
+        .map_err(|e| e.to_string())?;
+    let steam_found = steam.is_some();
 
-    let entries: Vec<GameEntry> = games
+    let mut entries: Vec<GameEntry> = steam
+        .unwrap_or_default()
         .into_iter()
         .map(|game| {
             let profile = games_catalog
@@ -103,11 +119,47 @@ async fn list_games(
             };
             GameEntry {
                 game,
+                source: "steam",
                 profile,
                 moddable,
             }
         })
         .collect();
+
+    // Jeux ajoutés à la main, sauf ceux que Steam connaît déjà.
+    let manual = mods.state().lock().await.manual_games().unwrap_or_default();
+    for ManualGame {
+        app_id,
+        profile_id,
+        path,
+        ..
+    } in manual
+    {
+        let Some(profile) = games_catalog
+            .as_ref()
+            .and_then(|c| c.by_id(&profile_id))
+            .cloned()
+        else {
+            continue;
+        };
+        let dir = PathBuf::from(&path);
+        if entries.iter().any(|e| e.game.app_id == app_id) || !dir.is_dir() {
+            continue;
+        }
+        entries.push(GameEntry {
+            game: SteamGame {
+                app_id,
+                name: profile.name.clone(),
+                engine: detect_engine(&dir),
+                library: dir.clone(),
+                install_dir: dir,
+            },
+            source: "manual",
+            moddable: profile.supported,
+            profile: Some(profile),
+        });
+    }
+    entries.sort_by_cached_key(|e| (e.game.name.to_lowercase(), e.game.app_id));
 
     *library.games.lock().unwrap() = entries
         .iter()
@@ -122,28 +174,96 @@ async fn list_games(
             ))
         })
         .collect();
+    *library.remote_art.lock().unwrap() = entries
+        .iter()
+        .filter_map(|e| {
+            let p = e.profile.as_ref()?;
+            Some((
+                e.game.app_id,
+                RemoteArt {
+                    cover: p.cover_url.clone(),
+                    hero: p.hero_url.clone(),
+                },
+            ))
+        })
+        .collect();
 
     Ok(GameScan {
-        steam_found: true,
+        steam_found,
         games: entries,
     })
 }
 
+/// Ajoute un jeu installé hors de Steam, à partir du dossier choisi par
+/// l'utilisateur. Le jeu est reconnu par ses fichiers grâce au catalogue de
+/// Thunderstore. Renvoie l'identifiant du jeu.
+#[tauri::command]
+async fn add_manual_game(
+    app: AppHandle,
+    catalog: State<'_, Catalog>,
+    mods: State<'_, Mods>,
+    path: String,
+) -> Result<u32, String> {
+    let dir = PathBuf::from(&path);
+    if !dir.is_dir() {
+        return Err("This folder doesn't exist anymore.".into());
+    }
+    let games = catalog.games(&app).await.ok_or(
+        "Modalia needs to be online once to recognize games.\nThe Thunderstore game list couldn't be downloaded.",
+    )?;
+    let (profile, game_dir) = games.locate_game(&dir).ok_or(
+        "Modalia doesn't recognize this game.\nPick the folder that contains the game's .exe. Modalia knows the games listed on Thunderstore.",
+    )?;
+    if !profile.supported {
+        return Err(format!(
+            "{} uses {}, which Modalia doesn't support yet.",
+            profile.name, profile.loader
+        ));
+    }
+
+    let app_id = manual_app_id(profile);
+    mods.state()
+        .lock()
+        .await
+        .save_manual_game(&ManualGame {
+            app_id,
+            profile_id: profile.id.clone(),
+            path: game_dir.to_string_lossy().into_owned(),
+            added_at: SystemTime::now()
+                .duration_since(UNIX_EPOCH)
+                .map(|d| d.as_secs() as i64)
+                .unwrap_or_default(),
+        })
+        .map_err(|e| e.to_string())?;
+    Ok(app_id)
+}
+
 /// Couleur d'accent CSS du jeu, extraite de sa jaquette.
 #[tauri::command]
-async fn game_accent(app_id: u32, library: State<'_, Library>) -> Result<Option<String>, String> {
+async fn game_accent(
+    app: AppHandle,
+    app_id: u32,
+    library: State<'_, Library>,
+) -> Result<Option<String>, String> {
     if let Some(cached) = library.accents.lock().unwrap().get(&app_id) {
         return Ok(cached.clone());
     }
-    let Some(root) = library.steam_root() else {
-        return Ok(None);
-    };
-
-    let accent = tauri::async_runtime::spawn_blocking(move || {
-        artwork::game_accent(&root, app_id).map(|a| a.css())
+    let root = library.steam_root();
+    let mut accent = tauri::async_runtime::spawn_blocking(move || {
+        root.and_then(|root| artwork::game_accent(&root, app_id).map(|a| a.css()))
     })
     .await
     .map_err(|e| e.to_string())?;
+    // Rien dans le cache de Steam : jaquette publiée par Thunderstore.
+    if accent.is_none()
+        && let Some(cover) = artwork_file(&app, app_id, ArtworkKind::Cover).await
+    {
+        accent = tauri::async_runtime::spawn_blocking(move || {
+            artwork::accent_from_path(&cover).map(|a| a.css())
+        })
+        .await
+        .map_err(|e| e.to_string())?;
+    }
 
     library
         .accents
@@ -151,6 +271,43 @@ async fn game_accent(app_id: u32, library: State<'_, Library>) -> Result<Option<
         .unwrap()
         .insert(app_id, accent.clone());
     Ok(accent)
+}
+
+/// Image d'un jeu : cache de Steam d'abord, sinon l'image publiée par
+/// Thunderstore pour les gestionnaires de mods, téléchargée une fois dans
+/// le cache de l'appli.
+async fn artwork_file(app: &AppHandle, app_id: u32, kind: ArtworkKind) -> Option<PathBuf> {
+    let library = app.state::<Library>();
+    if let Some(root) = library.steam_root()
+        && let Some(file) = artwork::find_artwork(&root, app_id, kind)
+    {
+        return Some(file);
+    }
+    let remote = library.remote_art.lock().unwrap().get(&app_id).cloned()?;
+    let (url, name) = match kind {
+        ArtworkKind::Cover => (remote.cover?, "cover"),
+        ArtworkKind::Hero | ArtworkKind::HeroBlur => (remote.hero?, "hero"),
+        ArtworkKind::Header | ArtworkKind::Logo => return None,
+    };
+    let extension = url
+        .rsplit('.')
+        .next()
+        .filter(|e| e.len() <= 4 && e.chars().all(|c| c.is_ascii_alphanumeric()))
+        .unwrap_or("img");
+    let file = app
+        .path()
+        .app_cache_dir()
+        .ok()?
+        .join("artwork")
+        .join(format!("{app_id}-{name}.{extension}"));
+    let _guard = library.art_downloads.lock().await;
+    if !file.is_file() {
+        let client = app.state::<Catalog>().client.clone();
+        download::download(&client, &url, &file, None, 20 * 1024 * 1024, |_, _| {})
+            .await
+            .ok()?;
+    }
+    Some(file)
 }
 
 /// En dev, `MODALIA_STEAM_ROOT` remplace la recherche automatique (ex. pour
@@ -165,20 +322,21 @@ fn steam_root() -> Option<PathBuf> {
 }
 
 /// Protocole `artwork://localhost/<appid>/<type>` (Windows :
-/// `http://artwork.localhost/...`). Ne sert que les images du cache de Steam :
-/// l'interface ne manipule jamais de chemin de fichier.
+/// `http://artwork.localhost/...`). Ne sert que les images des jeux (cache de
+/// Steam ou repli Thunderstore) : l'interface ne manipule jamais de chemin.
 fn artwork_protocol(
     ctx: UriSchemeContext<'_, Wry>,
     request: Request<Vec<u8>>,
     responder: UriSchemeResponder,
 ) {
-    let root = ctx.app_handle().state::<Library>().steam_root();
+    let app = ctx.app_handle().clone();
     let path = request.uri().path().to_owned();
 
-    tauri::async_runtime::spawn_blocking(move || {
-        let file = root
-            .zip(parse_artwork_path(&path))
-            .and_then(|(root, (app_id, kind))| artwork::find_artwork(&root, app_id, kind));
+    tauri::async_runtime::spawn(async move {
+        let file = match parse_artwork_path(&path) {
+            Some((app_id, kind)) => artwork_file(&app, app_id, kind).await,
+            None => None,
+        };
         let response = match file.and_then(|f| Some((fs::read(&f).ok()?, f))) {
             Some((bytes, file)) => Response::builder()
                 .header(header::CONTENT_TYPE, mime(&file))
@@ -202,6 +360,7 @@ fn parse_artwork_path(path: &str) -> Option<(u32, ArtworkKind)> {
 fn mime(file: &std::path::Path) -> &'static str {
     match file.extension().and_then(|e| e.to_str()) {
         Some("png") => "image/png",
+        Some("webp") => "image/webp",
         _ => "image/jpeg",
     }
 }
@@ -209,6 +368,7 @@ fn mime(file: &std::path::Path) -> &'static str {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .manage(Library::default())
         .manage(Catalog::new())
@@ -219,6 +379,7 @@ pub fn run() {
         .register_asynchronous_uri_scheme_protocol("artwork", artwork_protocol)
         .invoke_handler(tauri::generate_handler![
             list_games,
+            add_manual_game,
             game_accent,
             catalog::search_mods,
             catalog::get_mod,

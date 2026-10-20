@@ -2,6 +2,7 @@
 //! l'interface, avec la progression poussée par événements (SPEC §6.4).
 
 use std::collections::HashMap;
+use std::path::Path;
 use std::sync::Mutex as SyncMutex;
 
 use mod_engine::installer::{self, Installer, Paths, Progress, Target};
@@ -24,9 +25,19 @@ pub struct Mods {
 }
 
 impl Mods {
+    pub(crate) fn state(&self) -> &Mutex<ModState> {
+        &self.state
+    }
+
     pub fn open(app: &AppHandle) -> Result<Self, Box<dyn std::error::Error>> {
-        let data = app.path().app_data_dir()?;
+        // Données locales (`%LOCALAPPDATA%` sous Windows), jamais le profil
+        // itinérant : des centaines de Mo de mods n'ont pas à être
+        // synchronisés entre machines.
+        let data = app.path().app_local_data_dir()?;
         let cache = app.path().app_cache_dir()?;
+        // Avant toute ouverture : sous Windows, un fichier ouvert ne peut
+        // pas être remplacé.
+        migrate_from_roaming(&app.path().app_data_dir()?, &data);
         Ok(Self {
             state: Mutex::new(ModState::open(&data.join("modalia.db"))?),
             paths: Paths {
@@ -35,6 +46,36 @@ impl Mods {
             },
             removed: SyncMutex::default(),
         })
+    }
+}
+
+/// Les premières versions rangeaient base et mods dans `%APPDATA%`
+/// (itinérant). On les déplace une fois vers le dossier local, sinon les
+/// mods déjà posés dans les jeux deviendraient des fichiers orphelins.
+/// Sous macOS et Linux, les deux dossiers sont les mêmes : rien à faire.
+fn migrate_from_roaming(roaming: &Path, local: &Path) {
+    let old_db = roaming.join("modalia.db");
+    let new_db = local.join("modalia.db");
+    if roaming == local || !old_db.is_file() || new_db.exists() {
+        return;
+    }
+    let old_store = roaming.join("mods");
+    let new_store = local.join("mods");
+    let moved = std::fs::create_dir_all(local).is_ok()
+        && (!old_store.exists() || std::fs::rename(&old_store, &new_store).is_ok())
+        && std::fs::rename(&old_db, &new_db).is_ok();
+    if !moved {
+        eprintln!("couldn't move Modalia's data out of the roaming profile");
+        return;
+    }
+    for suffix in ["-wal", "-shm"] {
+        let _ = std::fs::rename(
+            roaming.join(format!("modalia.db{suffix}")),
+            local.join(format!("modalia.db{suffix}")),
+        );
+    }
+    if let Ok(mut state) = ModState::open(&new_db) {
+        let _ = state.rebase_store(&old_store, &new_store);
     }
 }
 

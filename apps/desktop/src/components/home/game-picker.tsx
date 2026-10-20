@@ -7,7 +7,9 @@ import { type KeyboardEvent, useCallback, useEffect, useMemo, useState } from "r
 
 import { GameCover } from "@/components/game-cover";
 import { Notice } from "@/components/notice";
-import { type GameScan, type SteamGame, gameSubtitle, isModdable } from "@/lib/engine";
+import { type GameScan, type SteamGame, gameSubtitle, isModdable, splitError } from "@/lib/engine";
+import { toast } from "@/components/toaster";
+import { pickAndAddGame } from "@/lib/add-game";
 import { gameHref, loadGames, rememberGame, withRecentsFirst } from "@/lib/games-store";
 import { normalize } from "@/lib/text";
 
@@ -35,6 +37,20 @@ export function GamePicker({
 	const [engaged, setEngaged] = useState(false);
 
 	const router = useRouter();
+	const [adding, setAdding] = useState(false);
+
+	const addGame = async () => {
+		setAdding(true);
+		try {
+			const appId = await pickAndAddGame();
+			if (appId !== null) router.push(gameHref(appId));
+		} catch (error) {
+			const { message, details } = splitError(error);
+			toast({ title: message, description: details ?? undefined, tone: "error", duration: 8000 });
+		} finally {
+			setAdding(false);
+		}
+	};
 
 	const scan = useCallback((fresh = false) => {
 		setState({ status: "loading" });
@@ -121,13 +137,21 @@ export function GamePicker({
 					</Notice>
 				)}
 
-				{state.status === "ready" && !state.scan.steamFound && (
-					<Notice icon={<Gamepad2 className="size-5 text-fg-muted" />} title="Steam isn't installed here">
+				{state.status === "ready" && !state.scan.steamFound && games.length === 0 && (
+					<Notice
+						icon={<Gamepad2 className="size-5 text-fg-muted" />}
+						title="Steam isn't installed here"
+						action={
+							<Button size="sm" isLoading={adding} onClick={addGame} leftIcon={<FolderPlus className="size-3.5" />}>
+								Add a game
+							</Button>
+						}
+					>
 						Add a game by picking its folder, Modalia handles the rest.
 					</Notice>
 				)}
 
-				{state.status === "ready" && state.scan.steamFound && results.length === 0 && (
+				{state.status === "ready" && (state.scan.steamFound || games.length > 0) && results.length === 0 && (
 					<Notice icon={<Gamepad2 className="size-5 text-fg-muted" />} title={query ? "No games found" : "No moddable games yet"}>
 						{query
 							? `No installed game matches “${query.trim()}”.`
@@ -170,8 +194,8 @@ export function GamePicker({
 				<Button
 					variant="secondary"
 					size="sm"
-					disabled
-					title="Coming soon"
+					isLoading={adding}
+					onClick={addGame}
 					leftIcon={<FolderPlus className="size-3.5" />}
 				>
 					Add a game manually
@@ -215,7 +239,9 @@ function GameRow({
 				<span className={cn("block truncate text-sm font-medium", moddable ? "text-fg" : "text-fg-subtle")}>
 					{game.name}
 				</span>
-				<span className="block truncate text-xs text-fg-subtle">{gameSubtitle(game)}</span>
+				<span className="block truncate text-xs text-fg-subtle">{gameSubtitle(game)}
+					{game.source === "manual" && " · Added manually"}
+				</span>
 			</span>
 			{moddable ? (
 				<ArrowRight

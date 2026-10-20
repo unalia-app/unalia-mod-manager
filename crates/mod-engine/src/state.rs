@@ -70,7 +70,27 @@ CREATE TABLE IF NOT EXISTS installed_mods (
     deployment   TEXT NOT NULL,
     PRIMARY KEY (game, id)
 );
+
+CREATE TABLE IF NOT EXISTS manual_games (
+    app_id     INTEGER PRIMARY KEY,
+    profile_id TEXT NOT NULL,
+    path       TEXT NOT NULL,
+    added_at   INTEGER NOT NULL
+);
 ";
+
+/// Jeu ajouté à la main (hors launcher), reconnu grâce au catalogue.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ManualGame {
+    /// Identifiant Steam du jeu s'il en a un, sinon identifiant dérivé du
+    /// profil (voir `games::manual_app_id`).
+    pub app_id: u32,
+    /// Profil du catalogue (ex. `hollow-knight-silksong`).
+    pub profile_id: String,
+    pub path: String,
+    pub added_at: i64,
+}
 
 impl State {
     pub fn open(path: &Path) -> Result<Self, StateError> {
@@ -141,6 +161,48 @@ impl State {
 
     pub fn save(&mut self, m: &InstalledMod) -> Result<(), StateError> {
         self.save_all(std::slice::from_ref(m))
+    }
+
+    /// Le stockage des mods a été déplacé : réécrit les chemins enregistrés.
+    pub fn rebase_store(&mut self, old: &Path, new: &Path) -> Result<(), StateError> {
+        self.conn.execute(
+            "UPDATE installed_mods SET store_dir = ?2 || substr(store_dir, length(?1) + 1)
+             WHERE substr(store_dir, 1, length(?1)) = ?1",
+            params![old.to_string_lossy(), new.to_string_lossy()],
+        )?;
+        Ok(())
+    }
+
+    pub fn manual_games(&self) -> Result<Vec<ManualGame>, StateError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT app_id, profile_id, path, added_at FROM manual_games ORDER BY added_at",
+        )?;
+        let rows = stmt.query_map([], |r| {
+            Ok(ManualGame {
+                app_id: r.get(0)?,
+                profile_id: r.get(1)?,
+                path: r.get(2)?,
+                added_at: r.get(3)?,
+            })
+        })?;
+        Ok(rows.collect::<Result<_, _>>()?)
+    }
+
+    /// Ajoute (ou remplace, si le jeu change de dossier) un jeu manuel.
+    pub fn save_manual_game(&mut self, game: &ManualGame) -> Result<(), StateError> {
+        self.conn.execute(
+            "INSERT OR REPLACE INTO manual_games VALUES (?1, ?2, ?3, ?4)",
+            params![game.app_id, game.profile_id, game.path, game.added_at],
+        )?;
+        Ok(())
+    }
+
+    pub fn remove_manual_game(&mut self, app_id: u32) -> Result<(), StateError> {
+        self.conn.execute(
+            "DELETE FROM manual_games WHERE app_id = ?1",
+            params![app_id],
+        )?;
+        Ok(())
     }
 
     pub fn remove(&mut self, game: &str, id: &str) -> Result<(), StateError> {

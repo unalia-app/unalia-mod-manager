@@ -12,7 +12,7 @@ mod schema;
 use std::collections::HashMap;
 use std::fs;
 use std::io;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::time::{Duration, SystemTime};
 
 use serde::Serialize;
@@ -127,6 +127,40 @@ impl GameCatalog {
                 .collect(),
         )
     }
+}
+
+impl GameCatalog {
+    /// Comme `identify_folder`, en tolérant le dossier parent : on choisit
+    /// souvent `D:/Games` au lieu de `D:/Games/Silksong`. Renvoie le profil
+    /// et le vrai dossier du jeu.
+    pub fn locate_game(&self, dir: &Path) -> Option<(&GameProfile, PathBuf)> {
+        if let Some(profile) = self.identify_folder(dir) {
+            return Some((profile, dir.to_path_buf()));
+        }
+        let found: Vec<_> = fs::read_dir(dir)
+            .ok()?
+            .flatten()
+            .filter(|e| e.file_type().is_ok_and(|t| t.is_dir()))
+            .filter_map(|e| Some((self.identify_folder(&e.path())?, e.path())))
+            .collect();
+        single(found)
+    }
+}
+
+/// Identifiant d'un jeu ajouté à la main : son identifiant Steam s'il en a
+/// un (images et état partagés avec la version Steam), sinon un identifiant
+/// stable dérivé du profil, bit de poids fort à 1 pour ne jamais croiser un
+/// identifiant Steam réel.
+pub fn manual_app_id(profile: &GameProfile) -> u32 {
+    if let Some(&id) = profile.steam_app_ids.first() {
+        return id;
+    }
+    // FNV-1a : stable d'une version de Rust à l'autre, contrairement au
+    // hachage de la bibliothèque standard.
+    let hash = profile.id.bytes().fold(0x811c_9dc5u32, |h, b| {
+        (h ^ u32::from(b)).wrapping_mul(0x0100_0193)
+    });
+    hash | 0x8000_0000
 }
 
 fn single<T>(items: Vec<T>) -> Option<T> {

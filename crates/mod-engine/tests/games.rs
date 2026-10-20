@@ -212,3 +212,110 @@ async fn no_cache_and_no_network_is_an_error() {
         "{result:?}"
     );
 }
+
+#[test]
+fn manual_games_reuse_the_steam_id_or_get_a_stable_one() {
+    use mod_engine::games::manual_app_id;
+    let catalog = catalog();
+    assert_eq!(
+        manual_app_id(catalog.by_id("hollow-knight-silksong").unwrap()),
+        1030300
+    );
+
+    let mut no_steam = catalog.by_id("valheim").unwrap().clone();
+    no_steam.steam_app_ids.clear();
+    let id = manual_app_id(&no_steam);
+    assert_eq!(id, manual_app_id(&no_steam), "doit être stable");
+    assert!(
+        id & 0x8000_0000 != 0,
+        "ne doit pas pouvoir croiser un identifiant Steam"
+    );
+}
+
+#[test]
+fn manual_games_are_persisted() {
+    use mod_engine::state::{ManualGame, State};
+    let dir = tempfile::tempdir().unwrap();
+    let db = dir.path().join("modalia.db");
+    let game = ManualGame {
+        app_id: 1030300,
+        profile_id: "hollow-knight-silksong".into(),
+        path: "D:/Games/Silksong".into(),
+        added_at: 1,
+    };
+    let mut state = State::open(&db).unwrap();
+    state.save_manual_game(&game).unwrap();
+    // Le même jeu déplacé : remplacé, pas dupliqué.
+    let moved = ManualGame {
+        path: "E:/Silksong".into(),
+        ..game.clone()
+    };
+    state.save_manual_game(&moved).unwrap();
+    drop(state);
+
+    let mut state = State::open(&db).unwrap();
+    assert_eq!(state.manual_games().unwrap(), [moved]);
+    state.remove_manual_game(1030300).unwrap();
+    assert!(state.manual_games().unwrap().is_empty());
+}
+
+#[test]
+fn store_paths_can_be_rebased_after_a_move() {
+    use mod_engine::deploy::Deployment;
+    use mod_engine::state::{InstalledMod, State};
+    let mut state = State::open_in_memory().unwrap();
+    let record = |id: &str, dir: &str| InstalledMod {
+        game: "steam:1".into(),
+        id: id.into(),
+        name: id.into(),
+        author: "a".into(),
+        version: "1.0.0".into(),
+        icon_url: None,
+        loader_root: None,
+        enabled: true,
+        explicit: true,
+        sha256: String::new(),
+        installed_at: 0,
+        store_dir: dir.into(),
+        deployment: Deployment::default(),
+    };
+    state
+        .save_all(&[
+            record("a-One", "C:/Roaming/mods/steam-1/a-One/1.0.0"),
+            record("b-Two", "D:/Elsewhere/b-Two"),
+        ])
+        .unwrap();
+
+    state
+        .rebase_store(Path::new("C:/Roaming/mods"), Path::new("C:/Local/mods"))
+        .unwrap();
+    assert_eq!(
+        state.get("steam:1", "a-One").unwrap().unwrap().store_dir,
+        "C:/Local/mods/steam-1/a-One/1.0.0"
+    );
+    assert_eq!(
+        state.get("steam:1", "b-Two").unwrap().unwrap().store_dir,
+        "D:/Elsewhere/b-Two",
+        "un chemin hors de l'ancien stockage ne bouge pas"
+    );
+}
+
+#[test]
+fn locating_a_game_tolerates_its_parent_folder() {
+    let catalog = catalog();
+    let games = tempfile::tempdir().unwrap();
+    let silksong = games.path().join("Silksong");
+    fs::create_dir_all(silksong.join("Hollow Knight Silksong_Data")).unwrap();
+    fs::create_dir_all(games.path().join("Photos")).unwrap();
+
+    let (profile, dir) = catalog.locate_game(games.path()).unwrap();
+    assert_eq!(profile.id, "hollow-knight-silksong");
+    assert_eq!(dir, silksong);
+    // Le bon dossier directement : inchangé.
+    assert_eq!(catalog.locate_game(&silksong).unwrap().1, silksong);
+
+    // Deux jeux dans le parent : ambigu, on ne devine pas.
+    fs::create_dir_all(games.path().join("LC")).unwrap();
+    fs::write(games.path().join("LC/Lethal Company.exe"), "").unwrap();
+    assert!(catalog.locate_game(games.path()).is_none());
+}

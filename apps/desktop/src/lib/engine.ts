@@ -25,6 +25,8 @@ export type SteamGame = {
 	profile: GameProfile | null;
 	/** Décidé par le moteur : profil Thunderstore avec un loader géré. */
 	moddable: boolean;
+	/** `manual` : ajouté à la main depuis son dossier. */
+	source: "steam" | "manual";
 };
 
 export type GameScan = {
@@ -36,6 +38,14 @@ export async function listGames(): Promise<GameScan> {
 	// Hors de Tauri (ex. `next dev` dans un navigateur), aucun moteur n'est joignable.
 	if (!isTauri()) return { steamFound: false, games: [] };
 	return invoke<GameScan>("list_games");
+}
+
+/**
+ * Ajoute un jeu installé hors de Steam à partir de son dossier. Le moteur le
+ * reconnaît par ses fichiers ; renvoie son identifiant.
+ */
+export function addManualGame(path: string): Promise<number> {
+	return invoke("add_manual_game", { path });
 }
 
 export function isModdable(game: SteamGame): boolean {
