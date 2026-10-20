@@ -463,3 +463,43 @@ async fn updating_a_dependency_keeps_it_a_dependency() {
     assert_eq!(prepatcher.version, "1.5.0");
     assert!(!prepatcher.explicit);
 }
+
+#[tokio::test]
+async fn prefetch_downloads_without_touching_the_game() {
+    let mut w = World::new().await;
+    let downloads = w.publish_knight().await;
+    let original = snapshot(&w.game);
+
+    // Pendant la partie : tout est téléchargé et extrait, rien n'est posé.
+    let installer = Installer {
+        source: &w.source,
+        catalog: Some(&w.catalog),
+        client: &w.client,
+        paths: &w.paths,
+    };
+    let target = Target {
+        game: "steam:1030300",
+        game_dir: &w.game,
+        community: COMMUNITY,
+    };
+    let prepared = installer.prefetch(&[], &target, KNIGHT).await.unwrap();
+    assert_eq!(prepared, 3);
+    assert_eq!(
+        snapshot(&w.game),
+        original,
+        "le jeu ne doit pas être touché"
+    );
+    assert!(w.state.list("steam:1030300").unwrap().is_empty());
+
+    // À la fermeture du jeu : l'installation ne retélécharge rien.
+    let (result, events) = w.install(KNIGHT).await;
+    assert_eq!(result.unwrap().len(), 3);
+    assert!(
+        !events
+            .iter()
+            .any(|e| matches!(e, Progress::Downloading { .. }))
+    );
+    for d in downloads {
+        d.expect(1).assert_async().await;
+    }
+}

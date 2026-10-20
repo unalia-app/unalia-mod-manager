@@ -243,10 +243,12 @@ export function splitError(error: unknown): { message: string; details: string |
 
 // Lancement et file d'attente (moteur : launch).
 
-export type PendingOp =
-	| { type: "install"; modId: string; name: string }
-	| { type: "setEnabled"; modId: string; enabled: boolean; name: string }
-	| { type: "uninstall"; modId: string; name: string };
+/** `ready` : installation déjà téléchargée pendant la partie. */
+export type PendingOp = { name: string; ready: boolean } & (
+	| { type: "install"; modId: string }
+	| { type: "setEnabled"; modId: string; enabled: boolean }
+	| { type: "uninstall"; modId: string }
+);
 
 export type GameStatus = { appId: number; running: boolean; starting: boolean; pending: PendingOp[] };
 

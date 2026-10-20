@@ -40,6 +40,12 @@ pub struct Mods {
     running: SyncMutex<HashSet<u32>>,
     /// Jeux lancés depuis Modalia, pas encore visibles dans les processus.
     starting: SyncMutex<HashMap<u32, Instant>>,
+    /// Téléchargements et extractions : un à la fois, pour que le
+    /// préchargement et une installation n'écrivent pas la même archive.
+    fetching: Mutex<()>,
+    /// Installations en attente déjà téléchargées et extraites : à la
+    /// fermeture du jeu, il ne reste qu'à poser les liens.
+    ready: SyncMutex<HashSet<(u32, String)>>,
 }
 
 impl Mods {
@@ -66,6 +72,8 @@ impl Mods {
             processes: SyncMutex::default(),
             running: SyncMutex::default(),
             starting: SyncMutex::default(),
+            fetching: Mutex::new(()),
+            ready: SyncMutex::default(),
         })
     }
 
@@ -139,6 +147,8 @@ pub struct PendingInfo {
     op: PendingOp,
     /// Nom à afficher (nom installé, sinon tiré de l'identifiant).
     name: String,
+    /// Installation déjà téléchargée pendant la partie.
+    ready: bool,
 }
 
 #[derive(Clone, Serialize)]
@@ -166,7 +176,12 @@ async fn status(app: &AppHandle, app_id: u32) -> GameStatus {
                 .flatten()
                 .map(|m| m.name)
                 .unwrap_or_else(|| display_name(op.mod_id()));
-            PendingInfo { op, name }
+            let ready = mods
+                .ready
+                .lock()
+                .unwrap()
+                .contains(&(app_id, op.mod_id().to_owned()));
+            PendingInfo { op, name, ready }
         })
         .collect();
     GameStatus {
@@ -222,6 +237,7 @@ pub async fn cancel_pending(app: AppHandle, app_id: u32, mod_id: String) -> Resu
             .filter(|op| op.mod_id() != mod_id)
             .collect();
         state.set_pending(&key, &next).map_err(|e| e.to_string())?;
+        mods.ready.lock().unwrap().remove(&(app_id, mod_id));
     }
     emit_status(&app, app_id).await;
     Ok(())
@@ -282,11 +298,53 @@ pub async fn install_mod(
 ) -> Result<Outcome<Vec<InstalledMod>>, String> {
     let game = library.game(app_id).ok_or(UNKNOWN_GAME)?;
     if mods.is_running(&game) {
-        queue(&app, app_id, PendingOp::Install { mod_id }).await?;
+        queue(
+            &app,
+            app_id,
+            PendingOp::Install {
+                mod_id: mod_id.clone(),
+            },
+        )
+        .await?;
+        // Le jeu tourne, mais rien n'empêche de télécharger : seul le
+        // déploiement attend sa fermeture.
+        tauri::async_runtime::spawn(prefetch(app.clone(), app_id, game, mod_id));
         return Ok(Outcome::Queued);
     }
     let value = run_install(&app, app_id, &game, &mod_id).await?;
     Ok(Outcome::Done { value })
+}
+
+/// Télécharge et extrait en arrière-plan une installation mise en attente.
+/// Un échec ici n'est pas grave : l'installation réessaiera à la fermeture
+/// du jeu et signalera alors l'erreur.
+async fn prefetch(app: AppHandle, app_id: u32, game: KnownGame, mod_id: String) {
+    let catalog = app.state::<Catalog>();
+    let mods = app.state::<Mods>();
+    let games_catalog = catalog.games(&app).await;
+    let key = game_key(app_id);
+    // Liste des mods installés, sans garder la base pendant le téléchargement.
+    let existing = mods.state.lock().await.list(&key).unwrap_or_default();
+    let installer = Installer {
+        source: &catalog.thunderstore,
+        catalog: games_catalog.as_deref(),
+        client: &catalog.client,
+        paths: &mods.paths,
+    };
+    let target = Target {
+        game: &key,
+        game_dir: &game.dir,
+        community: &game.community,
+    };
+    let _fetching = mods.fetching.lock().await;
+    if installer
+        .prefetch(&existing, &target, &mod_id)
+        .await
+        .is_ok()
+    {
+        mods.ready.lock().unwrap().insert((app_id, mod_id));
+        emit_status(&app, app_id).await;
+    }
 }
 
 async fn run_install(
@@ -311,6 +369,7 @@ async fn run_install(
         community: &game.community,
     };
 
+    let _fetching = mods.fetching.lock().await;
     let mut state = mods.state.lock().await;
     // Pas plus d'un événement par 1 % : l'interface n'en a pas besoin.
     let mut last = None;
@@ -540,6 +599,7 @@ async fn apply_pending(app: &AppHandle, app_id: u32, game: &KnownGame) {
     if ops.is_empty() {
         return;
     }
+    mods.ready.lock().unwrap().retain(|(id, _)| *id != app_id);
 
     let mut applied = 0;
     let mut failed = Vec::new();

@@ -114,30 +114,7 @@ impl<S: ModSource> Installer<'_, S> {
     ) -> Result<Vec<InstalledMod>, InstallError> {
         on_progress(Progress::Resolving);
         let existing = state.list(target.game)?;
-        let installed = Installed {
-            versions: existing
-                .iter()
-                .map(|m| (m.id.clone(), m.version.clone()))
-                .collect(),
-            loader: existing
-                .iter()
-                .find(|m| m.is_loader())
-                .map(|m| m.id.clone()),
-        };
-        let plan = resolver::resolve(
-            mod_id,
-            &installed,
-            |id| async move { self.source.get(target.community, &id).await },
-            |id| self.loader_root(id).is_some(),
-        )
-        .await?;
-
-        if plan.steps.iter().any(|s| s.loader)
-            && installed.loader.is_none()
-            && BepInEx.installed_manually(target.game_dir)
-        {
-            return Err(InstallError::LoaderPresent);
-        }
+        let plan = self.plan(&installed_of(&existing), target, mod_id).await?;
 
         let total = plan.steps.len();
         let mut done: Vec<Done> = Vec::new();
@@ -180,6 +157,47 @@ impl<S: ModSource> Installer<'_, S> {
         Ok(state.list(target.game)?)
     }
 
+    /// Prépare l'installation de `mod_id` sans toucher au jeu ni à l'état :
+    /// tout le plan est téléchargé et extrait. Sert pendant une partie : à la
+    /// fermeture du jeu, l'installation n'a plus qu'à poser les liens.
+    /// Renvoie le nombre de paquets préparés.
+    pub async fn prefetch(
+        &self,
+        existing: &[InstalledMod],
+        target: &Target<'_>,
+        mod_id: &str,
+    ) -> Result<usize, InstallError> {
+        let plan = self.plan(&installed_of(existing), target, mod_id).await?;
+        let total = plan.steps.len();
+        for (index, step) in plan.steps.iter().enumerate() {
+            self.fetch_step(target, step, index, total, &mut |_| {})
+                .await?;
+        }
+        Ok(total)
+    }
+
+    async fn plan(
+        &self,
+        installed: &Installed,
+        target: &Target<'_>,
+        mod_id: &str,
+    ) -> Result<resolver::InstallPlan, InstallError> {
+        let plan = resolver::resolve(
+            mod_id,
+            installed,
+            |id| async move { self.source.get(target.community, &id).await },
+            |id| self.loader_root(id).is_some(),
+        )
+        .await?;
+        if plan.steps.iter().any(|s| s.loader)
+            && installed.loader.is_none()
+            && BepInEx.installed_manually(target.game_dir)
+        {
+            return Err(InstallError::LoaderPresent);
+        }
+        Ok(plan)
+    }
+
     async fn install_step(
         &self,
         target: &Target<'_>,
@@ -189,6 +207,63 @@ impl<S: ModSource> Installer<'_, S> {
         previous: Option<&InstalledMod>,
         on_progress: &mut impl FnMut(Progress),
     ) -> Result<InstalledMod, InstallError> {
+        let name = step.name.clone();
+        let version = &step.version.number;
+        let (store_dir, sha256) = self
+            .fetch_step(target, step, index, total, on_progress)
+            .await?;
+
+        // Une mise à jour retire d'abord l'ancienne version du jeu.
+        if let Some(old) = previous {
+            deploy::undeploy(target.game_dir, &old.deployment, false);
+        }
+        let loader_root = step.loader.then(|| self.loader_root(&step.id)).flatten();
+        let placements = placements(&step.id, loader_root.as_deref(), &store_dir)?;
+        let deployment = match deploy::deploy(&store_dir, target.game_dir, &placements) {
+            Ok(d) => d,
+            Err(source) => {
+                if let Some(old) = previous {
+                    redeploy(target.game_dir, old);
+                }
+                return Err(InstallError::Deploy { name, source });
+            }
+        };
+
+        Ok(InstalledMod {
+            game: target.game.to_owned(),
+            id: step.id.clone(),
+            name,
+            author: step
+                .id
+                .split_once('-')
+                .map(|(a, _)| a.to_owned())
+                .unwrap_or_default(),
+            version: version.clone(),
+            icon_url: Some(format!(
+                "https://gcdn.thunderstore.io/live/repository/icons/{}-{version}.png",
+                step.id
+            )),
+            loader_root,
+            enabled: true,
+            explicit: false,
+            sha256,
+            installed_at: now(),
+            store_dir: store_dir.to_string_lossy().into_owned(),
+            deployment,
+        })
+    }
+
+    /// Télécharge et extrait un paquet dans le stockage, sans toucher au
+    /// jeu. Renvoie le dossier extrait et l'empreinte de l'archive. Déjà
+    /// fait pour cette version : instantané.
+    async fn fetch_step(
+        &self,
+        target: &Target<'_>,
+        step: &PlanStep,
+        index: usize,
+        total: usize,
+        on_progress: &mut impl FnMut(Progress),
+    ) -> Result<(PathBuf, String), InstallError> {
         let name = step.name.clone();
         let version = &step.version.number;
 
@@ -249,50 +324,27 @@ impl<S: ModSource> Installer<'_, S> {
             })?;
         }
 
-        // Une mise à jour retire d'abord l'ancienne version du jeu.
-        if let Some(old) = previous {
-            deploy::undeploy(target.game_dir, &old.deployment, false);
-        }
-        let loader_root = step.loader.then(|| self.loader_root(&step.id)).flatten();
-        let placements = placements(&step.id, loader_root.as_deref(), &store_dir)?;
-        let deployment = match deploy::deploy(&store_dir, target.game_dir, &placements) {
-            Ok(d) => d,
-            Err(source) => {
-                if let Some(old) = previous {
-                    redeploy(target.game_dir, old);
-                }
-                return Err(InstallError::Deploy { name, source });
-            }
-        };
-
-        Ok(InstalledMod {
-            game: target.game.to_owned(),
-            id: step.id.clone(),
-            name,
-            author: step
-                .id
-                .split_once('-')
-                .map(|(a, _)| a.to_owned())
-                .unwrap_or_default(),
-            version: version.clone(),
-            icon_url: Some(format!(
-                "https://gcdn.thunderstore.io/live/repository/icons/{}-{version}.png",
-                step.id
-            )),
-            loader_root,
-            enabled: true,
-            explicit: false,
-            sha256,
-            installed_at: now(),
-            store_dir: store_dir.to_string_lossy().into_owned(),
-            deployment,
-        })
+        Ok((store_dir, sha256))
     }
 
     fn loader_root(&self, id: &str) -> Option<String> {
         self.catalog?
             .loader_package(id)
             .map(|l| l.root_folder.clone())
+    }
+}
+
+/// Ce que le resolver doit savoir des mods déjà dans le jeu.
+fn installed_of(existing: &[InstalledMod]) -> Installed {
+    Installed {
+        versions: existing
+            .iter()
+            .map(|m| (m.id.clone(), m.version.clone()))
+            .collect(),
+        loader: existing
+            .iter()
+            .find(|m| m.is_loader())
+            .map(|m| m.id.clone()),
     }
 }
 

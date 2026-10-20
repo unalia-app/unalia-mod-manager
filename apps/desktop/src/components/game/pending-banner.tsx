@@ -1,6 +1,6 @@
 "use client";
 
-import { Clock, X } from "lucide-react";
+import { Check, Clock, X } from "lucide-react";
 
 import { toast } from "@/components/toaster";
 import { type PendingOp, cancelPending, splitError } from "@/lib/engine";
@@ -37,6 +37,9 @@ export function PendingBanner({ appId }: { appId: number }) {
 						className="flex items-center gap-1 rounded-full border border-line-strong bg-surface-strong py-0.5 pr-1 pl-2.5 text-xs text-fg-muted"
 					>
 						{describe(op)}
+						{op.type === "install" && op.ready && (
+							<Check className="size-3 text-success" aria-label="Downloaded" />
+						)}
 						<button
 							type="button"
 							aria-label={`Cancel: ${describe(op)}`}

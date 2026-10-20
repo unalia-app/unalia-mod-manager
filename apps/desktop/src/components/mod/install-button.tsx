@@ -65,7 +65,7 @@ export function InstallButton({
 					Queued
 				</Button>
 				<span className="text-[11px] text-fg-subtle">
-					Installs when you close the game ·{" "}
+					{pending.ready ? "Downloaded · installs when you close the game" : "Downloading in the background"} ·{" "}
 					<button
 						type="button"
 						className="cursor-pointer text-fg-muted underline-offset-2 hover:underline"
