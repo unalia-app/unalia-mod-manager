@@ -4,12 +4,17 @@ import { Badge, cn } from "@modalia/ui";
 import Link from "next/link";
 import { type ReactNode, type RefObject, useEffect, useState } from "react";
 
+import { WindowControls } from "@/components/window-controls";
+import { usePlatform } from "@/lib/platform";
+
 /**
  * En-tête de l'appli : logo (retour à l'accueil) et contenu propre à
  * l'écran. Commence après les feux tricolores de macOS.
  *
- * C'est aussi la poignée de la fenêtre (pas de barre de titre système) :
- * Tauri ne déplace la fenêtre que si on attrape l'en-tête lui-même, ses
+ * C'est aussi la barre de titre (pas de barre système) : poignée de la
+ * fenêtre, double-clic pour agrandir, et sous Windows les boutons de
+ * fenêtre de Modalia. Tauri ne déplace la fenêtre que si on attrape
+ * l'en-tête lui-même, ses
  * boutons restent cliquables. Il reste collé en haut pour que la poignée
  * soit toujours là.
  */
@@ -25,12 +30,16 @@ export function AppHeader({
 	children?: ReactNode;
 }) {
 	const scrolled = useScrolled();
+	const platform = usePlatform();
+	const mac = platform === "mac";
 
 	return (
 		<header
 			data-tauri-drag-region
 			className={cn(
-				"sticky top-0 z-20 flex h-14 items-center gap-5 border-b pr-6 pl-22 transition-[background-color,border-color] duration-300",
+				"sticky top-0 z-20 flex h-14 items-center gap-5 border-b transition-[background-color,border-color] duration-300",
+				// macOS : les feux tricolores occupent la gauche.
+				mac ? "pr-6 pl-22" : "pr-3 pl-6",
 				scrolled ? "border-line bg-bg/75 backdrop-blur-xl" : "border-transparent",
 			)}
 		>
@@ -48,6 +57,11 @@ export function AppHeader({
 				</Badge>
 			</Link>
 			{children}
+			{!mac && (
+				<div className="ml-auto">
+					<WindowControls />
+				</div>
+			)}
 		</header>
 	);
 }
