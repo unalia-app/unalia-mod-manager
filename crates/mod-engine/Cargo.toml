@@ -6,6 +6,7 @@ repository.workspace = true
 description = "Moteur de Modalia : détection des jeux, sources, loaders, déploiement des mods"
 
 [dependencies]
+fs4 = "1"
 reqwest = { version = "0.13", features = ["json", "query", "gzip"] }
 rusqlite = { version = "0.40", features = ["bundled"] }
 serde.workspace = true
@@ -13,6 +14,7 @@ serde_json.workspace = true
 sha2 = "0.11"
 sysinfo = { version = "0.39", default-features = false, features = ["system"] }
 thiserror.workspace = true
+tokio = { version = "1", features = ["rt", "sync", "time", "macros"] }
 zip = { version = "9", default-features = false, features = ["deflate"] }
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
 

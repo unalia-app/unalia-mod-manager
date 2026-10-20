@@ -14,7 +14,7 @@ use serde::Serialize;
 use crate::HttpClient;
 use crate::archive::{self, ArchiveError, Limits};
 use crate::deploy::{self, DeployError, Deployment};
-use crate::download::{self, DownloadError, MAX_DOWNLOAD_BYTES};
+use crate::download::{self, DownloadError};
 use crate::games::GameCatalog;
 use crate::loaders::bepinex::BepInEx;
 use crate::loaders::{Loader, PackageKind, Placement};
@@ -51,6 +51,14 @@ pub enum Progress {
         name: String,
         received: u64,
         size: Option<u64>,
+    },
+    /// Extraction : `done` / `size` en octets décompressés.
+    Extracting {
+        index: usize,
+        total: usize,
+        name: String,
+        done: u64,
+        size: u64,
     },
     Installing {
         index: usize,
@@ -275,12 +283,15 @@ impl<S: ModSource> Installer<'_, S> {
         let sha256 = if archive.is_file() {
             download::sha256_file(&archive)?
         } else {
+            let options = download::Options {
+                expected_sha256: step.version.sha256.clone(),
+                ..download::Options::default()
+            };
             download::download(
                 self.client,
                 &step.version.download_url,
                 &archive,
-                step.version.sha256.as_deref(),
-                MAX_DOWNLOAD_BYTES,
+                &options,
                 |received, size| {
                     on_progress(Progress::Downloading {
                         index,
@@ -316,12 +327,35 @@ impl<S: ModSource> Installer<'_, S> {
             if let Some(parent) = store_dir.parent() {
                 fs::create_dir_all(parent)?;
             }
-            archive::extract(&archive, &store_dir, Limits::default()).map_err(|source| {
-                InstallError::Archive {
+            // Sur un fil à part : extraire 10 Go prend des minutes, le fil
+            // asynchrone doit rester libre. La progression revient par canal.
+            let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+            let (from, to) = (archive.clone(), store_dir.clone());
+            let job = tokio::task::spawn_blocking(move || {
+                let mut last = 0;
+                archive::extract_with_progress(&from, &to, Limits::default(), |done, size| {
+                    // Un message par Mo suffit à l'affichage.
+                    if done - last >= 1024 * 1024 || done == size {
+                        last = done;
+                        let _ = tx.send((done, size));
+                    }
+                })
+            });
+            while let Some((done, size)) = rx.recv().await {
+                on_progress(Progress::Extracting {
+                    index,
+                    total,
+                    name: name.clone(),
+                    done,
+                    size,
+                });
+            }
+            job.await
+                .map_err(|e| InstallError::Io(std::io::Error::other(e)))?
+                .map_err(|source| InstallError::Archive {
                     name: name.clone(),
                     source,
-                }
-            })?;
+                })?;
         }
 
         Ok((store_dir, sha256))

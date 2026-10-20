@@ -27,9 +27,11 @@ pub struct Limits {
 
 impl Default for Limits {
     fn default() -> Self {
+        // Assez pour les plus gros mods (textures 4K, gros packs), le ratio
+        // de compression reste la vraie défense contre les archives bombes.
         Self {
-            max_total_bytes: 2 * 1024 * 1024 * 1024,
-            max_entries: 20_000,
+            max_total_bytes: 256 * 1024 * 1024 * 1024,
+            max_entries: 500_000,
             max_ratio: 200,
         }
     }
@@ -59,13 +61,25 @@ pub enum ArchiveError {
 /// L'extraction se fait dans un dossier temporaire voisin, renommé en `dest`
 /// seulement si tout a réussi.
 pub fn extract(archive: &Path, dest: &Path, limits: Limits) -> Result<Vec<String>, ArchiveError> {
+    extract_with_progress(archive, dest, limits, |_, _| {})
+}
+
+/// Comme `extract`, avec `on_progress(octets extraits, total annoncé)` :
+/// le total vient de l'archive (pour l'affichage seulement, les limites se
+/// fondent sur ce qui est réellement écrit).
+pub fn extract_with_progress(
+    archive: &Path,
+    dest: &Path,
+    limits: Limits,
+    mut on_progress: impl FnMut(u64, u64),
+) -> Result<Vec<String>, ArchiveError> {
     let staging = dest.with_extension("partial");
     if staging.exists() {
         fs::remove_dir_all(&staging)?;
     }
     fs::create_dir_all(&staging)?;
 
-    match extract_into(archive, &staging, limits) {
+    match extract_into(archive, &staging, limits, &mut on_progress) {
         Ok(files) => {
             fs::rename(&staging, dest)?;
             Ok(files)
@@ -77,11 +91,19 @@ pub fn extract(archive: &Path, dest: &Path, limits: Limits) -> Result<Vec<String
     }
 }
 
-fn extract_into(archive: &Path, dir: &Path, limits: Limits) -> Result<Vec<String>, ArchiveError> {
+fn extract_into(
+    archive: &Path,
+    dir: &Path,
+    limits: Limits,
+    on_progress: &mut impl FnMut(u64, u64),
+) -> Result<Vec<String>, ArchiveError> {
     let mut zip = zip::ZipArchive::new(File::open(archive)?)?;
     if zip.len() > limits.max_entries {
         return Err(ArchiveError::TooManyEntries);
     }
+    let announced: u64 = (0..zip.len())
+        .filter_map(|i| zip.by_index_raw(i).ok().map(|e| e.size()))
+        .sum();
 
     let mut files = Vec::new();
     let mut total: u64 = 0;
@@ -122,6 +144,7 @@ fn extract_into(archive: &Path, dir: &Path, limits: Limits) -> Result<Vec<String
             return Err(ArchiveError::SuspiciousRatio(raw));
         }
         total += written;
+        on_progress(total, announced.max(total));
         files.push(to_slash(&relative));
     }
     files.sort();

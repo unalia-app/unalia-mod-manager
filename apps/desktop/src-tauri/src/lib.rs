@@ -310,7 +310,14 @@ async fn artwork_file(app: &AppHandle, app_id: u32, kind: ArtworkKind) -> Option
     let _guard = library.art_downloads.lock().await;
     if !file.is_file() {
         let client = app.state::<Catalog>().client.clone();
-        download::download(&client, &url, &file, None, 20 * 1024 * 1024, |_, _| {})
+        // Une image : une seule connexion, 20 Mo au plus.
+        let options = download::Options {
+            max_bytes: 20 * 1024 * 1024,
+            connections: 1,
+            space_factor: 1.0,
+            ..download::Options::default()
+        };
+        download::download(&client, &url, &file, &options, |_, _| {})
             .await
             .ok()?;
     }

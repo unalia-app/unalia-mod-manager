@@ -22,7 +22,8 @@ import {
 
 export type ActiveInstall =
 	| { status: "queued" }
-	| { status: "running"; progress: InstallProgress }
+	/** `speed` : octets par seconde (moyenne lissée), pendant un téléchargement. */
+	| { status: "running"; progress: InstallProgress; speed?: number }
 	| { status: "error"; message: string; details: string | null };
 
 type Snapshot = {
@@ -68,9 +69,36 @@ function listenOnce() {
 	listening = true;
 	void onInstallProgress(({ appId, modId, progress }) =>
 		update((s) => {
-			s.active.set(key(appId, modId), { status: "running", progress });
+			const k = key(appId, modId);
+			s.active.set(k, { status: "running", progress, speed: measureSpeed(k, progress) });
 		}),
 	);
+}
+
+/** Échantillons de vitesse par installation (téléchargement en cours). */
+const samples = new Map<string, { index: number; bytes: number; at: number; speed?: number }>();
+
+/**
+ * Vitesse lissée (moyenne mobile exponentielle) : assez réactive pour
+ * suivre une variation, assez stable pour un temps restant lisible.
+ */
+function measureSpeed(k: string, progress: InstallProgress): number | undefined {
+	if (progress.stage !== "downloading") {
+		samples.delete(k);
+		return undefined;
+	}
+	const now = performance.now();
+	const previous = samples.get(k);
+	if (!previous || previous.index !== progress.index || progress.received < previous.bytes) {
+		samples.set(k, { index: progress.index, bytes: progress.received, at: now });
+		return undefined;
+	}
+	const elapsed = (now - previous.at) / 1000;
+	if (elapsed < 0.25) return previous.speed;
+	const instant = (progress.received - previous.bytes) / elapsed;
+	const speed = previous.speed === undefined ? instant : previous.speed * 0.7 + instant * 0.3;
+	samples.set(k, { index: progress.index, bytes: progress.received, at: now, speed });
+	return speed;
 }
 
 const loading = new Set<number>();
@@ -186,8 +214,10 @@ export function overallProgress(progress: InstallProgress): number {
 			return 0.03;
 		case "downloading": {
 			const part = progress.size ? progress.received / progress.size : 0.5;
-			return (progress.index + part * 0.85) / progress.total;
+			return (progress.index + part * 0.8) / progress.total;
 		}
+		case "extracting":
+			return (progress.index + 0.8 + (progress.done / Math.max(progress.size, 1)) * 0.15) / progress.total;
 		case "installing":
 			return (progress.index + 0.92) / progress.total;
 	}

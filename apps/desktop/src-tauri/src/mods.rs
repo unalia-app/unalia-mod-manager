@@ -383,9 +383,13 @@ async fn run_install(
                     ..
                 } => Some((
                     *index,
+                    0,
                     size.map(|s| received * 100 / s.max(1))
                         .unwrap_or(*received >> 16),
                 )),
+                Progress::Extracting {
+                    index, done, size, ..
+                } => Some((*index, 1, done * 100 / (*size).max(1))),
                 _ => None,
             };
             if step.is_some() && step == last {

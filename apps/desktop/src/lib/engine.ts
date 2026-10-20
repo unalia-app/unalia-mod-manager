@@ -185,6 +185,7 @@ export type InstalledMod = {
 export type InstallProgress =
 	| { stage: "resolving" }
 	| { stage: "downloading"; index: number; total: number; name: string; received: number; size: number | null }
+	| { stage: "extracting"; index: number; total: number; name: string; done: number; size: number }
 	| { stage: "installing"; index: number; total: number; name: string };
 
 export type InstallEvent = { appId: number; modId: string; progress: InstallProgress };

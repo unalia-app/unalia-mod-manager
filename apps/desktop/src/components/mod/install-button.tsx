@@ -4,6 +4,7 @@ import { Button, cn } from "@modalia/ui";
 import { ArrowUp, Check, Clock, Download, RotateCw } from "lucide-react";
 
 import { type InstallProgress, cancelPending } from "@/lib/engine";
+import { bytes, timeLeft } from "@/lib/format";
 import { usePendingOp } from "@/lib/game-status";
 import { clearError, install, overallProgress, useActiveInstall, useInstalled, useModUpdate } from "@/lib/installs";
 
@@ -32,6 +33,7 @@ export function InstallButton({
 
 	if (active?.status === "queued" || active?.status === "running") {
 		const progress = active.status === "running" ? active.progress : null;
+		const speed = active.status === "running" ? active.speed : undefined;
 		const value = progress ? overallProgress(progress) : 0;
 		return (
 			<div className="flex flex-col items-end gap-2">
@@ -52,7 +54,7 @@ export function InstallButton({
 						{label(progress, value)}
 					</span>
 				</div>
-				<span className="text-[11px] text-fg-subtle">{sublabel(progress)}</span>
+				<span className="text-right text-[11px] whitespace-pre-line text-fg-subtle">{sublabel(progress, speed)}</span>
 			</div>
 		);
 	}
@@ -147,12 +149,29 @@ function label(progress: InstallProgress | null, value: number): string {
 	if (!progress) return "Waiting…";
 	if (progress.stage === "resolving") return "Preparing…";
 	const percent = Math.round(value * 100);
-	return progress.stage === "downloading" ? `Downloading ${percent}%` : `Installing ${percent}%`;
+	if (progress.stage === "downloading") return `Downloading ${percent}%`;
+	if (progress.stage === "extracting") return `Unpacking ${percent}%`;
+	return `Installing ${percent}%`;
 }
 
-function sublabel(progress: InstallProgress | null): string {
+/**
+ * Paquet en cours, et pour les gros fichiers la quantité, la vitesse et le
+ * temps restant : « 3.2 GB of 10 GB · 24 MB/s · 5 min left ».
+ */
+function sublabel(progress: InstallProgress | null, speed?: number): string {
 	if (!progress || progress.stage === "resolving") return "Checking dependencies";
-	return progress.total > 1 ? `${progress.name} · ${progress.index + 1} of ${progress.total}` : progress.name;
+	const which = progress.total > 1 ? `${progress.name} · ${progress.index + 1} of ${progress.total}` : progress.name;
+	if (progress.stage === "downloading" && progress.size && progress.size > 20 * 1024 * 1024) {
+		const parts = [`${bytes(progress.received)} of ${bytes(progress.size)}`];
+		if (speed && speed > 0) {
+			parts.push(`${bytes(speed)}/s`, timeLeft((progress.size - progress.received) / speed));
+		}
+		return `${which}\n${parts.filter(Boolean).join(" · ")}`;
+	}
+	if (progress.stage === "extracting" && progress.size > 20 * 1024 * 1024) {
+		return `${which}\nUnpacking ${bytes(progress.done)} of ${bytes(progress.size)}`;
+	}
+	return which;
 }
 
 /** Badge des cartes : installé / en cours. */
