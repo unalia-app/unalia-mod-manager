@@ -9,7 +9,9 @@ description = "Moteur de Modalia : détection des jeux, sources, loaders, déplo
 reqwest = { version = "0.13", features = ["json", "query", "gzip"] }
 serde.workspace = true
 serde_json.workspace = true
+sha2 = "0.11"
 thiserror.workspace = true
+zip = { version = "9", default-features = false, features = ["deflate"] }
 image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
 
 [target.'cfg(windows)'.dependencies]

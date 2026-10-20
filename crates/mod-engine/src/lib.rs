@@ -2,9 +2,13 @@
 //!
 //! Voir `SPEC.md` (section 6.3) pour le rôle de chaque brique.
 
+pub mod archive;
 pub mod artwork;
+pub mod deploy;
 pub mod detect;
 pub mod games;
+pub mod loaders;
+pub mod resolver;
 pub mod sources;
 
 pub use reqwest::Client as HttpClient;
