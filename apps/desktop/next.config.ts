@@ -5,6 +5,8 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   output: "export",
   images: { unoptimized: true },
+  // `/game/` → `game/index.html` : servi tel quel par Tauri.
+  trailingSlash: true,
   transpilePackages: ["@modalia/ui"],
   devIndicators: false,
 };

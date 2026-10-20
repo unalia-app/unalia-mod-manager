@@ -6,7 +6,7 @@ import { Spinner } from "./spinner";
 
 // Repris du MainButton d'Unalia : fond blanc, texte qui glisse au survol.
 const buttonVariants = cva(
-	"group inline-flex select-none items-center justify-center rounded-md font-medium transition-[color,background-color,transform] duration-200 cursor-pointer active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 disabled:cursor-not-allowed disabled:opacity-60",
+	"group inline-flex select-none items-center justify-center rounded-md font-medium transition-[color,background-color,scale] duration-200 cursor-pointer active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 disabled:cursor-not-allowed disabled:opacity-60",
 	{
 		variants: {
 			variant: {

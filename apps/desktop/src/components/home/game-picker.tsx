@@ -2,16 +2,14 @@
 
 import { Badge, Button, Kbd, SearchField, Skeleton, cn } from "@modalia/ui";
 import { ArrowRight, FolderPlus, Gamepad2, RotateCw, TriangleAlert } from "lucide-react";
-import { type KeyboardEvent, type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
+import { type KeyboardEvent, useCallback, useEffect, useMemo, useState } from "react";
 
-import {
-	type GameScan,
-	type SteamGame,
-	artworkUrl,
-	gameSubtitle,
-	isModdable,
-	listGames,
-} from "@/lib/engine";
+import { GameCover } from "@/components/game-cover";
+import { Notice } from "@/components/notice";
+import { type GameScan, type SteamGame, gameSubtitle, isModdable } from "@/lib/engine";
+import { gameHref, loadGames, rememberGame, withRecentsFirst } from "@/lib/games-store";
+import { normalize } from "@/lib/text";
 
 /** Jamais une liste de 1 000 jeux d'emblée (SPEC §3.1). */
 const SUGGESTION_COUNT = 5;
@@ -36,18 +34,20 @@ export function GamePicker({
 	// change que si l'utilisateur désigne lui-même un jeu.
 	const [engaged, setEngaged] = useState(false);
 
-	const scan = useCallback(() => {
+	const router = useRouter();
+
+	const scan = useCallback((fresh = false) => {
 		setState({ status: "loading" });
-		listGames().then(
+		loadGames({ fresh }).then(
 			(result) => setState({ status: "ready", scan: result }),
 			(error: unknown) => setState({ status: "error", message: String(error) }),
 		);
 	}, []);
 
-	useEffect(scan, [scan]);
+	useEffect(() => scan(), [scan]);
 
 	const games = state.status === "ready" ? state.scan.games : [];
-	const moddable = useMemo(() => games.filter(isModdable), [games]);
+	const moddable = useMemo(() => withRecentsFirst(games.filter(isModdable)), [games]);
 
 	// Sans recherche : les jeux moddables. Avec : tous les jeux qui
 	// correspondent, moddables d'abord, pour expliquer pourquoi un jeu
@@ -70,7 +70,8 @@ export function GamePicker({
 
 	const select = (game: SteamGame) => {
 		if (!isModdable(game)) return;
-		// Branché quand l'écran du jeu (Découvrir / Mes mods) existera.
+		rememberGame(game.appId);
+		router.push(gameHref(game.appId));
 	};
 
 	const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
@@ -110,7 +111,7 @@ export function GamePicker({
 						icon={<TriangleAlert className="size-5 text-danger" />}
 						title="Impossible de lire ta bibliothèque Steam"
 						action={
-							<Button variant="outline" size="sm" leftIcon={<RotateCw className="size-3.5" />} onClick={scan}>
+							<Button variant="outline" size="sm" leftIcon={<RotateCw className="size-3.5" />} onClick={() => scan(true)}>
 								Réessayer
 							</Button>
 						}
@@ -219,7 +220,7 @@ function GameRow({
 			{moddable ? (
 				<ArrowRight
 					className={cn(
-						"size-4 shrink-0 text-accent transition-[opacity,transform] duration-200",
+						"size-4 shrink-0 text-accent transition-[opacity,translate] duration-200",
 						active ? "translate-x-0 opacity-100" : "-translate-x-1 opacity-0",
 					)}
 				/>
@@ -227,37 +228,6 @@ function GameRow({
 				<Badge>Bientôt</Badge>
 			)}
 		</button>
-	);
-}
-
-/** Jaquette du cache de Steam ; initiales tant qu'elle charge ou si elle manque. */
-function GameCover({ game, dimmed }: { game: SteamGame; dimmed: boolean }) {
-	const [status, setStatus] = useState<"loading" | "loaded" | "missing">("loading");
-
-	return (
-		<span
-			aria-hidden
-			className={cn(
-				"relative flex h-12 w-8 shrink-0 items-center justify-center overflow-hidden rounded-md border border-line bg-gradient-to-br from-white/[0.08] to-white/[0.02] font-tight text-[11px] font-semibold text-fg-muted",
-				dimmed && "opacity-50 grayscale",
-			)}
-		>
-			{status !== "loaded" && initials(game.name)}
-			{status !== "missing" && (
-				<img
-					src={artworkUrl(game.appId, "cover")}
-					alt=""
-					loading="lazy"
-					decoding="async"
-					onLoad={() => setStatus("loaded")}
-					onError={() => setStatus("missing")}
-					className={cn(
-						"absolute inset-0 size-full object-cover transition-opacity duration-300",
-						status === "loaded" ? "opacity-100" : "opacity-0",
-					)}
-				/>
-			)}
-		</span>
 	);
 }
 
@@ -275,59 +245,4 @@ function LoadingRows() {
 			))}
 		</div>
 	);
-}
-
-function Notice({
-	icon,
-	title,
-	children,
-	action,
-	details,
-}: {
-	icon: ReactNode;
-	title: string;
-	children: ReactNode;
-	action?: ReactNode;
-	details?: string;
-}) {
-	return (
-		<div className="flex animate-row-in gap-3 px-3 py-3.5">
-			<span className="flex size-10 shrink-0 items-center justify-center rounded-xl border border-line bg-surface">
-				{icon}
-			</span>
-			<div className="min-w-0 flex-1">
-				<p className="text-sm font-medium text-fg">{title}</p>
-				<p className="mt-0.5 text-xs leading-relaxed text-fg-subtle">{children}</p>
-				{action && <div className="mt-3">{action}</div>}
-				{details && (
-					<details className="mt-3 text-xs text-fg-faint">
-						<summary className="cursor-pointer select-none transition-colors hover:text-fg-subtle">
-							Détails techniques
-						</summary>
-						<pre className="mt-2 overflow-x-auto whitespace-pre-wrap rounded-md border border-line bg-black/30 p-2.5 font-mono text-[11px] text-fg-subtle">
-							{details}
-						</pre>
-					</details>
-				)}
-			</div>
-		</div>
-	);
-}
-
-/** Recherche tolérante : casse, accents et ponctuation ignorés. */
-function normalize(text: string): string {
-	return text
-		.normalize("NFD")
-		.replace(/\p{Diacritic}/gu, "")
-		.toLowerCase()
-		.replace(/[^\p{L}\p{N}]+/gu, " ")
-		.trim();
-}
-
-function initials(name: string): string {
-	const words = normalize(name).split(" ").filter(Boolean);
-	return words
-		.slice(0, 2)
-		.map((w) => w[0]?.toUpperCase())
-		.join("");
 }

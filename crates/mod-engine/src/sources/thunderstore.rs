@@ -5,6 +5,9 @@
 //!   télécharger tout le catalogue).
 //! - Fiche et description : `api/experimental/package/...` (documentée).
 
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
+
 use reqwest::{Client, StatusCode};
 use serde::Deserialize;
 use serde::de::DeserializeOwned;
@@ -25,6 +28,9 @@ pub const MOD_MANAGERS: [&str; 2] = ["ebkr-r2modman", "Kesomannen-GaleModManager
 pub struct Thunderstore {
     client: Client,
     base_url: String,
+    /// Identifiant de la catégorie « Libraries » de chaque communauté
+    /// (`None` : la communauté n'en a pas).
+    library_categories: Arc<Mutex<HashMap<String, Option<u64>>>>,
 }
 
 impl Thunderstore {
@@ -37,7 +43,32 @@ impl Thunderstore {
         Self {
             client,
             base_url: base_url.trim_end_matches('/').to_owned(),
+            library_categories: Arc::default(),
         }
+    }
+
+    /// Les filtres de catégorie attendent des identifiants propres à chaque
+    /// communauté : on les demande une fois. En cas d'échec, pas de filtre
+    /// (et on réessaiera à la prochaine recherche).
+    async fn library_category(&self, community: &str) -> Option<u64> {
+        if let Some(&cached) = self.library_categories.lock().unwrap().get(community) {
+            return cached;
+        }
+        let url = format!(
+            "{}/api/cyberstorm/community/{community}/filters/",
+            self.base_url
+        );
+        let filters: Filters = self.fetch(&url, &[]).await.ok()?;
+        let id = filters
+            .package_categories
+            .iter()
+            .find(|c| c.slug == "libraries")
+            .and_then(|c| c.id.parse().ok());
+        self.library_categories
+            .lock()
+            .unwrap()
+            .insert(community.to_owned(), id);
+        id
     }
 
     async fn fetch<T: DeserializeOwned>(
@@ -82,11 +113,8 @@ impl ModSource for Thunderstore {
         community: &str,
         query: &SearchQuery,
     ) -> Result<Page<ModSummary>, SourceError> {
-        let url = format!(
-            "{}/api/cyberstorm/listing/{}/",
-            self.base_url,
-            segment(community)?
-        );
+        let community = segment(community)?;
+        let url = format!("{}/api/cyberstorm/listing/{community}/", self.base_url);
         let ordering = match query.sort {
             Sort::Popular => "most-downloaded",
             Sort::Newest => "newest",
@@ -98,6 +126,11 @@ impl ModSource for Thunderstore {
         ];
         if !query.text.trim().is_empty() {
             params.push(("q", query.text.trim().to_owned()));
+        }
+        if !query.include_libraries
+            && let Some(id) = self.library_category(community).await
+        {
+            params.push(("excluded_categories", id.to_string()));
         }
 
         let listing: Listing = self.fetch(&url, &params).await?;
@@ -167,6 +200,17 @@ fn parse_dependency(full: &str) -> Option<Dependency> {
         id: id.to_owned(),
         min_version: version.to_owned(),
     })
+}
+
+#[derive(Deserialize)]
+struct Filters {
+    package_categories: Vec<FilterCategory>,
+}
+
+#[derive(Deserialize)]
+struct FilterCategory {
+    id: String,
+    slug: String,
 }
 
 #[derive(Deserialize)]

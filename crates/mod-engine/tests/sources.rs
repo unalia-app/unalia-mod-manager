@@ -62,6 +62,63 @@ async fn search_maps_the_listing_to_neutral_summaries() {
 }
 
 #[tokio::test]
+async fn search_excludes_libraries_by_default() {
+    let (mut server, ts) = source().await;
+    let filters = server
+        .mock(
+            "GET",
+            "/api/cyberstorm/community/hollow-knight-silksong/filters/",
+        )
+        .with_body(fixture("filters-silksong.json"))
+        .expect(1)
+        .create_async()
+        .await;
+    let excluded = server
+        .mock("GET", "/api/cyberstorm/listing/hollow-knight-silksong/")
+        .match_query(Matcher::UrlEncoded(
+            "excluded_categories".into(),
+            "1615".into(),
+        ))
+        .with_body(fixture("listing-silksong.json"))
+        .expect(2)
+        .create_async()
+        .await;
+
+    // Deux recherches : les filtres ne sont demandés qu'une fois.
+    for _ in 0..2 {
+        ts.search("hollow-knight-silksong", &SearchQuery::default())
+            .await
+            .unwrap();
+    }
+    filters.assert_async().await;
+    excluded.assert_async().await;
+}
+
+#[tokio::test]
+async fn libraries_can_be_included_and_filters_are_optional() {
+    let (mut server, ts) = source().await;
+    // Pas de route de filtres : la recherche marche quand même, sans filtre.
+    let plain = server
+        .mock("GET", "/api/cyberstorm/listing/hollow-knight-silksong/")
+        .match_query(Matcher::Any)
+        .match_request(|req| !req.path_and_query().contains("excluded_categories"))
+        .with_body(fixture("listing-silksong.json"))
+        .expect(2)
+        .create_async()
+        .await;
+
+    ts.search("hollow-knight-silksong", &SearchQuery::default())
+        .await
+        .unwrap();
+    let all = SearchQuery {
+        include_libraries: true,
+        ..Default::default()
+    };
+    ts.search("hollow-knight-silksong", &all).await.unwrap();
+    plain.assert_async().await;
+}
+
+#[tokio::test]
 async fn search_sends_text_sort_and_page() {
     let (mut server, ts) = source().await;
     let mock = server
@@ -79,6 +136,7 @@ async fn search_sends_text_sort_and_page() {
         text: "  skip intro ".into(),
         sort: Sort::Updated,
         page: 3,
+        ..Default::default()
     };
     let page = ts.search("hollow-knight-silksong", &query).await.unwrap();
     mock.assert_async().await;

@@ -61,7 +61,12 @@ pub async fn search_mods(
     sort: Sort,
     page: u32,
 ) -> Result<Page<ModSummary>, String> {
-    let query = SearchQuery { text, sort, page };
+    let query = SearchQuery {
+        text,
+        sort,
+        page,
+        ..Default::default()
+    };
     let (games, page) = tokio::join!(
         catalog.games(&app),
         catalog.thunderstore.search(&community, &query),

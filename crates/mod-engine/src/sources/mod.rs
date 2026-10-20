@@ -98,6 +98,10 @@ pub struct SearchQuery {
     pub sort: Sort,
     /// À partir de 1.
     pub page: u32,
+    /// Inclure les bibliothèques techniques. Par défaut non : elles
+    /// trustent les « populaires » (tout le monde en dépend) alors que
+    /// Modalia les installe tout seul comme dépendances.
+    pub include_libraries: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]

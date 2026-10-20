@@ -1,0 +1,88 @@
+{
+    "package_categories": [
+        {
+            "id": "1616",
+            "name": "(Deprecated category) Misc",
+            "slug": "misc"
+        },
+        {
+            "id": "1612",
+            "name": "Mods",
+            "slug": "mods"
+        },
+        {
+            "id": "1613",
+            "name": "Modpacks",
+            "slug": "modpacks"
+        },
+        {
+            "id": "1615",
+            "name": "Libraries",
+            "slug": "libraries"
+        },
+        {
+            "id": "1683",
+            "name": "Utility",
+            "slug": "utility"
+        },
+        {
+            "id": "1684",
+            "name": "Cosmetic",
+            "slug": "cosmetic"
+        },
+        {
+            "id": "1685",
+            "name": "Accessibility",
+            "slug": "accessibility"
+        },
+        {
+            "id": "1686",
+            "name": "Custom Tools",
+            "slug": "custom-tools"
+        },
+        {
+            "id": "1687",
+            "name": "Custom Crests",
+            "slug": "custom-crests"
+        },
+        {
+            "id": "1688",
+            "name": "Boss",
+            "slug": "boss"
+        },
+        {
+            "id": "1689",
+            "name": "Expansion",
+            "slug": "expansion"
+        },
+        {
+            "id": "2272",
+            "name": "AI Generated",
+            "slug": "ai-generated"
+        },
+        {
+            "id": "1614",
+            "name": "(Deprecated category) Tools",
+            "slug": "tools"
+        },
+        {
+            "id": "1617",
+            "name": "(Deprecated category) Audio",
+            "slug": "audio"
+        }
+    ],
+    "sections": [
+        {
+            "uuid": "01990e7b-a38e-f459-233c-f7e5f669f227",
+            "name": "Mods",
+            "slug": "mods",
+            "priority": 0
+        },
+        {
+            "uuid": "01990e7b-a39b-3809-2285-98b03b90cf08",
+            "name": "Modpacks",
+            "slug": "modpacks",
+            "priority": -1
+        }
+    ]
+}

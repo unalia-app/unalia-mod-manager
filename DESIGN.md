@@ -51,6 +51,7 @@ Une couleur d'état s'emploie toujours en **contour 20 % + fond 10 % + texte ple
 
 - Rayons : `rounded-md` pour boutons et champs, `rounded-lg` pour lignes et vignettes, `rounded-xl` pour panneaux, `rounded-2xl` pour fenêtres modales.
 - Panneau standard : utilitaire `glass` (bordure `line`, fond `surface`, flou). Le réserver aux panneaux de taille raisonnable : `backdrop-filter` coûte cher sur de grandes surfaces (SPEC §4).
+- **Jamais de `glass` sur un élément répété ou animé** (cartes d'une grille, ligne qui se soulève) : le flou est recalculé à chaque image, et le survol saccade. Utiliser `rounded-xl border border-line bg-surface`, qui donne quasiment le même rendu sur fond sombre.
 
 ## Mouvement
 
@@ -61,7 +62,9 @@ Une couleur d'état s'emploie toujours en **contour 20 % + fond 10 % + texte ple
 - Bouton principal : le libellé glisse au survol (effet repris du `MainButton` d'Unalia).
 - `prefers-reduced-motion` est respecté globalement.
 - **Intro de lancement** (`components/intro.tsx`, environ 1,6 s) : les lettres de MODALIA apparaissent une à une (fondu, légère montée, du flou au net, jamais masquées : une lettre à moitié coupée se lit comme un bug), un reflet irisé les traverse, un halo s'ouvre et une ligne se trace. Le logo s'envole ensuite vers l'en-tête (FLIP : on part d'un grand texte et on le réduit, pour garder des lettres nettes). Pendant l'intro, les entrées `animate-fade-up` de l'écran sont en pause (`.intro-pending`) et reprennent au moment de l'envol. Un clic ou une touche passe l'intro. Elle se joue une fois par lancement.
-- Piège Tailwind v4 : `translate-*` utilise la propriété CSS `translate`, qui s'ajoute à `transform`. Sur un élément animé par une keyframe en `transform`, ne pas mettre de classe `translate-*`.
+- Piège Tailwind v4 : `translate-*`, `scale-*` et `rotate-*` utilisent les propriétés CSS `translate`, `scale` et `rotate`, pas `transform`.
+  - Une transition explicite doit les nommer : `transition-[opacity,translate]`, pas `transition-[opacity,transform]`, sinon l'effet saute au lieu de s'animer. `transition-transform` et `transition` les couvrent déjà.
+  - Sur un élément animé par une keyframe en `transform`, ne pas mettre de classe `translate-*` : les deux s'additionnent.
 
 ## Composants (`@modalia/ui`)
 
@@ -70,6 +73,7 @@ Une couleur d'état s'emploie toujours en **contour 20 % + fond 10 % + texte ple
 | `Button` | `primary` (blanc, une seule action principale), `secondary` (texte), `outline` (verre). Tailles `sm` `md` `lg` `icon`. `isLoading` remplace le contenu par un `Spinner`. |
 | `Badge` | Étiquette en pilule : `neutral`, `accent` ou un état. |
 | `SearchField` | Champ de recherche en verre clair, avec un élément optionnel à droite. |
+| `Segmented` | Choix exclusif à indicateur glissant : `tabs` (onglets d'écran, soulignés à l'accent) ou `pills` (tri, filtres ; hauteur h-10 comme un `SearchField` compact, pour s'aligner dans une barre d'outils). |
 | `Skeleton` | Bloc de chargement. |
 | `Kbd` | Touche ou raccourci clavier. |
 | `cn` | Fusion de classes, connaît les tokens maison. |
@@ -78,7 +82,9 @@ Avant de créer un composant, vérifier qu'il n'existe pas dans Unalia (`compone
 
 ## Fenêtre
 
-- Pas de barre de titre système sous macOS (`titleBarStyle: Overlay`). Le haut de la fenêtre (`h-11`) sert de zone de déplacement, et le contenu de l'en-tête commence après les feux tricolores (`pl-22`).
+- Pas de barre de titre système sous macOS (`titleBarStyle: Overlay`). L'en-tête (`AppHeader`) est la zone de déplacement (`data-tauri-drag-region` sur l'élément lui-même, ses boutons restent cliquables). Il reste collé en haut, avec un fond flouté une fois la page défilée. Son contenu commence après les feux tricolores (`pl-22`).
+- `overflow-clip` plutôt que `overflow-hidden` sur les conteneurs d'écran : `hidden` crée un conteneur de défilement et casse `position: sticky`.
+- Un texte tronqué (`truncate`) coupe aussi les jambages (g, j, p) : lui donner un `pb-1`.
 - Sous Windows : effets Mica/acrylique à évaluer.
 
 ## Textes
