@@ -92,7 +92,7 @@ export function ModCard({ mod, index, appId }: { mod: ModSummary; index: number;
 }
 
 /**
- * Petit bouton « Install » toujours visible sur la carte (SPEC §3.4) : un
+ * Petit bouton « Install » au survol de la carte (SPEC §3.4) : un
  * clic installe le mod avec ses dépendances et le loader. Pendant
  * l'installation, il montre juste l'avancement ; une fois installé, il
  * laisse la place au badge « Installed ».
@@ -120,7 +120,12 @@ function QuickInstall({ appId, modId, name }: { appId: number; modId: string; na
 			title={failed ? active.message : undefined}
 			onClick={() => void install(appId, modId)}
 			className={cn(
-				"absolute right-2 bottom-2 z-20 flex h-7 min-w-[4.5rem] cursor-pointer items-center justify-center gap-1.5 rounded-full px-2.5 font-tight text-[11px] font-semibold shadow-lg transition-colors duration-200 disabled:cursor-default",
+				"absolute right-2 bottom-2 z-20 flex h-7 min-w-[4.5rem] cursor-pointer items-center justify-center gap-1.5 rounded-full px-2.5 font-tight text-[11px] font-semibold shadow-lg transition-[opacity,translate,background-color] duration-200 ease-out disabled:cursor-default",
+				// Au survol seulement : sur toute une grille, un bouton par carte
+				// se répète trop. Il reste affiché pendant l'installation et en
+				// cas d'échec, pour ne pas perdre l'info.
+				!busy && !failed &&
+					"translate-y-1 opacity-0 group-hover:translate-y-0 group-hover:opacity-100 focus-visible:translate-y-0 focus-visible:opacity-100",
 				failed ? "bg-danger text-bg" : busy ? "bg-black/70 text-fg backdrop-blur-md" : "bg-white text-bg hover:bg-white/85",
 			)}
 		>
