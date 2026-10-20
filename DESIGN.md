@@ -52,7 +52,7 @@ Une couleur d'état s'emploie toujours en **contour 20 % + fond 10 % + texte ple
 - Rayons : `rounded-md` pour boutons et champs, `rounded-lg` pour lignes et vignettes, `rounded-xl` pour panneaux, `rounded-2xl` pour fenêtres modales.
 - Panneau standard : utilitaire `glass` (bordure `line`, fond `surface`, flou). Le réserver aux panneaux de taille raisonnable : `backdrop-filter` coûte cher sur de grandes surfaces (SPEC §4).
 - **Contrôle posé sur une image** (bouton ou badge sur une icône de mod ou une jaquette) : utilitaire `liquid-glass`, un verre sombre teinté avec un liseré clair, lisible sur une image claire comme sombre. Jamais de bouton blanc sur une image : il disparaît sur un fond clair.
-- Barres de défilement : fines et invisibles au repos, elles apparaissent pendant le défilement ou au survol (`ScrollActivity` + `styles.css`).
+- Barres de défilement : la barre native est masquée (sous Windows, elle réserve sa colonne même transparente). La page a sa barre en surimpression (`OverlayScrollbar`), visible pendant le défilement ou au survol du bord droit, et qu'on peut attraper.
 - **Jamais de `glass` sur un élément répété ou animé** (cartes d'une grille, ligne qui se soulève) : le flou est recalculé à chaque image, et le survol saccade. Utiliser `rounded-xl border border-line bg-surface`, qui donne quasiment le même rendu sur fond sombre.
 
 ## Mouvement

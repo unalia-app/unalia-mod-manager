@@ -156,35 +156,17 @@
 }
 
 /*
- * Barres de défilement (WebView2 sous Windows : macOS a déjà les siennes en
- * surimpression). Fines, invisibles au repos ; visibles pendant le
- * défilement (`data-scrolling` posé par `ScrollActivity`) ou au survol.
+ * Barres de défilement natives masquées : même transparente, celle de
+ * Chromium (WebView2) réserve sa colonne, et le contenu s'arrête avant. La
+ * page a sa propre barre en surimpression (`OverlayScrollbar`).
  */
+html,
+body {
+	scrollbar-width: none;
+}
+
 ::-webkit-scrollbar {
-	width: 10px;
-	height: 10px;
-}
-
-::-webkit-scrollbar-track,
-::-webkit-scrollbar-corner {
-	background: transparent;
-}
-
-::-webkit-scrollbar-thumb {
-	border: 3px solid transparent;
-	border-radius: 9999px;
-	background-clip: padding-box;
-	background-color: transparent;
-}
-
-html[data-scrolling]::-webkit-scrollbar-thumb,
-html[data-scrolling] *::-webkit-scrollbar-thumb,
-::-webkit-scrollbar-thumb:hover {
-	background-color: rgb(255 255 255 / 0.22);
-}
-
-::-webkit-scrollbar-thumb:active {
-	background-color: rgb(255 255 255 / 0.32);
+	display: none;
 }
 
 @media (prefers-reduced-motion: reduce) {
