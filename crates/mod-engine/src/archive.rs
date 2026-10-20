@@ -109,7 +109,10 @@ fn extract_into(archive: &Path, dir: &Path, limits: Limits) -> Result<Vec<String
         // au-dessus de ce qui reste autorisé.
         let remaining = limits.max_total_bytes.saturating_sub(total);
         let mut out = File::create(&target)?;
-        let written = io::copy(&mut (&mut entry).take(remaining.saturating_add(1)), &mut out)?;
+        let written = io::copy(
+            &mut (&mut entry).take(remaining.saturating_add(1)),
+            &mut out,
+        )?;
         if written > remaining {
             return Err(ArchiveError::TooLarge);
         }

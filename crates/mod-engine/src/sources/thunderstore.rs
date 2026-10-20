@@ -31,20 +31,34 @@ pub struct Thunderstore {
     /// Identifiant de la catégorie « Libraries » de chaque communauté
     /// (`None` : la communauté n'en a pas).
     library_categories: Arc<Mutex<HashMap<String, Option<u64>>>>,
+    /// Refuser les téléchargements qui ne sont pas en HTTPS. Toujours vrai
+    /// hors des tests (le faux serveur de test parle HTTP).
+    require_https: bool,
 }
 
 impl Thunderstore {
     pub fn new(client: Client) -> Self {
-        Self::with_base_url(client, BASE_URL)
+        Self {
+            require_https: true,
+            ..Self::with_base_url(client, BASE_URL)
+        }
     }
 
-    /// Pour les tests : pointe vers un faux serveur.
+    /// Pour les tests : pointe vers un faux serveur, qui peut servir ses
+    /// archives en HTTP.
     pub fn with_base_url(client: Client, base_url: &str) -> Self {
         Self {
             client,
             base_url: base_url.trim_end_matches('/').to_owned(),
             library_categories: Arc::default(),
+            require_https: base_url.starts_with("https://"),
         }
+    }
+
+    /// Impose (ou non) le HTTPS pour les téléchargements.
+    pub fn require_https(mut self, required: bool) -> Self {
+        self.require_https = required;
+        self
     }
 
     /// Les filtres de catégorie attendent des identifiants propres à chaque
@@ -152,7 +166,7 @@ impl ModSource for Thunderstore {
             self.base_url
         );
         let package: Package = self.fetch(&url, &[]).await?;
-        package.into_mod(&self.base_url, segment(community)?)
+        package.into_mod(&self.base_url, segment(community)?, self.require_https)
     }
 
     async fn description(&self, id: &str, version: &str) -> Result<String, SourceError> {
@@ -299,10 +313,15 @@ struct Readme {
 }
 
 impl Package {
-    fn into_mod(self, base_url: &str, community: &str) -> Result<Mod, SourceError> {
+    fn into_mod(
+        self,
+        base_url: &str,
+        community: &str,
+        require_https: bool,
+    ) -> Result<Mod, SourceError> {
         // L'API ne garantit pas une URL HTTPS : on refuse tout autre schéma
         // plutôt que de télécharger en clair (SPEC §7).
-        if !self.latest.download_url.starts_with("https://") {
+        if require_https && !self.latest.download_url.starts_with("https://") {
             return Err(SourceError::Unexpected {
                 source_name: NAME,
                 detail: format!("insecure download URL: {}", self.latest.download_url),

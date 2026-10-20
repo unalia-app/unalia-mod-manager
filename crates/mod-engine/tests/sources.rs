@@ -283,6 +283,7 @@ async fn server_errors_and_garbage_are_reported() {
 #[tokio::test]
 async fn insecure_download_urls_are_refused() {
     let (mut server, ts) = source().await;
+    let ts = ts.require_https(true);
     let body = fixture("package-skip-intro.json").replace(
         "https://thunderstore.io/package/download",
         "http://evil.example",

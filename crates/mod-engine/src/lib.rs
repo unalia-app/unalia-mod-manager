@@ -6,10 +6,13 @@ pub mod archive;
 pub mod artwork;
 pub mod deploy;
 pub mod detect;
+pub mod download;
 pub mod games;
+pub mod installer;
 pub mod loaders;
 pub mod resolver;
 pub mod sources;
+pub mod state;
 
 pub use reqwest::Client as HttpClient;
 

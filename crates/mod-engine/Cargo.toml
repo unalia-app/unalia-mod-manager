@@ -7,6 +7,7 @@ description = "Moteur de Modalia : détection des jeux, sources, loaders, déplo
 
 [dependencies]
 reqwest = { version = "0.13", features = ["json", "query", "gzip"] }
+rusqlite = { version = "0.40", features = ["bundled"] }
 serde.workspace = true
 serde_json.workspace = true
 sha2 = "0.11"
