@@ -4,21 +4,37 @@ import { Badge, Button, Kbd, SearchField, Skeleton, cn } from "@modalia/ui";
 import { ArrowRight, FolderPlus, Gamepad2, RotateCw, TriangleAlert } from "lucide-react";
 import { type KeyboardEvent, type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 
-import { ENGINE_LABEL, type GameScan, type SteamGame, isModdable, listGames } from "@/lib/engine";
+import {
+	ENGINE_LABEL,
+	type GameScan,
+	type SteamGame,
+	artworkUrl,
+	isModdable,
+	listGames,
+} from "@/lib/engine";
 
 /** Jamais une liste de 1 000 jeux d'emblée (SPEC §3.1). */
 const SUGGESTION_COUNT = 5;
+const SEARCH_LIMIT = 8;
 
 type ScanState =
 	| { status: "loading" }
 	| { status: "ready"; scan: GameScan }
 	| { status: "error"; message: string };
 
-export function GamePicker() {
+export function GamePicker({
+	onFocusChange,
+}: {
+	/** Jeu mis en avant par l'utilisateur (survol, flèches), `null` sinon. */
+	onFocusChange: (game: SteamGame | null) => void;
+}) {
 	const [state, setState] = useState<ScanState>({ status: "loading" });
 	const [query, setQuery] = useState("");
 	const [showAll, setShowAll] = useState(false);
 	const [active, setActive] = useState(0);
+	// La première ligne est active par défaut pour Entrée, mais l'ambiance ne
+	// change que si l'utilisateur désigne lui-même un jeu.
+	const [engaged, setEngaged] = useState(false);
 
 	const scan = useCallback(() => {
 		setState({ status: "loading" });
@@ -41,10 +57,16 @@ export function GamePicker() {
 		if (!q) return showAll ? moddable : moddable.slice(0, SUGGESTION_COUNT);
 		return games
 			.filter((g) => normalize(g.name).includes(q))
-			.sort((a, b) => Number(isModdable(b)) - Number(isModdable(a)));
+			.sort((a, b) => Number(isModdable(b)) - Number(isModdable(a)))
+			.slice(0, SEARCH_LIMIT);
 	}, [games, moddable, query, showAll]);
 
 	useEffect(() => setActive(0), [results]);
+
+	useEffect(() => {
+		const game = engaged ? results[active] : undefined;
+		onFocusChange(game && isModdable(game) ? game : null);
+	}, [engaged, results, active, onFocusChange]);
 
 	const select = (game: SteamGame) => {
 		if (!isModdable(game)) return;
@@ -55,6 +77,7 @@ export function GamePicker() {
 		if (!results.length) return;
 		if (event.key === "ArrowDown" || event.key === "ArrowUp") {
 			event.preventDefault();
+			setEngaged(true);
 			const step = event.key === "ArrowDown" ? 1 : -1;
 			setActive((i) => (i + step + results.length) % results.length);
 		} else if (event.key === "Enter") {
@@ -112,14 +135,17 @@ export function GamePicker() {
 				)}
 
 				{state.status === "ready" && results.length > 0 && (
-					<ul aria-label="Jeux">
+					<ul aria-label="Jeux" onMouseLeave={() => setEngaged(false)}>
 						{results.map((game, i) => (
 							<li key={game.appId}>
 								<GameRow
 									game={game}
 									active={i === active}
 									index={i}
-									onHover={() => setActive(i)}
+									onHover={() => {
+										setActive(i);
+										setEngaged(true);
+									}}
 									onSelect={() => select(game)}
 								/>
 							</li>
@@ -183,7 +209,7 @@ function GameRow({
 				active && "bg-surface-hover",
 			)}
 		>
-			<GameTile name={game.name} dimmed={!moddable} />
+			<GameCover game={game} dimmed={!moddable} />
 			<span className="min-w-0 flex-1">
 				<span className={cn("block truncate text-sm font-medium", moddable ? "text-fg" : "text-fg-subtle")}>
 					{game.name}
@@ -193,7 +219,7 @@ function GameRow({
 			{moddable ? (
 				<ArrowRight
 					className={cn(
-						"size-4 shrink-0 text-fg-muted transition-[opacity,transform] duration-200",
+						"size-4 shrink-0 text-accent transition-[opacity,transform] duration-200",
 						active ? "translate-x-0 opacity-100" : "-translate-x-1 opacity-0",
 					)}
 				/>
@@ -204,17 +230,33 @@ function GameRow({
 	);
 }
 
-/** Vignette provisoire, en attendant les jaquettes du cache local de Steam. */
-function GameTile({ name, dimmed }: { name: string; dimmed: boolean }) {
+/** Jaquette du cache de Steam ; initiales tant qu'elle charge ou si elle manque. */
+function GameCover({ game, dimmed }: { game: SteamGame; dimmed: boolean }) {
+	const [status, setStatus] = useState<"loading" | "loaded" | "missing">("loading");
+
 	return (
 		<span
 			aria-hidden
 			className={cn(
-				"flex size-10 shrink-0 items-center justify-center rounded-md border border-line bg-gradient-to-br from-white/[0.08] to-white/[0.02] font-tight text-sm font-semibold text-fg-muted",
-				dimmed && "opacity-50",
+				"relative flex h-12 w-8 shrink-0 items-center justify-center overflow-hidden rounded-md border border-line bg-gradient-to-br from-white/[0.08] to-white/[0.02] font-tight text-[11px] font-semibold text-fg-muted",
+				dimmed && "opacity-50 grayscale",
 			)}
 		>
-			{initials(name)}
+			{status !== "loaded" && initials(game.name)}
+			{status !== "missing" && (
+				<img
+					src={artworkUrl(game.appId, "cover")}
+					alt=""
+					loading="lazy"
+					decoding="async"
+					onLoad={() => setStatus("loaded")}
+					onError={() => setStatus("missing")}
+					className={cn(
+						"absolute inset-0 size-full object-cover transition-opacity duration-300",
+						status === "loaded" ? "opacity-100" : "opacity-0",
+					)}
+				/>
+			)}
 		</span>
 	);
 }
@@ -224,7 +266,7 @@ function LoadingRows() {
 		<div role="status" aria-label="Recherche de tes jeux">
 			{[0, 1, 2].map((i) => (
 				<div key={i} className="flex items-center gap-3 px-2.5 py-2">
-					<Skeleton className="size-10" />
+					<Skeleton className="h-12 w-8" />
 					<div className="flex-1 space-y-2">
 						<Skeleton className="h-3.5 w-2/5" />
 						<Skeleton className="h-3 w-1/5" />

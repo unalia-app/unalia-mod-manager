@@ -32,3 +32,28 @@ export const ENGINE_LABEL: Record<Engine, string> = {
 	unreal: "Unreal",
 	unknown: "Moteur inconnu",
 };
+
+export type ArtworkKind = "cover" | "hero" | "header" | "logo";
+
+/**
+ * Image du cache local de Steam, servie par le protocole `artwork` du moteur.
+ * Sous Windows, la webview expose les protocoles maison en `http://<nom>.localhost`.
+ */
+export function artworkUrl(appId: number, kind: ArtworkKind): string {
+	const windows = typeof navigator !== "undefined" && navigator.userAgent.includes("Windows");
+	const base = windows ? "http://artwork.localhost" : "artwork://localhost";
+	return `${base}/${appId}/${kind}`;
+}
+
+const accents = new Map<number, Promise<string | null>>();
+
+/** Couleur d'accent CSS du jeu (`null` : accent neutre). Calculée une fois. */
+export function gameAccent(appId: number): Promise<string | null> {
+	if (!isTauri()) return Promise.resolve(null);
+	let accent = accents.get(appId);
+	if (!accent) {
+		accent = invoke<string | null>("game_accent", { appId }).catch(() => null);
+		accents.set(appId, accent);
+	}
+	return accent;
+}

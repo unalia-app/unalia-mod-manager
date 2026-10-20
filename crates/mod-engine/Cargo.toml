@@ -8,6 +8,7 @@ description = "Moteur de Modalia : détection des jeux, sources, loaders, déplo
 [dependencies]
 serde.workspace = true
 thiserror.workspace = true
+image = { version = "0.25", default-features = false, features = ["jpeg", "png"] }
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.56"

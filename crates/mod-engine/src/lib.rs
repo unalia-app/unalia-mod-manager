@@ -2,4 +2,5 @@
 //!
 //! Voir `SPEC.md` (section 6.3) pour le rôle de chaque brique.
 
+pub mod artwork;
 pub mod detect;

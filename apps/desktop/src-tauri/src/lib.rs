@@ -1,7 +1,27 @@
+use std::collections::HashMap;
+use std::fs;
 use std::path::PathBuf;
+use std::sync::Mutex;
 
+use mod_engine::artwork::{self, ArtworkKind};
 use mod_engine::detect::{self, SteamGame};
 use serde::Serialize;
+use tauri::http::{Request, Response, StatusCode, header};
+use tauri::{Manager, State, UriSchemeContext, UriSchemeResponder, Wry};
+
+/// Ce que l'appli sait de la bibliothèque Steam pendant la session.
+#[derive(Default)]
+struct Library {
+    steam_root: Mutex<Option<PathBuf>>,
+    /// Accents déjà calculés (`None` : jeu sans accent, accent neutre).
+    accents: Mutex<HashMap<u32, Option<String>>>,
+}
+
+impl Library {
+    fn steam_root(&self) -> Option<PathBuf> {
+        self.steam_root.lock().unwrap().clone()
+    }
+}
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -13,8 +33,11 @@ struct GameScan {
 }
 
 #[tauri::command]
-async fn list_games() -> Result<GameScan, String> {
-    tauri::async_runtime::spawn_blocking(|| match steam_root() {
+async fn list_games(library: State<'_, Library>) -> Result<GameScan, String> {
+    let root = steam_root();
+    *library.steam_root.lock().unwrap() = root.clone();
+
+    tauri::async_runtime::spawn_blocking(move || match root {
         Some(root) => Ok(GameScan {
             steam_found: true,
             games: detect::scan_steam(&root).map_err(|e| e.to_string())?,
@@ -28,6 +51,30 @@ async fn list_games() -> Result<GameScan, String> {
     .map_err(|e| e.to_string())?
 }
 
+/// Couleur d'accent CSS du jeu, extraite de sa jaquette.
+#[tauri::command]
+async fn game_accent(app_id: u32, library: State<'_, Library>) -> Result<Option<String>, String> {
+    if let Some(cached) = library.accents.lock().unwrap().get(&app_id) {
+        return Ok(cached.clone());
+    }
+    let Some(root) = library.steam_root() else {
+        return Ok(None);
+    };
+
+    let accent = tauri::async_runtime::spawn_blocking(move || {
+        artwork::game_accent(&root, app_id).map(|a| a.css())
+    })
+    .await
+    .map_err(|e| e.to_string())?;
+
+    library
+        .accents
+        .lock()
+        .unwrap()
+        .insert(app_id, accent.clone());
+    Ok(accent)
+}
+
 /// En dev, `MODALIA_STEAM_ROOT` remplace la recherche automatique (ex. pour
 /// pointer sur `fixtures/steam/root`). Ignorée dans les builds de release.
 fn steam_root() -> Option<PathBuf> {
@@ -39,10 +86,71 @@ fn steam_root() -> Option<PathBuf> {
     detect::find_steam_root()
 }
 
+/// Protocole `artwork://localhost/<appid>/<type>` (Windows :
+/// `http://artwork.localhost/...`). Ne sert que les images du cache de Steam :
+/// l'interface ne manipule jamais de chemin de fichier.
+fn artwork_protocol(
+    ctx: UriSchemeContext<'_, Wry>,
+    request: Request<Vec<u8>>,
+    responder: UriSchemeResponder,
+) {
+    let root = ctx.app_handle().state::<Library>().steam_root();
+    let path = request.uri().path().to_owned();
+
+    tauri::async_runtime::spawn_blocking(move || {
+        let file = root
+            .zip(parse_artwork_path(&path))
+            .and_then(|(root, (app_id, kind))| artwork::find_artwork(&root, app_id, kind));
+        let response = match file.and_then(|f| Some((fs::read(&f).ok()?, f))) {
+            Some((bytes, file)) => Response::builder()
+                .header(header::CONTENT_TYPE, mime(&file))
+                .header(header::CACHE_CONTROL, "max-age=3600")
+                .body(bytes),
+            None => Response::builder()
+                .status(StatusCode::NOT_FOUND)
+                .body(Vec::new()),
+        };
+        responder.respond(response.expect("réponse HTTP valide"));
+    });
+}
+
+fn parse_artwork_path(path: &str) -> Option<(u32, ArtworkKind)> {
+    let mut segments = path.trim_matches('/').split('/');
+    let app_id = segments.next()?.parse().ok()?;
+    let kind = segments.next()?.parse().ok()?;
+    segments.next().is_none().then_some((app_id, kind))
+}
+
+fn mime(file: &std::path::Path) -> &'static str {
+    match file.extension().and_then(|e| e.to_str()) {
+        Some("png") => "image/png",
+        _ => "image/jpeg",
+    }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .invoke_handler(tauri::generate_handler![list_games])
+        .manage(Library::default())
+        .register_asynchronous_uri_scheme_protocol("artwork", artwork_protocol)
+        .invoke_handler(tauri::generate_handler![list_games, game_accent])
         .run(tauri::generate_context!())
         .expect("échec du démarrage de Modalia");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_artwork_urls() {
+        assert_eq!(
+            parse_artwork_path("/1030300/cover"),
+            Some((1030300, ArtworkKind::Cover))
+        );
+        assert_eq!(parse_artwork_path("/1030300/cover/extra"), None);
+        assert_eq!(parse_artwork_path("/../cover"), None);
+        assert_eq!(parse_artwork_path("/1030300/../../etc"), None);
+        assert_eq!(parse_artwork_path("/"), None);
+    }
 }

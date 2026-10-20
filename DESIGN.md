@@ -28,7 +28,17 @@ Tokens : `packages/ui/src/styles.css`. Composants : `packages/ui/src/`.
 
 Une couleur d'état s'emploie toujours en **contour 20 % + fond 10 % + texte plein** (voir `Badge`), jamais en aplat.
 
-L'accent sera calculé en OKLCH depuis la jaquette du jeu, avec un contraste garanti. Ne jamais coder un accent en dur dans un composant.
+### Accent du jeu
+
+- Calculé par le moteur (`mod-engine::artwork`) à partir de la jaquette du cache de Steam. On prend la teinte dominante, avec une luminosité OKLCH fixe de 0,78 et un chroma entre 0,07 et 0,17. La couleur est ramenée dans le gamut sRGB, avec un contraste d'au moins 4,5:1 sur `bg`. Une jaquette grise ne produit pas d'accent, et l'interface reste alors neutre.
+- Un conteneur pose `style={{ "--accent": … }}` et l'utilitaire `accent-transition` : `--accent` est déclaré en `@property <color>`, ce qui donne un fondu de 700 ms quand on change de jeu.
+- Ne jamais coder un accent en dur dans un composant : `text-accent`, `bg-accent/10`, `border-accent/20`.
+
+### Ambiance
+
+- La bannière du jeu (`hero`), floutée (`blur-2xl`) à 35 % d'opacité, s'estompe vers le bas, avec un halo radial teinté par l'accent par-dessus.
+- L'ambiance suit le jeu que l'utilisateur désigne (survol, flèches), jamais un jeu choisi par défaut.
+- Images : uniquement via `artworkUrl()` (protocole `artwork` du moteur), jamais par un chemin de fichier.
 
 ## Typographie
 

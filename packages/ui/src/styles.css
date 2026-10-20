@@ -22,10 +22,6 @@
 	--color-fg-subtle: rgb(255 255 255 / 0.4);
 	--color-fg-faint: rgb(255 255 255 / 0.25);
 
-	/* Accent : seule couleur qui change selon le jeu actif (SPEC §4).
-	   Valeur par défaut neutre, remplacée par `--accent` sur un conteneur. */
-	--color-accent: var(--accent, oklch(0.922 0 0));
-
 	/* États : toujours en contour + fond à 10 %, comme les badges d'Unalia. */
 	--color-success: var(--color-emerald-400);
 	--color-info: var(--color-blue-400);
@@ -79,6 +75,26 @@
 			transform: translateX(400%);
 		}
 	}
+}
+
+/*
+ * Accent : seule couleur qui change selon le jeu actif (SPEC §4). Un
+ * conteneur définit `--accent` ; `inline` fait résoudre la variable sur
+ * l'élément qui l'utilise (et pas une fois pour toutes sur :root).
+ * L'enregistrer comme <color> permet de l'animer (`accent-transition`).
+ */
+@property --accent {
+	syntax: "<color>";
+	inherits: true;
+	initial-value: oklch(0.922 0 0);
+}
+
+@theme inline {
+	--color-accent: var(--accent);
+}
+
+@utility accent-transition {
+	transition: --accent 700ms var(--ease-out);
 }
 
 @layer base {
