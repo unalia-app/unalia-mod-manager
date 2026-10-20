@@ -303,3 +303,52 @@ async fn insecure_download_urls_are_refused() {
         .unwrap_err();
     assert!(matches!(err, SourceError::Unexpected { .. }), "{err:?}");
 }
+
+#[tokio::test]
+async fn donation_links_come_from_the_author_team() {
+    let (mut server, ts) = source().await;
+    let body = fixture("package-skip-intro.json")
+        .replace("\"Bigfootmech\"", "\"MorningRain\"")
+        .replace("Bigfootmech-", "MorningRain-");
+    server
+        .mock(
+            "GET",
+            "/api/experimental/package/MorningRain/Silksong_Skip_Intro/",
+        )
+        .with_body(body)
+        .create_async()
+        .await;
+    server
+        .mock("GET", "/api/cyberstorm/team/MorningRain/")
+        .with_body(fixture("team-morningrain.json"))
+        .create_async()
+        .await;
+
+    let m = ts
+        .get("hollow-knight-silksong", "MorningRain-Silksong_Skip_Intro")
+        .await
+        .unwrap();
+    assert_eq!(
+        m.donation_url.as_deref(),
+        Some("https://ko-fi.com/morning_rain")
+    );
+}
+
+#[tokio::test]
+async fn a_missing_team_never_breaks_the_mod_page() {
+    let (mut server, ts) = source().await;
+    server
+        .mock(
+            "GET",
+            "/api/experimental/package/shownyoung/KnightInSilksong/",
+        )
+        .with_body(fixture("package-knightinsilksong.json"))
+        .create_async()
+        .await;
+    // Pas de route d'équipe : 501 du faux serveur.
+    let m = ts
+        .get("hollow-knight-silksong", "shownyoung-KnightInSilksong")
+        .await
+        .unwrap();
+    assert_eq!(m.donation_url, None);
+}

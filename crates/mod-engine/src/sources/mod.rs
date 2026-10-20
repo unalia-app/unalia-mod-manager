@@ -48,6 +48,8 @@ pub struct Mod {
     /// Page du mod sur la source : toujours accessible (SPEC §2.4).
     pub source_url: String,
     pub website_url: Option<String>,
+    /// Lien de don de l'auteur (Ko-fi, Patreon…), s'il en a publié un.
+    pub donation_url: Option<String>,
     pub deprecated: bool,
     /// Versions, la plus récente en premier.
     pub versions: Vec<ModVersion>,

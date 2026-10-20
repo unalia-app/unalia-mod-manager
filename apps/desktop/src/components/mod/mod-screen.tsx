@@ -1,7 +1,7 @@
 "use client";
 
 import { Badge, Button, Skeleton, cn } from "@modalia/ui";
-import { ArrowLeft, Download, ExternalLink, Globe, Package, RotateCw, TriangleAlert } from "lucide-react";
+import { ArrowLeft, Download, ExternalLink, Globe, Heart, Package, RotateCw, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { type CSSProperties, type ReactNode, useEffect, useState } from "react";
@@ -130,6 +130,15 @@ function ModDetailsView({
 						<ExternalTextLink href={authorUrl} className="text-fg-muted hover:text-fg">
 							{mod.author}
 						</ExternalTextLink>
+						{mod.donationUrl && (
+							<>
+								{" · "}
+								<ExternalTextLink href={mod.donationUrl} className="inline-flex items-center gap-1 text-accent">
+									<Heart className="size-3 fill-current" />
+									Support
+								</ExternalTextLink>
+							</>
+						)}
 					</p>
 					<p className="mt-3 max-w-2xl text-sm leading-relaxed text-fg-muted">{mod.summary}</p>
 
@@ -202,6 +211,19 @@ function ModDetailsView({
 					</Panel>
 
 					<Panel title="Links">
+						{mod.donationUrl && (
+							<button
+								type="button"
+								onClick={() => void openExternal(mod.donationUrl ?? "")}
+								className="mb-3 flex w-full cursor-pointer items-center gap-3 rounded-lg border border-accent/25 bg-accent/[0.08] px-3 py-2.5 text-left transition-colors hover:bg-accent/[0.14]"
+							>
+								<Heart className="size-4 shrink-0 fill-accent text-accent" />
+								<span className="min-w-0">
+									<span className="block text-sm font-medium text-fg">Support the author</span>
+									<span className="block text-[11px] text-fg-subtle">Your whole donation goes to {mod.author}</span>
+								</span>
+							</button>
+						)}
 						<div className="flex flex-col items-start gap-1">
 							<ExternalButton href={mod.sourceUrl} icon={<ExternalLink className="size-3.5" />}>
 								View on Thunderstore

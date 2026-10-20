@@ -131,6 +131,8 @@ export type Mod = Omit<ModSummary, "iconUrl" | "downloads" | "pinned"> & {
 	downloads: number | null;
 	sourceUrl: string;
 	websiteUrl: string | null;
+	/** Lien de don de l'auteur : 100 % du don lui revient. */
+	donationUrl: string | null;
 	versions: ModVersion[];
 };
 

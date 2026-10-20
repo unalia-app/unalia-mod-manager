@@ -61,6 +61,14 @@ impl Thunderstore {
         self
     }
 
+    /// Lien de don de l'équipe de l'auteur. Facultatif : une erreur ici ne
+    /// doit pas empêcher d'afficher le mod. HTTPS seulement.
+    async fn donation_url(&self, namespace: &str) -> Option<String> {
+        let url = format!("{}/api/cyberstorm/team/{namespace}/", self.base_url);
+        let team: Team = self.fetch(&url, &[]).await.ok()?;
+        team.donation_link.filter(|l| l.starts_with("https://"))
+    }
+
     /// Les filtres de catégorie attendent des identifiants propres à chaque
     /// communauté : on les demande une fois. En cas d'échec, pas de filtre
     /// (et on réessaiera à la prochaine recherche).
@@ -166,7 +174,10 @@ impl ModSource for Thunderstore {
             self.base_url
         );
         let package: Package = self.fetch(&url, &[]).await?;
-        package.into_mod(&self.base_url, segment(community)?, self.require_https)
+        let mut found =
+            package.into_mod(&self.base_url, segment(community)?, self.require_https)?;
+        found.donation_url = self.donation_url(namespace).await;
+        Ok(found)
     }
 
     async fn description(&self, id: &str, version: &str) -> Result<String, SourceError> {
@@ -214,6 +225,11 @@ fn parse_dependency(full: &str) -> Option<Dependency> {
         id: id.to_owned(),
         min_version: version.to_owned(),
     })
+}
+
+#[derive(Deserialize)]
+struct Team {
+    donation_link: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -351,6 +367,7 @@ impl Package {
             downloads: u64::try_from(self.total_downloads).ok(),
             updated_at: self.date_updated,
             website_url: latest.website_url.filter(|u| !u.is_empty()),
+            donation_url: None,
             deprecated: self.is_deprecated,
             versions: vec![ModVersion {
                 dependencies: latest

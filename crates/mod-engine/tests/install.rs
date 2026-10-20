@@ -427,6 +427,7 @@ fn package(id: &str, version: &str, deps: &[(&str, &str)]) -> Mod {
         updated_at: String::new(),
         source_url: String::new(),
         website_url: None,
+        donation_url: None,
         deprecated: false,
         versions: vec![ModVersion {
             number: version.into(),
