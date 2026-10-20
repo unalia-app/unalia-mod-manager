@@ -192,15 +192,18 @@ export function installedMods(appId: number): Promise<InstalledMod[]> {
 	return invoke("installed_mods", { appId });
 }
 
-export function installMod(appId: number, modId: string): Promise<InstalledMod[]> {
+/** Fait tout de suite, ou mis en attente parce que le jeu tourne. */
+export type Outcome<T> = { status: "done"; value: T } | { status: "queued" };
+
+export function installMod(appId: number, modId: string): Promise<Outcome<InstalledMod[]>> {
 	return invoke("install_mod", { appId, modId });
 }
 
-export function setModEnabled(appId: number, modId: string, enabled: boolean): Promise<InstalledMod> {
+export function setModEnabled(appId: number, modId: string, enabled: boolean): Promise<Outcome<InstalledMod>> {
 	return invoke("set_mod_enabled", { appId, modId, enabled });
 }
 
-export function uninstallMod(appId: number, modId: string): Promise<void> {
+export function uninstallMod(appId: number, modId: string): Promise<Outcome<null>> {
 	return invoke("uninstall_mod", { appId, modId });
 }
 
@@ -221,4 +224,38 @@ export function splitError(error: unknown): { message: string; details: string |
 	const text = String(error);
 	const [message, ...rest] = text.split("\n");
 	return { message: message ?? text, details: rest.length ? rest.join("\n") : null };
+}
+
+// Lancement et file d'attente (moteur : launch).
+
+export type PendingOp =
+	| { type: "install"; modId: string; name: string }
+	| { type: "setEnabled"; modId: string; enabled: boolean; name: string }
+	| { type: "uninstall"; modId: string; name: string };
+
+export type GameStatus = { appId: number; running: boolean; starting: boolean; pending: PendingOp[] };
+
+export type PendingApplied = { appId: number; applied: number; failed: { modId: string; message: string }[] };
+
+export function gameStatus(appId: number): Promise<GameStatus> {
+	if (!isTauri()) return Promise.resolve({ appId, running: false, starting: false, pending: [] });
+	return invoke("game_status", { appId });
+}
+
+export function playGame(appId: number): Promise<void> {
+	return invoke("play_game", { appId });
+}
+
+export function cancelPending(appId: number, modId: string): Promise<void> {
+	return invoke("cancel_pending", { appId, modId });
+}
+
+export function onGameStatus(handler: (status: GameStatus) => void): Promise<UnlistenFn> {
+	if (!isTauri()) return Promise.resolve(() => {});
+	return listen<GameStatus>("game-status", (e) => handler(e.payload));
+}
+
+export function onPendingApplied(handler: (event: PendingApplied) => void): Promise<UnlistenFn> {
+	if (!isTauri()) return Promise.resolve(() => {});
+	return listen<PendingApplied>("pending-applied", (e) => handler(e.payload));
 }

@@ -7,7 +7,8 @@ import { useState } from "react";
 
 import { Notice } from "@/components/notice";
 import { toast } from "@/components/toaster";
-import { type InstalledMod, splitError } from "@/lib/engine";
+import { type InstalledMod, cancelPending, splitError } from "@/lib/engine";
+import { usePendingOp } from "@/lib/game-status";
 import { modHref } from "@/lib/games-store";
 import { remove, restore, toggle, useInstalled } from "@/lib/installs";
 
@@ -65,45 +66,58 @@ function ModRow({ mod: m, appId }: { mod: InstalledMod; appId: number }) {
 	const router = useRouter();
 	const [busy, setBusy] = useState(false);
 	const loader = m.loaderRoot !== null;
+	// Changement demandé pendant une partie : on montre l'état prévu.
+	const pending = usePendingOp(appId, m.id);
+	const removing = pending?.type === "uninstall";
+	const enabled = pending?.type === "setEnabled" ? pending.enabled : m.enabled;
 
 	const fail = (error: unknown) => {
 		const { message, details } = splitError(error);
 		toast({ title: message, description: details ?? undefined, tone: "error" });
 	};
 
-	const onToggle = (enabled: boolean) => {
-		toggle(appId, m.id, enabled).catch(fail);
+	const onToggle = (value: boolean) => {
+		toggle(appId, m.id, value).catch(fail);
 	};
 
 	const onRemove = async () => {
 		setBusy(true);
 		try {
-			await remove(appId, m.id);
-			toast({
-				title: `${m.name} removed`,
-				action: { label: "Undo", onClick: () => restore(appId, m.id).catch(fail) },
-			});
+			const outcome = await remove(appId, m.id);
+			toast(
+				outcome === "queued"
+					? {
+							title: `${m.name} will be removed when you close the game`,
+							action: { label: "Undo", onClick: () => cancelPending(appId, m.id).catch(fail) },
+						}
+					: {
+							title: `${m.name} removed`,
+							action: { label: "Undo", onClick: () => restore(appId, m.id).catch(fail) },
+						},
+			);
 		} catch (error) {
 			fail(error);
+		} finally {
 			setBusy(false);
 		}
 	};
 
 	return (
-		<div className="flex animate-row-in items-center gap-3 px-4 py-3">
+		<div className={cn("flex animate-row-in items-center gap-3 px-4 py-3", removing && "opacity-60")}>
 			<button
 				type="button"
 				onClick={() => router.push(modHref(appId, m.id))}
 				className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 text-left"
 			>
-				<ModThumb src={m.iconUrl} dimmed={!m.enabled} />
+				<ModThumb src={m.iconUrl} dimmed={!enabled || removing} />
 				<span className="min-w-0">
 					<span className="flex items-center gap-2">
-						<span className={cn("truncate text-sm font-medium", m.enabled ? "text-fg" : "text-fg-subtle")}>
+						<span className={cn("truncate text-sm font-medium", enabled && !removing ? "text-fg" : "text-fg-subtle")}>
 							{m.name}
 						</span>
 						{loader && <Badge tone="accent">Loader</Badge>}
 						{!loader && !m.explicit && <Badge>Dependency</Badge>}
+						{pending && <Badge tone="accent">Pending</Badge>}
 					</span>
 					<span className="block truncate text-xs text-fg-subtle">
 						by {m.author} · v{m.version}
@@ -111,16 +125,18 @@ function ModRow({ mod: m, appId }: { mod: InstalledMod; appId: number }) {
 				</span>
 			</button>
 
-			{loader ? (
+			{removing ? (
+				<span className="text-[11px] text-fg-subtle">Removed when you close the game</span>
+			) : loader ? (
 				<span className="text-[11px] text-fg-faint">Required by your mods</span>
 			) : (
-				<Switch checked={m.enabled} onChange={onToggle} label={`${m.enabled ? "Turn off" : "Turn on"} ${m.name}`} />
+				<Switch checked={enabled} onChange={onToggle} label={`${enabled ? "Turn off" : "Turn on"} ${m.name}`} />
 			)}
 			<button
 				type="button"
 				aria-label={`Remove ${m.name}`}
 				title="Remove"
-				disabled={busy}
+				disabled={busy || removing}
 				onClick={onRemove}
 				className="cursor-pointer rounded-md p-2 text-fg-subtle transition-colors hover:bg-danger/10 hover:text-danger disabled:opacity-50"
 			>

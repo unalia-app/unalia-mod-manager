@@ -75,9 +75,10 @@ export function install(appId: number, modId: string): Promise<void> {
 		s.active.set(k, { status: "queued" });
 	});
 	return installMod(appId, modId).then(
-		(mods) =>
+		(outcome) =>
 			update((s) => {
-				s.installed.set(appId, mods);
+				// Mis en attente : la file du jeu (game-status) prend le relais.
+				if (outcome.status === "done") s.installed.set(appId, outcome.value);
 				s.active.delete(k);
 			}),
 		(error: unknown) =>
@@ -93,7 +94,8 @@ export function clearError(appId: number, modId: string) {
 	});
 }
 
-export async function toggle(appId: number, modId: string, enabled: boolean) {
+/** Renvoie `queued` si le jeu tourne : le changement attend sa fermeture. */
+export async function toggle(appId: number, modId: string, enabled: boolean): Promise<"done" | "queued"> {
 	// Optimiste : l'interrupteur bouge tout de suite (SPEC §3.5 « instantané »).
 	const apply = (value: boolean) =>
 		update((s) => {
@@ -102,16 +104,21 @@ export async function toggle(appId: number, modId: string, enabled: boolean) {
 		});
 	apply(enabled);
 	try {
-		await setModEnabled(appId, modId, enabled);
+		const outcome = await setModEnabled(appId, modId, enabled);
+		// En attente : l'état réel ne change qu'à la fermeture du jeu ;
+		// l'interface montre le changement prévu à partir de la file.
+		if (outcome.status === "queued") apply(!enabled);
+		return outcome.status;
 	} catch (error) {
 		apply(!enabled);
 		throw error;
 	}
 }
 
-export async function remove(appId: number, modId: string) {
-	await uninstallMod(appId, modId);
-	await refreshInstalled(appId);
+export async function remove(appId: number, modId: string): Promise<"done" | "queued"> {
+	const outcome = await uninstallMod(appId, modId);
+	if (outcome.status === "done") await refreshInstalled(appId);
+	return outcome.status;
 }
 
 export async function restore(appId: number, modId: string) {

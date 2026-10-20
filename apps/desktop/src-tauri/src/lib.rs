@@ -42,6 +42,10 @@ struct Library {
 struct KnownGame {
     dir: PathBuf,
     community: String,
+    /// Ajouté à la main : se lance par son exécutable, pas par Steam.
+    manual: bool,
+    /// Exécutables connus du catalogue pour ce jeu.
+    exe_names: Vec<String>,
 }
 
 #[derive(Clone, Default)]
@@ -165,11 +169,14 @@ async fn list_games(
         .iter()
         .filter(|e| e.moddable)
         .filter_map(|e| {
+            let profile = e.profile.as_ref()?;
             Some((
                 e.game.app_id,
                 KnownGame {
                     dir: e.game.install_dir.clone(),
-                    community: e.profile.as_ref()?.community.clone(),
+                    community: profile.community.clone(),
+                    manual: e.source == "manual",
+                    exe_names: profile.exe_names.clone(),
                 },
             ))
         })
@@ -374,6 +381,7 @@ pub fn run() {
         .manage(Catalog::new())
         .setup(|app| {
             app.manage(mods::Mods::open(app.handle())?);
+            tauri::async_runtime::spawn(mods::watch(app.handle().clone()));
             Ok(())
         })
         .register_asynchronous_uri_scheme_protocol("artwork", artwork_protocol)
@@ -389,6 +397,9 @@ pub fn run() {
             mods::set_mod_enabled,
             mods::uninstall_mod,
             mods::restore_mod,
+            mods::cancel_pending,
+            mods::game_status,
+            mods::play_game,
         ])
         .run(tauri::generate_context!())
         .expect("Modalia failed to start");

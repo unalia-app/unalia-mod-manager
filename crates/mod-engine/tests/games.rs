@@ -319,3 +319,48 @@ fn locating_a_game_tolerates_its_parent_folder() {
     fs::write(games.path().join("LC/Lethal Company.exe"), "").unwrap();
     assert!(catalog.locate_game(games.path()).is_none());
 }
+
+#[test]
+fn pending_changes_survive_a_restart() {
+    use mod_engine::launch::PendingOp;
+    use mod_engine::state::State;
+    let dir = tempfile::tempdir().unwrap();
+    let db = dir.path().join("modalia.db");
+    let ops = vec![
+        PendingOp::Install {
+            mod_id: "a-A".into(),
+        },
+        PendingOp::SetEnabled {
+            mod_id: "b-B".into(),
+            enabled: false,
+        },
+    ];
+    State::open(&db)
+        .unwrap()
+        .set_pending("steam:1", &ops)
+        .unwrap();
+
+    let mut state = State::open(&db).unwrap();
+    assert_eq!(state.pending("steam:1").unwrap(), ops);
+    assert!(state.pending("steam:2").unwrap().is_empty());
+    state.set_pending("steam:1", &[]).unwrap();
+    assert!(state.pending("steam:1").unwrap().is_empty());
+}
+
+#[test]
+fn detects_a_real_running_process() {
+    use mod_engine::launch::{ProcessWatcher, is_running};
+    // Le binaire de ce test tourne depuis son dossier : il doit être vu.
+    let exe = std::env::current_exe().unwrap();
+    let dir = exe.parent().unwrap();
+    let running = ProcessWatcher::default().running_exes();
+    assert!(
+        is_running(dir, &running),
+        "{} absent de la liste des processus",
+        exe.display()
+    );
+    assert!(!is_running(
+        Path::new("/nonexistent/modalia-game"),
+        &running
+    ));
+}

@@ -11,6 +11,8 @@ import { GameCover } from "@/components/game-cover";
 import { Discover } from "@/components/game/discover";
 import { GameSwitcher } from "@/components/game/game-switcher";
 import { MyMods } from "@/components/game/my-mods";
+import { PendingBanner } from "@/components/game/pending-banner";
+import { PlayButton } from "@/components/game/play-button";
 import { Notice } from "@/components/notice";
 import { useAccent } from "@/hooks/use-accent";
 import { type SteamGame, gameSubtitle } from "@/lib/engine";
@@ -78,7 +80,7 @@ export function GameScreen() {
 								game={game}
 								className="h-36 w-24 animate-fade-up rounded-lg border-line-strong text-lg shadow-2xl shadow-black/50"
 							/>
-							<div className="min-w-0 animate-fade-up pb-1 [animation-delay:60ms]">
+							<div className="min-w-0 flex-1 animate-fade-up pb-1 [animation-delay:60ms]">
 								<Badge tone="accent">{gameSubtitle(game)}</Badge>
 								{/* `truncate` coupe ce qui dépasse : le pb-1 laisse la place aux jambages (g, j, p). */}
 								<h1 className="mt-2 truncate pb-1 text-4xl leading-tight font-semibold tracking-tight">{game.name}</h1>
@@ -86,7 +88,12 @@ export function GameScreen() {
 									Community mods from Thunderstore. Modalia installs the loader and dependencies for you.
 								</p>
 							</div>
+							<div className="shrink-0 animate-fade-up pb-1 [animation-delay:90ms]">
+								<PlayButton appId={game.appId} />
+							</div>
 						</section>
+
+						<PendingBanner appId={game.appId} />
 
 						<div className="mt-10 animate-fade-up [animation-delay:120ms]">
 							<Segmented label="Game sections" variant="tabs" items={tabs} value={tab} onChange={setTab} />

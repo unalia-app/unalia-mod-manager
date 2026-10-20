@@ -1,10 +1,11 @@
 "use client";
 
 import { Button, cn } from "@modalia/ui";
-import { Check, Download, RotateCw } from "lucide-react";
+import { Check, Clock, Download, RotateCw } from "lucide-react";
 
 import { toast } from "@/components/toaster";
-import type { InstallProgress } from "@/lib/engine";
+import { type InstallProgress, cancelPending } from "@/lib/engine";
+import { usePendingOp } from "@/lib/game-status";
 import { clearError, install, overallProgress, useActiveInstall, useInstalled } from "@/lib/installs";
 
 /**
@@ -24,6 +25,7 @@ export function InstallButton({
 }) {
 	const installed = useInstalled(appId)?.find((m) => m.id === modId);
 	const active = useActiveInstall(appId, modId);
+	const pending = usePendingOp(appId, modId);
 
 	// Le résultat (réussite ou erreur) arrive par le store, que le bouton suit.
 	const start = () => void install(appId, modId);
@@ -51,6 +53,27 @@ export function InstallButton({
 					</span>
 				</div>
 				<span className="text-[11px] text-fg-subtle">{sublabel(progress)}</span>
+			</div>
+		);
+	}
+
+	// Le jeu tourne : l'installation attend sa fermeture (SPEC §3.6).
+	if (pending?.type === "install") {
+		return (
+			<div className="flex flex-col items-end gap-2">
+				<Button size="lg" variant="outline" disabled leftIcon={<Clock className="size-4 text-accent" />} className="disabled:opacity-100">
+					Queued
+				</Button>
+				<span className="text-[11px] text-fg-subtle">
+					Installs when you close the game ·{" "}
+					<button
+						type="button"
+						className="cursor-pointer text-fg-muted underline-offset-2 hover:underline"
+						onClick={() => void cancelPending(appId, modId)}
+					>
+						Cancel
+					</button>
+				</span>
 			</div>
 		);
 	}
@@ -127,17 +150,18 @@ function sublabel(progress: InstallProgress | null): string {
 export function InstallStateBadge({ appId, modId, className }: { appId: number; modId: string; className?: string }) {
 	const installed = useInstalled(appId)?.some((m) => m.id === modId);
 	const active = useActiveInstall(appId, modId);
+	const pending = usePendingOp(appId, modId)?.type === "install";
 	const running = active?.status === "queued" || active?.status === "running";
-	if (!installed && !running) return null;
+	if (!installed && !running && !pending) return null;
 	return (
 		<span
 			className={cn(
 				"inline-flex items-center gap-1 rounded-full border px-2 py-0.5 font-tight text-[11px] font-semibold tracking-wide backdrop-blur-md",
-				running ? "border-accent/30 bg-black/50 text-accent" : "border-success/30 bg-black/50 text-success",
+				running || pending ? "border-accent/30 bg-black/50 text-accent" : "border-success/30 bg-black/50 text-success",
 				className,
 			)}
 		>
-			{running ? "Installing…" : (
+			{pending ? "Queued" : running ? "Installing…" : (
 				<>
 					<Check className="size-3" />
 					Installed

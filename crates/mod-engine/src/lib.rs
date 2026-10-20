@@ -9,6 +9,7 @@ pub mod detect;
 pub mod download;
 pub mod games;
 pub mod installer;
+pub mod launch;
 pub mod loaders;
 pub mod resolver;
 pub mod sources;

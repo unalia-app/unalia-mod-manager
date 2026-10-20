@@ -10,6 +10,7 @@ use rusqlite::{Connection, OptionalExtension, params};
 use serde::Serialize;
 
 use crate::deploy::Deployment;
+use crate::launch::PendingOp;
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -69,6 +70,11 @@ CREATE TABLE IF NOT EXISTS installed_mods (
     store_dir    TEXT NOT NULL,
     deployment   TEXT NOT NULL,
     PRIMARY KEY (game, id)
+);
+
+CREATE TABLE IF NOT EXISTS pending_ops (
+    game TEXT PRIMARY KEY,
+    ops  TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS manual_games (
@@ -170,6 +176,35 @@ impl State {
              WHERE substr(store_dir, 1, length(?1)) = ?1",
             params![old.to_string_lossy(), new.to_string_lossy()],
         )?;
+        Ok(())
+    }
+
+    /// Changements en attente de la fermeture du jeu, dans l'ordre.
+    pub fn pending(&self, game: &str) -> Result<Vec<PendingOp>, StateError> {
+        let ops: Option<String> = self
+            .conn
+            .query_row(
+                "SELECT ops FROM pending_ops WHERE game = ?1",
+                params![game],
+                |r| r.get(0),
+            )
+            .optional()?;
+        Ok(ops
+            .map(|o| serde_json::from_str(&o))
+            .transpose()?
+            .unwrap_or_default())
+    }
+
+    pub fn set_pending(&mut self, game: &str, ops: &[PendingOp]) -> Result<(), StateError> {
+        if ops.is_empty() {
+            self.conn
+                .execute("DELETE FROM pending_ops WHERE game = ?1", params![game])?;
+        } else {
+            self.conn.execute(
+                "INSERT OR REPLACE INTO pending_ops VALUES (?1, ?2)",
+                params![game, serde_json::to_string(ops)?],
+            )?;
+        }
         Ok(())
     }
 
