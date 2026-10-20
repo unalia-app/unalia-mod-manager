@@ -6,3 +6,4 @@ export { SearchField, type SearchFieldProps } from "./search-field";
 export { Segmented, type SegmentedItem } from "./segmented";
 export { Skeleton } from "./skeleton";
 export { Spinner } from "./spinner";
+export { Switch } from "./switch";

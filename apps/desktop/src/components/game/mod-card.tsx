@@ -7,6 +7,7 @@ import { useState } from "react";
 
 import type { ModSummary } from "@/lib/engine";
 import { compactNumber, relativeDate } from "@/lib/format";
+import { InstallStateBadge } from "@/components/mod/install-button";
 import { modHref } from "@/lib/games-store";
 
 /** Carte de la grille Découvrir, dans l'esprit des cartes de jeu d'Unalia. */
@@ -44,6 +45,7 @@ export function ModCard({ mod, index, appId }: { mod: ModSummary; index: number;
 						)}
 					/>
 				)}
+				<InstallStateBadge appId={appId} modId={mod.id} className="absolute top-2 right-2" />
 				{mod.deprecated && (
 					<Badge tone="warning" className="absolute top-2 left-2 backdrop-blur-md">
 						Deprecated

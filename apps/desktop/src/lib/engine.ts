@@ -1,4 +1,5 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
+import { type UnlistenFn, listen } from "@tauri-apps/api/event";
 
 // Miroir des types sérialisés par le moteur (serde, camelCase).
 export type Engine = "unity" | "unreal" | "unknown";
@@ -148,4 +149,66 @@ export function getMod(community: string, id: string): Promise<ModDetails> {
 /** Markdown brut de la source : à nettoyer avant tout affichage (SPEC §7). */
 export function modDescription(id: string, version: string): Promise<string> {
 	return invoke("mod_description", { id, version });
+}
+
+// Installation (moteur : installer, state).
+
+export type InstalledMod = {
+	game: string;
+	id: string;
+	name: string;
+	author: string;
+	version: string;
+	iconUrl: string | null;
+	/** Paquet loader : son dossier racine dans l'archive. */
+	loaderRoot: string | null;
+	enabled: boolean;
+	/** Demandé par l'utilisateur (sinon installé comme dépendance). */
+	explicit: boolean;
+	sha256: string;
+	installedAt: number;
+	storeDir: string;
+};
+
+export type InstallProgress =
+	| { stage: "resolving" }
+	| { stage: "downloading"; index: number; total: number; name: string; received: number; size: number | null }
+	| { stage: "installing"; index: number; total: number; name: string };
+
+export type InstallEvent = { appId: number; modId: string; progress: InstallProgress };
+
+export function installedMods(appId: number): Promise<InstalledMod[]> {
+	if (!isTauri()) return Promise.resolve([]);
+	return invoke("installed_mods", { appId });
+}
+
+export function installMod(appId: number, modId: string): Promise<InstalledMod[]> {
+	return invoke("install_mod", { appId, modId });
+}
+
+export function setModEnabled(appId: number, modId: string, enabled: boolean): Promise<InstalledMod> {
+	return invoke("set_mod_enabled", { appId, modId, enabled });
+}
+
+export function uninstallMod(appId: number, modId: string): Promise<void> {
+	return invoke("uninstall_mod", { appId, modId });
+}
+
+export function restoreMod(appId: number, modId: string): Promise<InstalledMod> {
+	return invoke("restore_mod", { appId, modId });
+}
+
+export function onInstallProgress(handler: (event: InstallEvent) => void): Promise<UnlistenFn> {
+	if (!isTauri()) return Promise.resolve(() => {});
+	return listen<InstallEvent>("install-progress", (e) => handler(e.payload));
+}
+
+/**
+ * Les erreurs du moteur arrivent en deux parties : un message lisible, puis
+ * après un retour à la ligne, la cause technique (à replier).
+ */
+export function splitError(error: unknown): { message: string; details: string | null } {
+	const text = String(error);
+	const [message, ...rest] = text.split("\n");
+	return { message: message ?? text, details: rest.length ? rest.join("\n") : null };
 }

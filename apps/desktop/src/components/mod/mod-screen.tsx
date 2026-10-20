@@ -10,6 +10,7 @@ import { Ambience } from "@/components/ambience";
 import { AppHeader } from "@/components/app-header";
 import { GameSwitcher } from "@/components/game/game-switcher";
 import { Markdown } from "@/components/markdown";
+import { InstallButton } from "@/components/mod/install-button";
 import { Notice } from "@/components/notice";
 import { useAccent } from "@/hooks/use-accent";
 import { type DependencyInfo, type ModDetails, type SteamGame, getMod, modDescription } from "@/lib/engine";
@@ -149,15 +150,13 @@ function ModDetailsView({
 					</div>
 				</div>
 
-				<div className="flex shrink-0 animate-fade-up flex-col items-end gap-2 [animation-delay:120ms]">
-					<Button size="lg" disabled title="Installing is coming soon">
-						Install
-					</Button>
-					{extraDependencies > 0 && (
-						<span className="text-[11px] text-fg-subtle">
-							+ {extraDependencies} {extraDependencies > 1 ? "dependencies" : "dependency"}
-						</span>
-					)}
+				<div className="shrink-0 animate-fade-up [animation-delay:120ms]">
+					<InstallButton
+						appId={game.appId}
+						modId={mod.id}
+						modName={mod.name}
+						dependencyCount={extraDependencies}
+					/>
 				</div>
 			</section>
 

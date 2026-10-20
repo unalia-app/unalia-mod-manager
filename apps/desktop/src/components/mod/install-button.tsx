@@ -1,0 +1,148 @@
+"use client";
+
+import { Button, cn } from "@modalia/ui";
+import { Check, Download, RotateCw } from "lucide-react";
+
+import { toast } from "@/components/toaster";
+import type { InstallProgress } from "@/lib/engine";
+import { clearError, install, overallProgress, useActiveInstall, useInstalled } from "@/lib/installs";
+
+/**
+ * Un clic : le bouton devient lui-même la barre de progression
+ * (téléchargement → installation), puis « Installed ». Jamais de popup.
+ */
+export function InstallButton({
+	appId,
+	modId,
+	modName,
+	dependencyCount,
+}: {
+	appId: number;
+	modId: string;
+	modName: string;
+	dependencyCount: number;
+}) {
+	const installed = useInstalled(appId)?.find((m) => m.id === modId);
+	const active = useActiveInstall(appId, modId);
+
+	// Le résultat (réussite ou erreur) arrive par le store, que le bouton suit.
+	const start = () => void install(appId, modId);
+
+	if (active?.status === "queued" || active?.status === "running") {
+		const progress = active.status === "running" ? active.progress : null;
+		const value = progress ? overallProgress(progress) : 0;
+		return (
+			<div className="flex flex-col items-end gap-2">
+				<div
+					role="progressbar"
+					aria-valuemin={0}
+					aria-valuemax={100}
+					aria-valuenow={Math.round(value * 100)}
+					aria-label={`Installing ${modName}`}
+					className="relative h-10 w-48 overflow-hidden rounded-md border border-line-strong bg-surface-strong"
+				>
+					<div
+						className="absolute inset-y-0 left-0 w-full origin-left bg-accent/35 transition-[scale] duration-300 ease-out"
+						style={{ scale: `${Math.max(value, 0.02)} 1` }}
+					/>
+					<div className="absolute inset-y-0 w-1/3 animate-shimmer bg-gradient-to-r from-transparent via-white/10 to-transparent" />
+					<span className="relative flex h-full items-center justify-center gap-2 px-3 text-xs font-medium text-fg">
+						{label(progress, value)}
+					</span>
+				</div>
+				<span className="text-[11px] text-fg-subtle">{sublabel(progress)}</span>
+			</div>
+		);
+	}
+
+	if (installed) {
+		return (
+			<div className="flex flex-col items-end gap-2">
+				<Button size="lg" variant="outline" disabled leftIcon={<Check className="size-4 text-success" />} className="disabled:opacity-100">
+					Installed
+				</Button>
+				<span className="text-[11px] text-fg-subtle">
+					v{installed.version}
+					{installed.enabled ? "" : " · turned off"}
+				</span>
+			</div>
+		);
+	}
+
+	if (active?.status === "error") {
+		return (
+			<div className="flex max-w-64 flex-col items-end gap-2 text-right">
+				<Button
+					size="lg"
+					leftIcon={<RotateCw className="size-4" />}
+					onClick={() => {
+						clearError(appId, modId);
+						start();
+					}}
+				>
+					Try again
+				</Button>
+				<span className="text-[11px] leading-snug text-danger">{active.message}</span>
+				{active.details && (
+					<button
+						type="button"
+						className="cursor-pointer text-[11px] text-fg-faint underline-offset-2 hover:underline"
+						onClick={() => toast({ title: active.message, description: active.details ?? undefined, tone: "error", duration: 10000 })}
+					>
+						Technical details
+					</button>
+				)}
+			</div>
+		);
+	}
+
+	return (
+		<div className="flex flex-col items-end gap-2">
+			<Button size="lg" leftIcon={<Download className="size-4" />} onClick={start}>
+				Install
+			</Button>
+			{dependencyCount > 0 && (
+				<span className="text-[11px] text-fg-subtle">
+					+ {dependencyCount} {dependencyCount > 1 ? "dependencies" : "dependency"}
+				</span>
+			)}
+		</div>
+	);
+}
+
+/** Le pourcentage est global, comme la barre ; le paquet en cours est dessous. */
+function label(progress: InstallProgress | null, value: number): string {
+	if (!progress) return "Waiting…";
+	if (progress.stage === "resolving") return "Preparing…";
+	const percent = Math.round(value * 100);
+	return progress.stage === "downloading" ? `Downloading ${percent}%` : `Installing ${percent}%`;
+}
+
+function sublabel(progress: InstallProgress | null): string {
+	if (!progress || progress.stage === "resolving") return "Checking dependencies";
+	return progress.total > 1 ? `${progress.name} · ${progress.index + 1} of ${progress.total}` : progress.name;
+}
+
+/** Badge des cartes : installé / en cours. */
+export function InstallStateBadge({ appId, modId, className }: { appId: number; modId: string; className?: string }) {
+	const installed = useInstalled(appId)?.some((m) => m.id === modId);
+	const active = useActiveInstall(appId, modId);
+	const running = active?.status === "queued" || active?.status === "running";
+	if (!installed && !running) return null;
+	return (
+		<span
+			className={cn(
+				"inline-flex items-center gap-1 rounded-full border px-2 py-0.5 font-tight text-[11px] font-semibold tracking-wide backdrop-blur-md",
+				running ? "border-accent/30 bg-black/50 text-accent" : "border-success/30 bg-black/50 text-success",
+				className,
+			)}
+		>
+			{running ? "Installing…" : (
+				<>
+					<Check className="size-3" />
+					Installed
+				</>
+			)}
+		</span>
+	);
+}

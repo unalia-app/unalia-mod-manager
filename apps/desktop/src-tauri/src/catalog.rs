@@ -15,8 +15,8 @@ use tauri::{AppHandle, Manager, State};
 const SCHEMA_MAX_AGE: Duration = Duration::from_secs(24 * 3600);
 
 pub struct Catalog {
-    client: HttpClient,
-    thunderstore: Thunderstore,
+    pub(crate) client: HttpClient,
+    pub(crate) thunderstore: Thunderstore,
     games: Mutex<Option<Arc<GameCatalog>>>,
 }
 

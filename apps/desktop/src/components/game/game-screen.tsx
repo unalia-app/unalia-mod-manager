@@ -3,7 +3,7 @@
 import { Badge, Button, Segmented, Skeleton } from "@modalia/ui";
 import { ArrowLeft, Gamepad2 } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { type CSSProperties, useEffect, useState } from "react";
+import { type CSSProperties, type ReactNode, useEffect, useState } from "react";
 
 import { Ambience } from "@/components/ambience";
 import { AppHeader } from "@/components/app-header";
@@ -15,13 +15,10 @@ import { Notice } from "@/components/notice";
 import { useAccent } from "@/hooks/use-accent";
 import { type SteamGame, gameSubtitle } from "@/lib/engine";
 import { findGame, rememberGame } from "@/lib/games-store";
+import { useInstalled } from "@/lib/installs";
 
 type Tab = "discover" | "mine";
 
-const TABS: { value: Tab; label: string }[] = [
-	{ value: "discover", label: "Discover" },
-	{ value: "mine", label: "My mods" },
-];
 
 /** Écran d'un jeu : ambiance du jeu, onglets Découvrir et Mes mods (SPEC §3.2). */
 export function GameScreen() {
@@ -30,6 +27,23 @@ export function GameScreen() {
 	const [game, setGame] = useState<SteamGame | null | undefined>(undefined);
 	const [tab, setTab] = useState<Tab>("discover");
 	const accent = useAccent(game?.appId ?? null);
+	const installedCount = useInstalled(appId)?.length ?? 0;
+	const tabs: { value: Tab; label: ReactNode }[] = [
+		{ value: "discover", label: "Discover" },
+		{
+			value: "mine",
+			label: (
+				<span className="flex items-center gap-1.5">
+					My mods
+					{installedCount > 0 && (
+						<span className="rounded-full bg-surface-strong px-1.5 font-tight text-[10px] text-fg-muted">
+							{installedCount}
+						</span>
+					)}
+				</span>
+			),
+		},
+	];
 
 	useEffect(() => {
 		setGame(undefined);
@@ -75,14 +89,14 @@ export function GameScreen() {
 						</section>
 
 						<div className="mt-10 animate-fade-up [animation-delay:120ms]">
-							<Segmented label="Game sections" variant="tabs" items={TABS} value={tab} onChange={setTab} />
+							<Segmented label="Game sections" variant="tabs" items={tabs} value={tab} onChange={setTab} />
 						</div>
 
 						<div className="mt-6 animate-fade-up [animation-delay:160ms]">
 							{tab === "discover" ? (
 								<Discover community={game.profile.community} appId={game.appId} />
 							) : (
-								<MyMods onDiscover={() => setTab("discover")} />
+								<MyMods appId={game.appId} onDiscover={() => setTab("discover")} />
 							)}
 						</div>
 					</>

@@ -1,4 +1,5 @@
 mod catalog;
+mod mods;
 
 use std::collections::HashMap;
 use std::fs;
@@ -20,11 +21,25 @@ struct Library {
     steam_root: Mutex<Option<PathBuf>>,
     /// Accents déjà calculés (`None` : jeu sans accent, accent neutre).
     accents: Mutex<HashMap<u32, Option<String>>>,
+    /// Jeux moddables du dernier scan. Les commandes d'installation ne
+    /// reçoivent qu'un identifiant de l'interface : le dossier du jeu vient
+    /// toujours d'ici, jamais de la webview.
+    games: Mutex<HashMap<u32, KnownGame>>,
+}
+
+#[derive(Clone)]
+struct KnownGame {
+    dir: PathBuf,
+    community: String,
 }
 
 impl Library {
     fn steam_root(&self) -> Option<PathBuf> {
         self.steam_root.lock().unwrap().clone()
+    }
+
+    fn game(&self, app_id: u32) -> Option<KnownGame> {
+        self.games.lock().unwrap().get(&app_id).cloned()
     }
 }
 
@@ -72,29 +87,45 @@ async fn list_games(
         });
     };
 
+    let entries: Vec<GameEntry> = games
+        .into_iter()
+        .map(|game| {
+            let profile = games_catalog
+                .as_ref()
+                .and_then(|c| c.by_steam_app_id(game.app_id))
+                .cloned();
+            // Sans catalogue (premier lancement hors ligne), on se rabat
+            // sur la détection du moteur.
+            let moddable = match (&games_catalog, &profile) {
+                (Some(_), Some(p)) => p.supported,
+                (Some(_), None) => false,
+                (None, _) => game.engine == Engine::Unity,
+            };
+            GameEntry {
+                game,
+                profile,
+                moddable,
+            }
+        })
+        .collect();
+
+    *library.games.lock().unwrap() = entries
+        .iter()
+        .filter(|e| e.moddable)
+        .filter_map(|e| {
+            Some((
+                e.game.app_id,
+                KnownGame {
+                    dir: e.game.install_dir.clone(),
+                    community: e.profile.as_ref()?.community.clone(),
+                },
+            ))
+        })
+        .collect();
+
     Ok(GameScan {
         steam_found: true,
-        games: games
-            .into_iter()
-            .map(|game| {
-                let profile = games_catalog
-                    .as_ref()
-                    .and_then(|c| c.by_steam_app_id(game.app_id))
-                    .cloned();
-                // Sans catalogue (premier lancement hors ligne), on se rabat
-                // sur la détection du moteur.
-                let moddable = match (&games_catalog, &profile) {
-                    (Some(_), Some(p)) => p.supported,
-                    (Some(_), None) => false,
-                    (None, _) => game.engine == Engine::Unity,
-                };
-                GameEntry {
-                    game,
-                    profile,
-                    moddable,
-                }
-            })
-            .collect(),
+        games: entries,
     })
 }
 
@@ -181,6 +212,10 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .manage(Library::default())
         .manage(Catalog::new())
+        .setup(|app| {
+            app.manage(mods::Mods::open(app.handle())?);
+            Ok(())
+        })
         .register_asynchronous_uri_scheme_protocol("artwork", artwork_protocol)
         .invoke_handler(tauri::generate_handler![
             list_games,
@@ -188,6 +223,11 @@ pub fn run() {
             catalog::search_mods,
             catalog::get_mod,
             catalog::mod_description,
+            mods::installed_mods,
+            mods::install_mod,
+            mods::set_mod_enabled,
+            mods::uninstall_mod,
+            mods::restore_mod,
         ])
         .run(tauri::generate_context!())
         .expect("Modalia failed to start");
