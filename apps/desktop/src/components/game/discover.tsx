@@ -1,13 +1,15 @@
 "use client";
 
 import { Button, SearchField, Segmented } from "@modalia/ui";
-import { PackageSearch, RotateCw, TriangleAlert } from "lucide-react";
+import { Download, ListChecks, PackageSearch, RotateCw, TriangleAlert, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 
 import { ModCard, ModCardSkeleton } from "@/components/game/mod-card";
 import { Notice } from "@/components/notice";
 import { type ModSort, type ModSummary, searchMods } from "@/lib/engine";
 import { compactNumber } from "@/lib/format";
+import { install } from "@/lib/installs";
 
 const SORTS: { value: ModSort; label: string }[] = [
 	{ value: "popular", label: "Popular" },
@@ -35,6 +37,35 @@ export function Discover({ community, appId }: { community: string; appId: numbe
 	const [attempt, setAttempt] = useState(0);
 	// Chaque nouvelle recherche invalide les réponses encore en vol.
 	const generation = useRef(0);
+	// Mode sélection multiple (SPEC §3.4) : cocher plusieurs mods, tout installer.
+	const [selecting, setSelecting] = useState(false);
+	const [selected, setSelected] = useState<Set<string>>(new Set());
+
+	const stopSelecting = () => {
+		setSelecting(false);
+		setSelected(new Set());
+	};
+
+	const toggleSelected = (id: string) =>
+		setSelected((current) => {
+			const next = new Set(current);
+			if (next.has(id)) next.delete(id);
+			else next.add(id);
+			return next;
+		});
+
+	const installSelected = () => {
+		// Le moteur les installe l'un après l'autre ; chaque carte suit le sien.
+		for (const id of selected) void install(appId, id);
+		stopSelecting();
+	};
+
+	useEffect(() => {
+		if (!selecting) return;
+		const onKey = (e: KeyboardEvent) => e.key === "Escape" && stopSelecting();
+		window.addEventListener("keydown", onKey);
+		return () => window.removeEventListener("keydown", onKey);
+	}, [selecting]);
 
 	useEffect(() => {
 		const current = ++generation.current;
@@ -85,11 +116,21 @@ export function Discover({ community, appId }: { community: string; appId: numbe
 					className="h-10 max-w-sm flex-1"
 				/>
 				<Segmented label="Sort mods" items={SORTS} value={sort} onChange={setSort} />
-				{results && (
-					<span className="ml-auto font-tight text-xs text-fg-subtle">
-						{compactNumber(results.total)} mod{results.total > 1 ? "s" : ""}
-					</span>
-				)}
+				<span className="ml-auto flex items-center gap-3">
+					{results && (
+						<span className="font-tight text-xs text-fg-subtle">
+							{compactNumber(results.total)} mod{results.total > 1 ? "s" : ""}
+						</span>
+					)}
+					<Button
+						variant={selecting ? "outline" : "secondary"}
+						size="sm"
+						leftIcon={selecting ? <X className="size-3.5" /> : <ListChecks className="size-3.5" />}
+						onClick={() => (selecting ? stopSelecting() : setSelecting(true))}
+					>
+						{selecting ? "Cancel" : "Select"}
+					</Button>
+				</span>
 			</div>
 
 			<div className="mt-6">
@@ -137,7 +178,15 @@ export function Discover({ community, appId }: { community: string; appId: numbe
 					<>
 						<div className={GRID}>
 							{results.items.map((mod, i) => (
-								<ModCard key={mod.id} mod={mod} index={i} appId={appId} />
+								<ModCard
+									key={mod.id}
+									mod={mod}
+									index={i}
+									appId={appId}
+									selecting={selecting}
+									selected={selected.has(mod.id)}
+									onToggleSelect={() => toggleSelected(mod.id)}
+								/>
 							))}
 							{loadingMore && Array.from({ length: 4 }, (_, i) => <ModCardSkeleton key={`more-${i}`} />)}
 						</div>
@@ -153,6 +202,32 @@ export function Discover({ community, appId }: { community: string; appId: numbe
 					</>
 				)}
 			</div>
+
+			{selecting &&
+				// Portail vers <body> : un ancêtre animé en `transform` (entrée de
+				// l'écran) ferait de lui la référence du `fixed`. Conteneur plein
+				// écran pour centrer : pas de translate sur la barre, déjà animée
+				// par une keyframe en transform.
+				createPortal(
+				<div className="pointer-events-none fixed inset-x-0 bottom-6 z-40 flex justify-center">
+					<div className="pointer-events-auto flex animate-row-in items-center gap-4 rounded-xl border border-line-strong bg-[#141417]/95 py-2 pr-2 pl-4 shadow-2xl backdrop-blur-xl">
+						<span className="text-sm text-fg-muted">
+							{selected.size === 0
+								? "Pick the mods to install"
+								: `${selected.size} mod${selected.size > 1 ? "s" : ""} selected`}
+						</span>
+						<Button
+							size="sm"
+							disabled={selected.size === 0}
+							leftIcon={<Download className="size-3.5" />}
+							onClick={installSelected}
+						>
+							{selected.size > 1 ? `Install all (${selected.size})` : "Install"}
+						</Button>
+					</div>
+				</div>,
+				document.body,
+			)}
 		</div>
 	);
 }
