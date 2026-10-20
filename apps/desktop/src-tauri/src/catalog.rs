@@ -7,6 +7,7 @@ use mod_engine::HttpClient;
 use mod_engine::games::{GameCatalog, SCHEMA_URL, load_catalog};
 use mod_engine::sources::thunderstore::{MOD_MANAGERS, Thunderstore};
 use mod_engine::sources::{Mod, ModSource, ModSummary, Page, SearchQuery, Sort};
+use serde::Serialize;
 use tauri::async_runtime::Mutex;
 use tauri::{AppHandle, Manager, State};
 
@@ -42,7 +43,7 @@ impl Catalog {
                 .join("thunderstore-schema.json");
             match load_catalog(&self.client, SCHEMA_URL, &cache, SCHEMA_MAX_AGE).await {
                 Ok(catalog) => *games = Some(Arc::new(catalog)),
-                Err(error) => eprintln!("catalogue des jeux indisponible : {error}"),
+                Err(error) => eprintln!("game catalog unavailable: {error}"),
             }
         }
         games.clone()
@@ -81,17 +82,61 @@ pub async fn search_mods(
     Ok(page)
 }
 
+/// Fiche d'un mod pour la page de détail.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModDetails {
+    #[serde(flatten)]
+    r#mod: Mod,
+    /// Dépendances de la dernière version, prêtes à afficher.
+    dependencies: Vec<DependencyInfo>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DependencyInfo {
+    id: String,
+    name: String,
+    author: String,
+    min_version: String,
+    /// Loader du jeu (ex. BepInEx) : installé à part, à la racine du jeu.
+    loader: bool,
+}
+
 #[tauri::command]
 pub async fn get_mod(
+    app: AppHandle,
     catalog: State<'_, Catalog>,
     community: String,
     id: String,
-) -> Result<Mod, String> {
-    catalog
-        .thunderstore
-        .get(&community, &id)
-        .await
-        .map_err(|e| e.to_string())
+) -> Result<ModDetails, String> {
+    let (games, found) = tokio::join!(
+        catalog.games(&app),
+        catalog.thunderstore.get(&community, &id),
+    );
+    let found = found.map_err(|e| e.to_string())?;
+    let dependencies = found
+        .latest()
+        .map(|v| v.dependencies.as_slice())
+        .unwrap_or_default()
+        .iter()
+        .map(|d| {
+            let (author, name) = d.id.split_once('-').unwrap_or(("", &d.id));
+            DependencyInfo {
+                name: name.replace('_', " "),
+                author: author.to_owned(),
+                min_version: d.min_version.clone(),
+                loader: games
+                    .as_ref()
+                    .is_some_and(|g| g.loader_package(&d.id).is_some()),
+                id: d.id.clone(),
+            }
+        })
+        .collect();
+    Ok(ModDetails {
+        r#mod: found,
+        dependencies,
+    })
 }
 
 /// Description en Markdown brut : l'interface la nettoie avant affichage.

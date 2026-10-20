@@ -89,6 +89,9 @@ Avant de créer un composant, vérifier qu'il n'existe pas dans Unalia (`compone
 
 ## Textes
 
-- Tutoiement, phrases courtes, sans jargon : « Ajoute un jeu en choisissant son dossier », pas « Sélectionnez un répertoire d'installation ».
-- Une erreur dit ce qui s'est passé et quoi faire. Le détail technique va dans un `<details>` « Détails techniques ».
+- **L'interface est en anglais.** Le code, ses commentaires et cette documentation restent en français. Une vraie traduction communautaire viendra plus tard (SPEC §10).
+- Ton direct, phrases courtes, sans jargon : « Add a game by picking its folder », pas « Select an installation directory ».
+- Une erreur dit ce qui s'est passé et quoi faire (« Couldn't load mods. Check your connection. »). Le détail technique va dans un `<details>` « Technical details ».
+- Casse de phrase, y compris pour les titres et les boutons : « Add a game manually », pas « Add A Game Manually ».
+- Guillemets typographiques “ ” autour d'une saisie de l'utilisateur.
 - Pas de tiret cadratin ni demi-cadratin.

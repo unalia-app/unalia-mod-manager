@@ -26,7 +26,7 @@ export function Notice({
 				{details && (
 					<details className="mt-3 text-xs text-fg-faint">
 						<summary className="cursor-pointer select-none transition-colors hover:text-fg-subtle">
-							Détails techniques
+							Technical details
 						</summary>
 						<pre className="mt-2 overflow-x-auto whitespace-pre-wrap rounded-md border border-line bg-black/30 p-2.5 font-mono text-[11px] text-fg-subtle">
 							{details}

@@ -1,7 +1,7 @@
-const compact = new Intl.NumberFormat("fr-FR", { notation: "compact", maximumFractionDigits: 1 });
-const relative = new Intl.RelativeTimeFormat("fr-FR", { numeric: "auto" });
+const compact = new Intl.NumberFormat("en-US", { notation: "compact", maximumFractionDigits: 1 });
+const relative = new Intl.RelativeTimeFormat("en-US", { numeric: "auto" });
 
-/** 10716544 → « 10,7 M ». */
+/** 10716544 → « 10.7M ». */
 export function compactNumber(n: number): string {
 	return compact.format(n);
 }
@@ -15,11 +15,11 @@ const UNITS: [Intl.RelativeTimeFormatUnit, number][] = [
 	["minute", 60],
 ];
 
-/** Date ISO → « il y a 3 jours ». */
+/** Date ISO → « 3 days ago ». */
 export function relativeDate(iso: string, now = Date.now()): string {
 	const seconds = (new Date(iso).getTime() - now) / 1000;
 	for (const [unit, size] of UNITS) {
 		if (Math.abs(seconds) >= size) return relative.format(Math.round(seconds / size), unit);
 	}
-	return "à l'instant";
+	return "just now";
 }

@@ -44,7 +44,7 @@ export function isModdable(game: SteamGame): boolean {
 export const ENGINE_LABEL: Record<Engine, string> = {
 	unity: "Unity",
 	unreal: "Unreal",
-	unknown: "Moteur inconnu",
+	unknown: "Unknown engine",
 };
 
 const LOADER_LABEL: Record<string, string> = {
@@ -129,7 +129,19 @@ export function searchMods(community: string, text: string, sort: ModSort, page:
 	return invoke("search_mods", { community, text, sort, page });
 }
 
-export function getMod(community: string, id: string): Promise<Mod> {
+/** Dépendance de la dernière version, prête à afficher (moteur : get_mod). */
+export type DependencyInfo = {
+	id: string;
+	name: string;
+	author: string;
+	minVersion: string;
+	/** Loader du jeu : installé à part, automatiquement. */
+	loader: boolean;
+};
+
+export type ModDetails = Mod & { dependencies: DependencyInfo[] };
+
+export function getMod(community: string, id: string): Promise<ModDetails> {
 	return invoke("get_mod", { community, id });
 }
 

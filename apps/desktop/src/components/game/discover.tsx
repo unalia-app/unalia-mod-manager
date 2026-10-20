@@ -10,9 +10,9 @@ import { type ModSort, type ModSummary, searchMods } from "@/lib/engine";
 import { compactNumber } from "@/lib/format";
 
 const SORTS: { value: ModSort; label: string }[] = [
-	{ value: "popular", label: "Populaires" },
-	{ value: "newest", label: "Récents" },
-	{ value: "updated", label: "Mis à jour" },
+	{ value: "popular", label: "Popular" },
+	{ value: "newest", label: "Newest" },
+	{ value: "updated", label: "Updated" },
 ];
 
 const GRID = "grid grid-cols-[repeat(auto-fill,minmax(11.5rem,1fr))] gap-4";
@@ -25,7 +25,7 @@ type Results = {
 };
 
 /** Onglet Découvrir : recherche, tri et grille qui se charge au défilement. */
-export function Discover({ community }: { community: string }) {
+export function Discover({ community, appId }: { community: string; appId: number }) {
 	const [text, setText] = useState("");
 	const query = useDebounced(text.trim(), 250);
 	const [sort, setSort] = useState<ModSort>("popular");
@@ -80,11 +80,11 @@ export function Discover({ community }: { community: string }) {
 				<SearchField
 					value={text}
 					onChange={(e) => setText(e.target.value)}
-					placeholder="Rechercher un mod"
-					aria-label="Rechercher un mod"
+					placeholder="Search mods"
+					aria-label="Search mods"
 					className="h-10 max-w-sm flex-1"
 				/>
-				<Segmented label="Trier les mods" items={SORTS} value={sort} onChange={setSort} />
+				<Segmented label="Sort mods" items={SORTS} value={sort} onChange={setSort} />
 				{results && (
 					<span className="ml-auto font-tight text-xs text-fg-subtle">
 						{compactNumber(results.total)} mod{results.total > 1 ? "s" : ""}
@@ -97,7 +97,7 @@ export function Discover({ community }: { community: string }) {
 					<div className="glass max-w-xl">
 						<Notice
 							icon={<TriangleAlert className="size-5 text-danger" />}
-							title="Impossible de charger les mods"
+							title="Couldn't load mods"
 							action={
 								<Button
 									variant="outline"
@@ -105,12 +105,12 @@ export function Discover({ community }: { community: string }) {
 									leftIcon={<RotateCw className="size-3.5" />}
 									onClick={() => setAttempt((a) => a + 1)}
 								>
-									Réessayer
+									Try again
 								</Button>
 							}
 							details={error}
 						>
-							Vérifie ta connexion. Tes mods déjà installés ne sont pas concernés.
+							Check your connection. Mods you already installed are not affected.
 						</Notice>
 					</div>
 				)}
@@ -125,10 +125,10 @@ export function Discover({ community }: { community: string }) {
 
 				{results && results.items.length === 0 && (
 					<div className="glass max-w-xl">
-						<Notice icon={<PackageSearch className="size-5 text-fg-muted" />} title="Aucun mod trouvé">
+						<Notice icon={<PackageSearch className="size-5 text-fg-muted" />} title="No mods found">
 							{query
-								? `Aucun mod ne correspond à « ${query} ». Essaie avec moins de mots.`
-								: "Ce jeu n'a pas encore de mods sur Thunderstore."}
+								? `No mod matches “${query}”. Try fewer words.`
+								: "This game has no mods on Thunderstore yet."}
 						</Notice>
 					</div>
 				)}
@@ -137,16 +137,16 @@ export function Discover({ community }: { community: string }) {
 					<>
 						<div className={GRID}>
 							{results.items.map((mod, i) => (
-								<ModCard key={mod.id} mod={mod} index={i} />
+								<ModCard key={mod.id} mod={mod} index={i} appId={appId} />
 							))}
 							{loadingMore && Array.from({ length: 4 }, (_, i) => <ModCardSkeleton key={`more-${i}`} />)}
 						</div>
 						{results.hasMore && <div ref={sentinel} className="h-px" />}
 						{error && (
 							<p className="mt-6 text-center text-xs text-fg-subtle">
-								La suite n'a pas pu être chargée.{" "}
+								Couldn't load more mods.{" "}
 								<button type="button" className="cursor-pointer text-fg underline" onClick={loadMore}>
-									Réessayer
+									Try again
 								</button>
 							</p>
 						)}

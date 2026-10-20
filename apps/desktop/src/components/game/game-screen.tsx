@@ -19,8 +19,8 @@ import { findGame, rememberGame } from "@/lib/games-store";
 type Tab = "discover" | "mine";
 
 const TABS: { value: Tab; label: string }[] = [
-	{ value: "discover", label: "Découvrir" },
-	{ value: "mine", label: "Mes mods" },
+	{ value: "discover", label: "Discover" },
+	{ value: "mine", label: "My mods" },
 ];
 
 /** Écran d'un jeu : ambiance du jeu, onglets Découvrir et Mes mods (SPEC §3.2). */
@@ -69,18 +69,18 @@ export function GameScreen() {
 								{/* `truncate` coupe ce qui dépasse : le pb-1 laisse la place aux jambages (g, j, p). */}
 								<h1 className="mt-2 truncate pb-1 text-4xl leading-tight font-semibold tracking-tight">{game.name}</h1>
 								<p className="mt-1.5 text-sm text-fg-subtle">
-									Mods de la communauté, depuis Thunderstore. Modalia installe le loader et les dépendances pour toi.
+									Community mods from Thunderstore. Modalia installs the loader and dependencies for you.
 								</p>
 							</div>
 						</section>
 
 						<div className="mt-10 animate-fade-up [animation-delay:120ms]">
-							<Segmented label="Sections du jeu" variant="tabs" items={TABS} value={tab} onChange={setTab} />
+							<Segmented label="Game sections" variant="tabs" items={TABS} value={tab} onChange={setTab} />
 						</div>
 
 						<div className="mt-6 animate-fade-up [animation-delay:160ms]">
 							{tab === "discover" ? (
-								<Discover community={game.profile.community} />
+								<Discover community={game.profile.community} appId={game.appId} />
 							) : (
 								<MyMods onDiscover={() => setTab("discover")} />
 							)}
@@ -109,7 +109,7 @@ function BackHome() {
 	const router = useRouter();
 	return (
 		<Button variant="outline" size="sm" leftIcon={<ArrowLeft className="size-3.5" />} onClick={() => router.push("/")}>
-			Choisir un autre jeu
+			Pick another game
 		</Button>
 	);
 }
@@ -117,8 +117,8 @@ function BackHome() {
 function GameMissing() {
 	return (
 		<div className="glass mt-16 max-w-xl">
-			<Notice icon={<Gamepad2 className="size-5 text-fg-muted" />} title="Ce jeu n'est plus installé" action={<BackHome />}>
-				Steam ne le trouve plus sur cet ordinateur. S'il est sur un disque débranché, rebranche-le puis reviens ici.
+			<Notice icon={<Gamepad2 className="size-5 text-fg-muted" />} title="This game isn't installed anymore" action={<BackHome />}>
+				Steam can't find it on this computer. If it's on an unplugged drive, plug it back in and come back here.
 			</Notice>
 		</div>
 	);
@@ -127,8 +127,8 @@ function GameMissing() {
 function NotModdable({ game }: { game: SteamGame }) {
 	return (
 		<div className="glass mt-16 max-w-xl">
-			<Notice icon={<Gamepad2 className="size-5 text-fg-muted" />} title={`${game.name} n'est pas encore pris en charge`} action={<BackHome />}>
-				Modalia commence par les jeux qui utilisent BepInEx. D'autres arrivent bientôt.
+			<Notice icon={<Gamepad2 className="size-5 text-fg-muted" />} title={`${game.name} isn't supported yet`} action={<BackHome />}>
+				Modalia starts with games that use BepInEx. More are coming soon.
 			</Notice>
 		</div>
 	);

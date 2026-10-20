@@ -9,14 +9,14 @@ export function MyMods({ onDiscover }: { onDiscover: () => void }) {
 		<div className="glass max-w-xl">
 			<Notice
 				icon={<Layers className="size-5 text-fg-muted" />}
-				title="Aucun mod installé pour l'instant"
+				title="No mods installed yet"
 				action={
 					<Button size="sm" onClick={onDiscover}>
-						Découvrir des mods
+						Discover mods
 					</Button>
 				}
 			>
-				Les mods que tu installes apparaîtront ici. Tu pourras les activer, les désactiver ou les retirer en un clic.
+				Mods you install show up here. Turn them on, off or remove them in one click.
 			</Notice>
 		</div>
 	);

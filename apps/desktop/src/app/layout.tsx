@@ -12,7 +12,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: ReactNode }) {
 	return (
-		<html lang="fr" className={`${poppins.variable} ${interTight.variable}`}>
+		<html lang="en" className={`${poppins.variable} ${interTight.variable}`}>
 			<body>
 				{children}
 				<DevShortcuts />

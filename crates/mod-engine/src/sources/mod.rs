@@ -114,15 +114,15 @@ pub struct Page<T> {
 
 #[derive(Debug, thiserror::Error)]
 pub enum SourceError {
-    #[error("{source_name} est injoignable")]
+    #[error("{source_name} can't be reached")]
     Network {
         source_name: &'static str,
         #[source]
         error: reqwest::Error,
     },
-    #[error("ce mod n'existe plus sur {source_name}")]
+    #[error("this mod no longer exists on {source_name}")]
     NotFound { source_name: &'static str },
-    #[error("réponse inattendue de {source_name} : {detail}")]
+    #[error("unexpected response from {source_name}: {detail}")]
     Unexpected {
         source_name: &'static str,
         detail: String,

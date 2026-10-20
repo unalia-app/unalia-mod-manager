@@ -18,4 +18,5 @@ mod-engine.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 tauri = { version = "2.12", features = [] }
+tauri-plugin-opener = "2.7"
 tokio = { version = "1", features = ["macros"] }

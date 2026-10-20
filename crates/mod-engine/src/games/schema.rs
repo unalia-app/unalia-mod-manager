@@ -12,7 +12,7 @@ use super::{GameProfile, LoaderPackage, SUPPORTED_LOADER};
 const ASSET_BASE: &str = "https://gcdn.thunderstore.io/live/community/";
 
 #[derive(Debug, thiserror::Error)]
-#[error("schéma Thunderstore invalide : {0}")]
+#[error("invalid Thunderstore schema: {0}")]
 pub struct SchemaError(#[from] serde_json::Error);
 
 #[derive(Deserialize)]

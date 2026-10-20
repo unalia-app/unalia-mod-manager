@@ -271,7 +271,7 @@ async fn server_errors_and_garbage_are_reported() {
 
     let down = ts.get("x", "a-b").await.unwrap_err();
     assert!(matches!(down, SourceError::Network { .. }), "{down:?}");
-    assert_eq!(down.to_string(), "Thunderstore est injoignable");
+    assert_eq!(down.to_string(), "Thunderstore can't be reached");
 
     let garbage = ts.get("x", "c-d").await.unwrap_err();
     assert!(

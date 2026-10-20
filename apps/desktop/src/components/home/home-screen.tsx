@@ -35,12 +35,12 @@ export function HomeScreen() {
 
 			<section className="relative z-10 mx-auto w-full max-w-[38rem] px-6 pt-[14vh] pb-16">
 				<h1 className="animate-fade-up text-5xl font-semibold leading-[1.1] tracking-tight">
-					Quel jeu veux-tu
+					Which game do you
 					<br />
-					<span className="text-fg-muted">modder ?</span>
+					<span className="text-fg-muted">want to mod?</span>
 				</h1>
 				<p className="mt-4 animate-fade-up text-base text-fg-subtle [animation-delay:60ms]">
-					Choisis tes mods, Modalia s'occupe du reste.
+					Pick your mods, Modalia handles the rest.
 				</p>
 
 				<div className="mt-9 animate-fade-up [animation-delay:120ms]">

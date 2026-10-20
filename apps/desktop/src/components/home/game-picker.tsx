@@ -96,8 +96,8 @@ export function GamePicker({
 				value={query}
 				onChange={(e) => setQuery(e.target.value)}
 				onKeyDown={onKeyDown}
-				placeholder="Rechercher parmi tes jeux installés"
-				aria-label="Rechercher un jeu"
+				placeholder="Search your installed games"
+				aria-label="Search games"
 				aria-controls="game-results"
 				className="h-14"
 				trailing={results.length > 0 && <Kbd>↵</Kbd>}
@@ -109,34 +109,34 @@ export function GamePicker({
 				{state.status === "error" && (
 					<Notice
 						icon={<TriangleAlert className="size-5 text-danger" />}
-						title="Impossible de lire ta bibliothèque Steam"
+						title="Couldn't read your Steam library"
 						action={
 							<Button variant="outline" size="sm" leftIcon={<RotateCw className="size-3.5" />} onClick={() => scan(true)}>
-								Réessayer
+								Try again
 							</Button>
 						}
 						details={state.message}
 					>
-						Ton jeu n'est pas en cause. Réessaie, et si ça persiste, ajoute ton jeu à la main.
+						Your games are fine. Try again, and if it keeps happening, add your game manually.
 					</Notice>
 				)}
 
 				{state.status === "ready" && !state.scan.steamFound && (
-					<Notice icon={<Gamepad2 className="size-5 text-fg-muted" />} title="Steam n'est pas installé ici">
-						Ajoute un jeu en choisissant son dossier, Modalia s'occupe du reste.
+					<Notice icon={<Gamepad2 className="size-5 text-fg-muted" />} title="Steam isn't installed here">
+						Add a game by picking its folder, Modalia handles the rest.
 					</Notice>
 				)}
 
 				{state.status === "ready" && state.scan.steamFound && results.length === 0 && (
-					<Notice icon={<Gamepad2 className="size-5 text-fg-muted" />} title={query ? "Aucun jeu trouvé" : "Aucun jeu moddable pour l'instant"}>
+					<Notice icon={<Gamepad2 className="size-5 text-fg-muted" />} title={query ? "No games found" : "No moddable games yet"}>
 						{query
-							? `Aucun jeu installé ne correspond à « ${query.trim()} ».`
-							: "Modalia commence par les jeux qui utilisent BepInEx. D'autres arrivent bientôt."}
+							? `No installed game matches “${query.trim()}”.`
+							: "Modalia starts with games that use BepInEx. More are coming soon."}
 					</Notice>
 				)}
 
 				{state.status === "ready" && results.length > 0 && (
-					<ul aria-label="Jeux" onMouseLeave={() => setEngaged(false)}>
+					<ul aria-label="Games" onMouseLeave={() => setEngaged(false)}>
 						{results.map((game, i) => (
 							<li key={game.appId}>
 								<GameRow
@@ -162,7 +162,7 @@ export function GamePicker({
 						onClick={() => setShowAll((v) => !v)}
 						className="cursor-pointer text-sm font-medium text-fg-subtle transition-colors hover:text-fg"
 					>
-						{showAll ? "Afficher moins" : `Voir tous mes jeux moddables (${moddable.length})`}
+						{showAll ? "Show less" : `See all my moddable games (${moddable.length})`}
 					</button>
 				) : (
 					<span />
@@ -171,10 +171,10 @@ export function GamePicker({
 					variant="secondary"
 					size="sm"
 					disabled
-					title="Bientôt disponible"
+					title="Coming soon"
 					leftIcon={<FolderPlus className="size-3.5" />}
 				>
-					Ajouter un jeu manuellement
+					Add a game manually
 				</Button>
 			</div>
 		</div>
@@ -225,7 +225,7 @@ function GameRow({
 					)}
 				/>
 			) : (
-				<Badge>Bientôt</Badge>
+				<Badge>Soon</Badge>
 			)}
 		</button>
 	);
@@ -233,7 +233,7 @@ function GameRow({
 
 function LoadingRows() {
 	return (
-		<div role="status" aria-label="Recherche de tes jeux">
+		<div role="status" aria-label="Looking for your games">
 			{[0, 1, 2].map((i) => (
 				<div key={i} className="flex items-center gap-3 px-2.5 py-2">
 					<Skeleton className="h-12 w-8" />

@@ -56,3 +56,7 @@ export function withRecentsFirst(games: SteamGame[]): SteamGame[] {
 export function gameHref(appId: number): string {
 	return `/game/?id=${appId}`;
 }
+
+export function modHref(appId: number, modId: string): string {
+	return `/mod/?game=${appId}&id=${encodeURIComponent(modId)}`;
+}

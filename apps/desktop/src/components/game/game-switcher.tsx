@@ -82,11 +82,11 @@ export function GameSwitcher({ current }: { current: SteamGame }) {
 						autoFocus
 						value={query}
 						onChange={(e) => setQuery(e.target.value)}
-						placeholder="Changer de jeu"
-						aria-label="Changer de jeu"
+						placeholder="Switch game"
+						aria-label="Switch game"
 						className="h-10 hover:translate-y-0"
 					/>
-					<ul role="listbox" aria-label="Jeux" className="mt-1.5">
+					<ul role="listbox" aria-label="Games" className="mt-1.5">
 						{results.map((game, i) => (
 							<li key={game.appId}>
 								<button
@@ -108,7 +108,7 @@ export function GameSwitcher({ current }: { current: SteamGame }) {
 						))}
 						{results.length === 0 && (
 							<li className="px-2 py-3 text-xs text-fg-subtle">
-								{query ? `Aucun jeu moddable ne correspond à « ${query.trim()} ».` : "Recherche de tes jeux…"}
+								{query ? `No moddable game matches “${query.trim()}”.` : "Looking for your games…"}
 							</li>
 						)}
 					</ul>
@@ -117,7 +117,7 @@ export function GameSwitcher({ current }: { current: SteamGame }) {
 						className="mt-1 flex items-center gap-2 rounded-lg border-t border-line px-2 pt-2.5 pb-1.5 text-xs font-medium text-fg-subtle transition-colors hover:text-fg"
 					>
 						<LayoutGrid className="size-3.5" />
-						Tous mes jeux
+						All my games
 					</Link>
 				</div>
 			)}

@@ -157,7 +157,7 @@ fn artwork_protocol(
                 .status(StatusCode::NOT_FOUND)
                 .body(Vec::new()),
         };
-        responder.respond(response.expect("réponse HTTP valide"));
+        responder.respond(response.expect("valid HTTP response"));
     });
 }
 
@@ -178,6 +178,7 @@ fn mime(file: &std::path::Path) -> &'static str {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        .plugin(tauri_plugin_opener::init())
         .manage(Library::default())
         .manage(Catalog::new())
         .register_asynchronous_uri_scheme_protocol("artwork", artwork_protocol)
@@ -189,7 +190,7 @@ pub fn run() {
             catalog::mod_description,
         ])
         .run(tauri::generate_context!())
-        .expect("échec du démarrage de Modalia");
+        .expect("Modalia failed to start");
 }
 
 #[cfg(test)]

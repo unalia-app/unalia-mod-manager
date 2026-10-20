@@ -34,7 +34,7 @@ export function AppHeader({
 				scrolled ? "border-line bg-bg/75 backdrop-blur-xl" : "border-transparent",
 			)}
 		>
-			<Link href="/" className="flex shrink-0 items-center gap-2 text-lg font-bold tracking-tight" aria-label="Accueil">
+			<Link href="/" className="flex shrink-0 items-center gap-2 text-lg font-bold tracking-tight" aria-label="Home">
 				<span ref={brandRef} className={cn("text-xl italic", brandHidden && "opacity-0")}>
 					MODALIA
 				</span>

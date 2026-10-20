@@ -305,10 +305,7 @@ impl Package {
         if !self.latest.download_url.starts_with("https://") {
             return Err(SourceError::Unexpected {
                 source_name: NAME,
-                detail: format!(
-                    "URL de téléchargement non sécurisée : {}",
-                    self.latest.download_url
-                ),
+                detail: format!("insecure download URL: {}", self.latest.download_url),
             });
         }
 

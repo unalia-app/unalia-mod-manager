@@ -137,11 +137,11 @@ fn single<T>(items: Vec<T>) -> Option<T> {
 
 #[derive(Debug, thiserror::Error)]
 pub enum CatalogError {
-    #[error("impossible de télécharger la liste des jeux de Thunderstore")]
+    #[error("couldn't download the Thunderstore game list")]
     Download(#[source] reqwest::Error),
-    #[error("liste des jeux de Thunderstore illisible")]
+    #[error("the Thunderstore game list is unreadable")]
     Schema(#[from] SchemaError),
-    #[error("impossible d'écrire le cache de la liste des jeux")]
+    #[error("couldn't write the game list cache")]
     Cache(#[source] io::Error),
 }
 

@@ -53,7 +53,7 @@ pub struct ParseError {
 
 impl fmt::Display for ParseError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "ligne {} : {}", self.line, self.message)
+        write!(f, "line {}: {}", self.line, self.message)
     }
 }
 
@@ -75,17 +75,17 @@ fn parse_pairs(lexer: &mut Lexer<'_>, nested: bool) -> Result<Obj, ParseError> {
     let mut pairs = Vec::new();
     loop {
         let key = match lexer.next_token()? {
-            None if nested => return Err(lexer.error("accolade fermante manquante")),
+            None if nested => return Err(lexer.error("missing closing brace")),
             None => return Ok(Obj(pairs)),
             Some(Token::Close) if nested => return Ok(Obj(pairs)),
-            Some(Token::Close) => return Err(lexer.error("accolade fermante en trop")),
-            Some(Token::Open) => return Err(lexer.error("clé attendue avant une accolade")),
+            Some(Token::Close) => return Err(lexer.error("unexpected closing brace")),
+            Some(Token::Open) => return Err(lexer.error("expected a key before a brace")),
             Some(Token::Str(s)) => s,
         };
         let value = match lexer.next_token()? {
             Some(Token::Str(s)) => Value::Str(s),
             Some(Token::Open) => Value::Obj(parse_pairs(lexer, true)?),
-            Some(Token::Close) | None => return Err(lexer.error("valeur manquante après une clé")),
+            Some(Token::Close) | None => return Err(lexer.error("missing value after a key")),
         };
         pairs.push((key, value));
     }
@@ -163,14 +163,14 @@ impl Lexer<'_> {
                 return Ok(());
             }
         }
-        Err(self.error("condition non fermée"))
+        Err(self.error("unclosed condition"))
     }
 
     fn quoted(&mut self) -> Result<String, ParseError> {
         let mut out = String::new();
         loop {
             match self.bump() {
-                None => return Err(self.error("guillemet fermant manquant")),
+                None => return Err(self.error("missing closing quote")),
                 Some('"') => return Ok(out),
                 Some('\\') => match self.bump() {
                     Some('\\') => out.push('\\'),
@@ -181,7 +181,7 @@ impl Lexer<'_> {
                         out.push('\\');
                         out.push(other);
                     }
-                    None => return Err(self.error("guillemet fermant manquant")),
+                    None => return Err(self.error("missing closing quote")),
                 },
                 Some(c) => out.push(c),
             }

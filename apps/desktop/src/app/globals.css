@@ -107,3 +107,122 @@
 .intro-pending .animate-fade-up {
 	animation-play-state: paused;
 }
+
+/* Descriptions de mods (components/markdown.tsx). Pas de plugin typography :
+   quelques règles suffisent et restent dans les tokens de Modalia. */
+.prose-mod {
+	color: var(--color-fg-muted);
+	font-size: 0.875rem;
+	line-height: 1.7;
+	overflow-wrap: anywhere;
+
+	& > :first-child {
+		margin-top: 0;
+	}
+
+	& :where(h1, h2, h3, h4) {
+		margin: 1.8em 0 0.6em;
+		color: var(--color-fg);
+		font-weight: 600;
+		letter-spacing: -0.01em;
+		line-height: 1.3;
+	}
+
+	& h1 {
+		font-size: 1.35rem;
+	}
+
+	& h2 {
+		font-size: 1.15rem;
+	}
+
+	& :where(h3, h4) {
+		font-size: 1rem;
+	}
+
+	& :where(p, ul, ol, pre, blockquote, table) {
+		margin: 0.9em 0;
+	}
+
+	& :where(ul, ol) {
+		padding-left: 1.4em;
+	}
+
+	& ul {
+		list-style: disc;
+	}
+
+	& ol {
+		list-style: decimal;
+	}
+
+	& li + li {
+		margin-top: 0.3em;
+	}
+
+	& a {
+		color: var(--color-accent);
+		text-decoration: underline;
+		text-decoration-color: color-mix(in oklch, var(--color-accent) 40%, transparent);
+		text-underline-offset: 3px;
+		cursor: pointer;
+	}
+
+	& strong {
+		color: var(--color-fg);
+		font-weight: 600;
+	}
+
+	& img {
+		display: inline-block;
+		max-width: 100%;
+		height: auto;
+		border-radius: var(--radius-lg);
+	}
+
+	& :not(pre) > code {
+		padding: 0.15em 0.4em;
+		border-radius: var(--radius-sm);
+		background: var(--color-surface-strong);
+		color: var(--color-fg);
+		font-size: 0.85em;
+	}
+
+	& pre {
+		overflow-x: auto;
+		padding: 0.9em 1em;
+		border: 1px solid var(--color-line);
+		border-radius: var(--radius-lg);
+		background: rgb(0 0 0 / 0.3);
+		font-size: 0.8rem;
+	}
+
+	& blockquote {
+		padding-left: 1em;
+		border-left: 2px solid var(--color-line-strong);
+		color: var(--color-fg-subtle);
+	}
+
+	& hr {
+		margin: 2em 0;
+		border-color: var(--color-line);
+	}
+
+	& table {
+		display: block;
+		overflow-x: auto;
+		border-collapse: collapse;
+		font-size: 0.8rem;
+	}
+
+	& :where(th, td) {
+		padding: 0.4em 0.8em;
+		border: 1px solid var(--color-line);
+		text-align: left;
+	}
+
+	& th {
+		color: var(--color-fg);
+		font-weight: 600;
+	}
+}

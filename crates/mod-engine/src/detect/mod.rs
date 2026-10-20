@@ -32,7 +32,7 @@ pub struct SteamGame {
 
 #[derive(Debug, thiserror::Error)]
 pub enum DetectError {
-    #[error("aucune installation Steam dans {0}")]
+    #[error("no Steam installation in {0}")]
     SteamNotFound(PathBuf),
 }
 
