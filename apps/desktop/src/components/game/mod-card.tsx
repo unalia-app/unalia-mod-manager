@@ -18,16 +18,34 @@ import { install, overallProgress, useActiveInstall, useInstalled, useModUpdate 
  * Toute la carte mène à la page du mod (lien étiré par-dessus), sauf le
  * bouton « Install » posé au-dessus du lien.
  */
-export function ModCard({ mod, index, appId }: { mod: ModSummary; index: number; appId: number }) {
+export function ModCard({
+	mod,
+	index,
+	appId,
+	animated = true,
+}: {
+	mod: ModSummary;
+	index: number;
+	appId: number;
+	/**
+	 * Entrée animée en cascade : pour la première page seulement. Rejouée
+	 * à chaque page chargée au défilement, elle retardait l'arrivée des
+	 * cartes et faisait sauter la position de défilement.
+	 */
+	animated?: boolean;
+}) {
 	const [image, setImage] = useState<"loading" | "loaded" | "missing">(mod.iconUrl ? "loading" : "missing");
 	const category = mod.categories[0];
 
 	return (
 		<article
-			style={{ animationDelay: `${(index % 24) * 20}ms` }}
+			style={animated ? { animationDelay: `${(index % 24) * 20}ms` } : undefined}
 			// Pas de `glass` ici : un backdrop-filter recalculé à chaque image du
 			// survol, sur toute une grille, saccade (surtout dans WebKit).
-			className="group relative flex animate-row-in flex-col rounded-xl border border-line bg-surface p-2 transition-[background-color,border-color,translate] duration-300 ease-out hover:-translate-y-1 hover:border-line-strong hover:bg-surface-hover has-[:focus-visible]:border-accent/60"
+			className={cn(
+				"group relative flex flex-col rounded-xl border border-line bg-surface p-2 transition-[background-color,border-color,translate] duration-300 ease-out hover:-translate-y-1 hover:border-line-strong hover:bg-surface-hover has-[:focus-visible]:border-accent/60",
+				animated ? "animate-row-in" : "animate-fade-in",
+			)}
 		>
 			<Link
 				href={modHref(appId, mod.id)}

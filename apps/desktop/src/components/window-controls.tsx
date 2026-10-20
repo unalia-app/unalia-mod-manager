@@ -64,14 +64,14 @@ function ControlButton({
 			title={label}
 			onClick={onClick}
 			className={cn(
-				"flex h-8 w-10 cursor-pointer items-center justify-center rounded-md text-fg-muted transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-accent/60 focus-visible:outline-none",
+				"flex h-9 w-11 cursor-pointer items-center justify-center rounded-md text-fg-muted transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-accent/60 focus-visible:outline-none",
 				// Rouge de fermeture de Windows : le geste attendu, gardé tel quel.
 				danger ? "hover:bg-[#c42b1c] hover:text-white" : "hover:bg-surface-strong hover:text-fg",
 			)}
 		>
 			<svg
 				viewBox="0 0 12 12"
-				className="size-3"
+				className="size-3.5"
 				fill="none"
 				stroke="currentColor"
 				strokeWidth="1.2"

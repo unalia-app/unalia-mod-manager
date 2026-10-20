@@ -64,18 +64,23 @@ export function GamePicker({
 
 	const games = state.status === "ready" ? state.scan.games : [];
 	const moddable = useMemo(() => withRecentsFirst(games.filter(isModdable)), [games]);
+	// Toute la bibliothèque : moddables (récents en tête) puis les autres,
+	// pour que l'utilisateur retrouve ses jeux même s'ils ne sont pas encore
+	// pris en charge.
+	const library = useMemo(() => [...moddable, ...games.filter((g) => !isModdable(g))], [games, moddable]);
 
-	// Sans recherche : les jeux moddables. Avec : tous les jeux qui
+	// Sans recherche : la bibliothèque, moddables d'abord, jamais plus de
+	// quelques jeux d'emblée (SPEC §3.1). Avec : tous les jeux qui
 	// correspondent, moddables d'abord, pour expliquer pourquoi un jeu
 	// attendu n'est pas proposé.
 	const results = useMemo(() => {
 		const q = normalize(query);
-		if (!q) return showAll ? moddable : moddable.slice(0, SUGGESTION_COUNT);
+		if (!q) return showAll ? library : library.slice(0, SUGGESTION_COUNT);
 		return games
 			.filter((g) => normalize(g.name).includes(q))
 			.sort((a, b) => Number(isModdable(b)) - Number(isModdable(a)))
 			.slice(0, SEARCH_LIMIT);
-	}, [games, moddable, query, showAll]);
+	}, [games, library, query, showAll]);
 
 	useEffect(() => setActive(0), [results]);
 
@@ -103,7 +108,7 @@ export function GamePicker({
 		}
 	};
 
-	const hiddenCount = moddable.length - SUGGESTION_COUNT;
+	const hiddenCount = library.length - SUGGESTION_COUNT;
 
 	return (
 		<div className="w-full">
@@ -152,10 +157,10 @@ export function GamePicker({
 				)}
 
 				{state.status === "ready" && (state.scan.steamFound || games.length > 0) && results.length === 0 && (
-					<Notice icon={<Gamepad2 className="size-5 text-fg-muted" />} title={query ? "No games found" : "No moddable games yet"}>
+					<Notice icon={<Gamepad2 className="size-5 text-fg-muted" />} title={query ? "No games found" : "No games yet"}>
 						{query
 							? `No installed game matches “${query.trim()}”.`
-							: "Modalia starts with games that use BepInEx. More are coming soon."}
+							: "Modalia didn't find any installed game. Add one by picking its folder."}
 					</Notice>
 				)}
 
@@ -186,7 +191,7 @@ export function GamePicker({
 						onClick={() => setShowAll((v) => !v)}
 						className="cursor-pointer text-sm font-medium text-fg-subtle transition-colors hover:text-fg"
 					>
-						{showAll ? "Show less" : `See all my moddable games (${moddable.length})`}
+						{showAll ? "Show less" : `See all my games (${library.length})`}
 					</button>
 				) : (
 					<span />

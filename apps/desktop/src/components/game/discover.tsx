@@ -74,6 +74,10 @@ export function Discover({ community, appId }: { community: string; appId: numbe
 	};
 
 	const sentinel = useInView<HTMLDivElement>(loadMore, results?.items.length);
+	// Taille de la première page : seules ses cartes ont l'entrée en cascade.
+	const firstPage = useRef(0);
+	if (results?.page === 1) firstPage.current = results.items.length;
+	const firstPageSize = firstPage.current;
 
 	return (
 		<div>
@@ -138,7 +142,7 @@ export function Discover({ community, appId }: { community: string; appId: numbe
 					<>
 						<div className={GRID}>
 							{results.items.map((mod, i) => (
-								<ModCard key={mod.id} mod={mod} index={i} appId={appId} />
+								<ModCard key={mod.id} mod={mod} index={i} appId={appId} animated={i < firstPageSize} />
 							))}
 							{loadingMore && Array.from({ length: 4 }, (_, i) => <ModCardSkeleton key={`more-${i}`} />)}
 						</div>
