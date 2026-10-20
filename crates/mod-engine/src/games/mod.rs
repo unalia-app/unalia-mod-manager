@@ -1,0 +1,199 @@
+//! Brique **games** : ce que Modalia sait de chaque jeu moddable.
+//!
+//! La base vient du schéma d'écosystème de Thunderstore (celui d'r2modman) :
+//! pour chaque jeu, ses identifiants Steam, sa communauté Thunderstore, son
+//! loader, ses exécutables. C'est de la donnée pure, jamais du code (SPEC §7).
+//!
+//! Le schéma est mis en cache sur disque : l'appli démarre hors ligne avec la
+//! dernière version connue.
+
+mod schema;
+
+use std::collections::HashMap;
+use std::fs;
+use std::io;
+use std::path::Path;
+use std::time::{Duration, SystemTime};
+
+use serde::Serialize;
+
+pub use schema::SchemaError;
+
+pub const SCHEMA_URL: &str = "https://thunderstore.io/api/experimental/schema/dev/latest/";
+
+/// Loader géré par le prototype (SPEC §5).
+pub const SUPPORTED_LOADER: &str = "bepinex";
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct GameProfile {
+    /// Identifiant du jeu dans le schéma, ex. `hollow-knight-silksong`.
+    pub id: String,
+    pub name: String,
+    /// Communauté Thunderstore où chercher les mods.
+    pub community: String,
+    pub steam_app_ids: Vec<u32>,
+    /// Loader attendu par les mods de ce jeu, ex. `bepinex`, `melonloader`.
+    pub loader: String,
+    /// `true` si Modalia sait installer ce loader.
+    pub supported: bool,
+    pub exe_names: Vec<String>,
+    /// Dossier de données Unity, ex. `Hollow Knight Silksong_Data`.
+    pub data_folder_name: Option<String>,
+    /// Jaquette 360×480 fournie par Thunderstore pour les gestionnaires de mods.
+    pub cover_url: Option<String>,
+    /// Bannière 1920×620.
+    pub hero_url: Option<String>,
+}
+
+/// Paquet qui *est* un loader (ex. `silksong_modding-BepInExPack_Silksong`) :
+/// il s'installe à la racine du jeu au lieu du dossier des plugins.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LoaderPackage {
+    pub package_id: String,
+    pub loader: String,
+    /// Dossier de l'archive dont le contenu va à la racine du jeu.
+    pub root_folder: String,
+}
+
+#[derive(Debug, Default)]
+pub struct GameCatalog {
+    games: Vec<GameProfile>,
+    by_steam_app_id: HashMap<u32, usize>,
+    loader_packages: HashMap<String, LoaderPackage>,
+}
+
+impl GameCatalog {
+    pub fn from_schema_json(json: &str) -> Result<Self, SchemaError> {
+        let (games, loaders) = schema::parse(json)?;
+        let mut by_steam_app_id = HashMap::new();
+        for (i, game) in games.iter().enumerate() {
+            for &app_id in &game.steam_app_ids {
+                by_steam_app_id.entry(app_id).or_insert(i);
+            }
+        }
+        Ok(Self {
+            games,
+            by_steam_app_id,
+            loader_packages: loaders
+                .into_iter()
+                .map(|l| (l.package_id.clone(), l))
+                .collect(),
+        })
+    }
+
+    pub fn games(&self) -> &[GameProfile] {
+        &self.games
+    }
+
+    pub fn by_steam_app_id(&self, app_id: u32) -> Option<&GameProfile> {
+        self.by_steam_app_id.get(&app_id).map(|&i| &self.games[i])
+    }
+
+    pub fn by_id(&self, id: &str) -> Option<&GameProfile> {
+        self.games.iter().find(|g| g.id == id)
+    }
+
+    /// Le paquet `namespace-name` est-il un loader ?
+    pub fn loader_package(&self, package_id: &str) -> Option<&LoaderPackage> {
+        self.loader_packages.get(package_id)
+    }
+
+    /// Reconnaît un jeu installé hors de Steam à partir de son dossier : le
+    /// dossier de données Unity d'abord (quasi unique), puis les
+    /// exécutables. Une correspondance ambiguë ne renvoie rien plutôt que de
+    /// deviner.
+    pub fn identify_folder(&self, dir: &Path) -> Option<&GameProfile> {
+        let names: Vec<String> = fs::read_dir(dir)
+            .ok()?
+            .flatten()
+            .map(|e| e.file_name().to_string_lossy().to_lowercase())
+            .collect();
+        let has = |name: &str| names.iter().any(|n| n == &name.to_lowercase());
+
+        let by_data = self
+            .games
+            .iter()
+            .filter(|g| g.data_folder_name.as_deref().is_some_and(has))
+            .collect::<Vec<_>>();
+        if !by_data.is_empty() {
+            return single(by_data);
+        }
+        single(
+            self.games
+                .iter()
+                .filter(|g| g.exe_names.iter().any(|e| has(e)))
+                .collect(),
+        )
+    }
+}
+
+fn single<T>(items: Vec<T>) -> Option<T> {
+    let mut items = items.into_iter();
+    let first = items.next()?;
+    items.next().is_none().then_some(first)
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum CatalogError {
+    #[error("impossible de télécharger la liste des jeux de Thunderstore")]
+    Download(#[source] reqwest::Error),
+    #[error("liste des jeux de Thunderstore illisible")]
+    Schema(#[from] SchemaError),
+    #[error("impossible d'écrire le cache de la liste des jeux")]
+    Cache(#[source] io::Error),
+}
+
+/// Charge le catalogue : cache s'il a moins de `max_age`, sinon
+/// téléchargement (et mise à jour du cache). Hors ligne, un cache périmé
+/// vaut mieux que rien.
+pub async fn load_catalog(
+    client: &reqwest::Client,
+    url: &str,
+    cache_file: &Path,
+    max_age: Duration,
+) -> Result<GameCatalog, CatalogError> {
+    let cached = fs::read_to_string(cache_file).ok();
+    let fresh = fs::metadata(cache_file)
+        .and_then(|m| m.modified())
+        .ok()
+        .and_then(|t| SystemTime::now().duration_since(t).ok())
+        .is_some_and(|age| age < max_age);
+
+    if fresh && let Some(Ok(catalog)) = cached.as_deref().map(GameCatalog::from_schema_json) {
+        return Ok(catalog);
+    }
+
+    match download_schema(client, url).await {
+        Ok(json) => {
+            // On valide avant d'écraser un cache qui fonctionne.
+            let catalog = GameCatalog::from_schema_json(&json)?;
+            write_atomically(cache_file, &json).map_err(CatalogError::Cache)?;
+            Ok(catalog)
+        }
+        Err(error) => cached
+            .as_deref()
+            .and_then(|json| GameCatalog::from_schema_json(json).ok())
+            .ok_or(CatalogError::Download(error)),
+    }
+}
+
+async fn download_schema(client: &reqwest::Client, url: &str) -> Result<String, reqwest::Error> {
+    client
+        .get(url)
+        .send()
+        .await?
+        .error_for_status()?
+        .text()
+        .await
+}
+
+fn write_atomically(path: &Path, contents: &str) -> io::Result<()> {
+    if let Some(dir) = path.parent() {
+        fs::create_dir_all(dir)?;
+    }
+    let tmp = path.with_extension("tmp");
+    fs::write(&tmp, contents)?;
+    fs::rename(tmp, path)
+}

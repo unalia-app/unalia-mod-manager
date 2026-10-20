@@ -5,10 +5,10 @@ import { ArrowRight, FolderPlus, Gamepad2, RotateCw, TriangleAlert } from "lucid
 import { type KeyboardEvent, type ReactNode, useCallback, useEffect, useMemo, useState } from "react";
 
 import {
-	ENGINE_LABEL,
 	type GameScan,
 	type SteamGame,
 	artworkUrl,
+	gameSubtitle,
 	isModdable,
 	listGames,
 } from "@/lib/engine";
@@ -130,7 +130,7 @@ export function GamePicker({
 					<Notice icon={<Gamepad2 className="size-5 text-fg-muted" />} title={query ? "Aucun jeu trouvé" : "Aucun jeu moddable pour l'instant"}>
 						{query
 							? `Aucun jeu installé ne correspond à « ${query.trim()} ».`
-							: "Modalia commence par les jeux Unity. D'autres moteurs arrivent bientôt."}
+							: "Modalia commence par les jeux qui utilisent BepInEx. D'autres arrivent bientôt."}
 					</Notice>
 				)}
 
@@ -214,7 +214,7 @@ function GameRow({
 				<span className={cn("block truncate text-sm font-medium", moddable ? "text-fg" : "text-fg-subtle")}>
 					{game.name}
 				</span>
-				<span className="block truncate text-xs text-fg-subtle">{ENGINE_LABEL[game.engine]}</span>
+				<span className="block truncate text-xs text-fg-subtle">{gameSubtitle(game)}</span>
 			</span>
 			{moddable ? (
 				<ArrowRight

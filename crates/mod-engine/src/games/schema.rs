@@ -1,0 +1,192 @@
+//! Lecture du schéma d'écosystème de Thunderstore. On ne garde que ce dont
+//! Modalia se sert ; tout le reste est ignoré pour rester tolérant aux
+//! évolutions du schéma.
+
+use std::collections::HashMap;
+
+use serde::Deserialize;
+
+use super::{GameProfile, LoaderPackage, SUPPORTED_LOADER};
+
+/// Les chemins d'images du schéma sont relatifs à ce CDN.
+const ASSET_BASE: &str = "https://gcdn.thunderstore.io/live/community/";
+
+#[derive(Debug, thiserror::Error)]
+#[error("schéma Thunderstore invalide : {0}")]
+pub struct SchemaError(#[from] serde_json::Error);
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct Schema {
+    games: HashMap<String, Game>,
+    #[serde(default)]
+    communities: HashMap<String, Community>,
+    #[serde(default)]
+    modloader_packages: Vec<ModloaderPackage>,
+}
+
+#[derive(Deserialize)]
+struct Game {
+    label: String,
+    meta: Meta,
+    #[serde(default)]
+    r2modman: Option<Vec<R2modman>>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct Meta {
+    display_name: String,
+    icon_url: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct R2modman {
+    #[serde(default)]
+    distributions: Vec<Distribution>,
+    package_index: Option<String>,
+    package_loader: Option<String>,
+    #[serde(default)]
+    exe_names: Vec<String>,
+    data_folder_name: Option<String>,
+    game_instance_type: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct Distribution {
+    platform: String,
+    identifier: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct Community {
+    #[serde(default)]
+    meta: CommunityMeta,
+}
+
+#[derive(Deserialize, Default)]
+struct CommunityMeta {
+    cover: Option<String>,
+    hero: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ModloaderPackage {
+    package_id: String,
+    root_folder: String,
+    loader: String,
+}
+
+pub(super) fn parse(json: &str) -> Result<(Vec<GameProfile>, Vec<LoaderPackage>), SchemaError> {
+    let schema: Schema = serde_json::from_str(json)?;
+
+    let mut games: Vec<GameProfile> = schema
+        .games
+        .into_values()
+        .filter_map(|game| profile(game, &schema.communities))
+        .collect();
+    // Ordre stable, indépendant de celui de la table de hachage.
+    games.sort_by(|a, b| a.id.cmp(&b.id));
+
+    let loaders = schema
+        .modloader_packages
+        .into_iter()
+        .map(|m| LoaderPackage {
+            package_id: m.package_id,
+            loader: m.loader,
+            root_folder: m.root_folder,
+        })
+        .collect();
+
+    Ok((games, loaders))
+}
+
+/// Un jeu sans entrée r2modman de type « game » n'est pas installable : on
+/// l'écarte (serveurs dédiés, entrées incomplètes).
+fn profile(game: Game, communities: &HashMap<String, Community>) -> Option<GameProfile> {
+    let entry = game
+        .r2modman?
+        .into_iter()
+        .find(|r| r.game_instance_type.as_deref().unwrap_or("game") == "game")?;
+
+    let community = entry
+        .package_index
+        .as_deref()
+        .and_then(community_from_index)
+        .unwrap_or_else(|| game.label.clone());
+    let loader = entry.package_loader.unwrap_or_else(|| "none".into());
+    let community_meta = communities.get(&community).map(|c| &c.meta);
+
+    Some(GameProfile {
+        steam_app_ids: entry
+            .distributions
+            .iter()
+            .filter(|d| d.platform == "steam")
+            .filter_map(|d| d.identifier.as_deref()?.parse().ok())
+            .collect(),
+        supported: loader == SUPPORTED_LOADER,
+        loader,
+        exe_names: entry.exe_names,
+        data_folder_name: entry.data_folder_name.filter(|d| !d.is_empty()),
+        cover_url: community_meta
+            .and_then(|m| m.cover.clone())
+            .or(game.meta.icon_url)
+            .map(asset_url),
+        hero_url: community_meta.and_then(|m| m.hero.clone()).map(asset_url),
+        name: game.meta.display_name,
+        community,
+        id: game.label,
+    })
+}
+
+/// `https://thunderstore.io/c/<communauté>/api/v1/...` → `<communauté>`.
+fn community_from_index(url: &str) -> Option<String> {
+    let rest = url.split("/c/").nth(1)?;
+    let community = rest.split('/').next()?;
+    (!community.is_empty()).then(|| community.to_owned())
+}
+
+fn asset_url(path: String) -> String {
+    if path.starts_with("https://") {
+        path
+    } else {
+        format!("{ASSET_BASE}{}", path.trim_start_matches('/'))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn community_comes_from_the_package_index() {
+        assert_eq!(
+            community_from_index(
+                "https://thunderstore.io/c/lethal-company/api/v1/package-listing-index/"
+            )
+            .as_deref(),
+            Some("lethal-company")
+        );
+        assert_eq!(
+            community_from_index("https://thunderstore.io/api/v1/"),
+            None
+        );
+    }
+
+    #[test]
+    fn asset_paths_become_cdn_urls() {
+        assert_eq!(
+            asset_url("valheim/valheim-cover-360x480.webp".into()),
+            "https://gcdn.thunderstore.io/live/community/valheim/valheim-cover-360x480.webp"
+        );
+        assert_eq!(asset_url("https://x.io/a.png".into()), "https://x.io/a.png");
+    }
+
+    #[test]
+    fn rejects_invalid_json() {
+        assert!(parse("{").is_err());
+        assert!(parse("{}").is_err());
+    }
+}

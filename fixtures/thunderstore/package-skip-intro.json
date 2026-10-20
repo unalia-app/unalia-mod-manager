@@ -1,0 +1,39 @@
+{
+ "namespace": "Bigfootmech",
+ "name": "Silksong_Skip_Intro",
+ "full_name": "Bigfootmech-Silksong_Skip_Intro",
+ "owner": "Bigfootmech",
+ "package_url": "https://thunderstore.io/package/Bigfootmech/Silksong_Skip_Intro/",
+ "date_created": "2025-09-09T08:48:39.802450Z",
+ "date_updated": "2025-09-09T08:48:45.288850Z",
+ "rating_score": -1,
+ "is_pinned": false,
+ "is_deprecated": false,
+ "total_downloads": -1,
+ "latest": {
+  "namespace": "Bigfootmech",
+  "name": "Silksong_Skip_Intro",
+  "version_number": "0.1.0",
+  "full_name": "Bigfootmech-Silksong_Skip_Intro-0.1.0",
+  "description": "Skip the Team Cherry, and 'Loading Symbol' info every time game starts. QOL for people opening the game multiple times, eg: modders",
+  "icon": "https://ccdn.thunderstore.io/live/repository/icons/Bigfootmech-Silksong_Skip_Intro-0.1.0.png",
+  "dependencies": [
+   "BepInEx-BepInExPack_Silksong-5.4.2303"
+  ],
+  "download_url": "https://thunderstore.io/package/download/Bigfootmech/Silksong_Skip_Intro/0.1.0/",
+  "downloads": 8200,
+  "date_created": "2025-09-09T08:48:43.064036Z",
+  "website_url": "https://github.com/Bigfootmech/Silksong_Skipintro",
+  "is_active": true
+ },
+ "community_listings": [
+  {
+   "has_nsfw_content": false,
+   "categories": [
+    "(Deprecated category) Misc"
+   ],
+   "community": "hollow-knight-silksong",
+   "review_status": "unreviewed"
+  }
+ ]
+}

@@ -1,13 +1,18 @@
+mod catalog;
+
 use std::collections::HashMap;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Mutex;
 
 use mod_engine::artwork::{self, ArtworkKind};
-use mod_engine::detect::{self, SteamGame};
+use mod_engine::detect::{self, Engine, SteamGame};
+use mod_engine::games::GameProfile;
 use serde::Serialize;
 use tauri::http::{Request, Response, StatusCode, header};
-use tauri::{Manager, State, UriSchemeContext, UriSchemeResponder, Wry};
+use tauri::{AppHandle, Manager, State, UriSchemeContext, UriSchemeResponder, Wry};
+
+use crate::catalog::Catalog;
 
 /// Ce que l'appli sait de la bibliothèque Steam pendant la session.
 #[derive(Default)]
@@ -29,26 +34,68 @@ struct GameScan {
     /// `false` si aucune installation de Steam n'a été trouvée : l'accueil
     /// propose alors l'ajout manuel d'un dossier.
     steam_found: bool,
-    games: Vec<SteamGame>,
+    games: Vec<GameEntry>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct GameEntry {
+    #[serde(flatten)]
+    game: SteamGame,
+    /// Profil Thunderstore du jeu, s'il est connu.
+    profile: Option<GameProfile>,
+    /// Modalia sait-il modder ce jeu ?
+    moddable: bool,
 }
 
 #[tauri::command]
-async fn list_games(library: State<'_, Library>) -> Result<GameScan, String> {
+async fn list_games(
+    app: AppHandle,
+    library: State<'_, Library>,
+    catalog: State<'_, Catalog>,
+) -> Result<GameScan, String> {
     let root = steam_root();
     *library.steam_root.lock().unwrap() = root.clone();
 
-    tauri::async_runtime::spawn_blocking(move || match root {
-        Some(root) => Ok(GameScan {
-            steam_found: true,
-            games: detect::scan_steam(&root).map_err(|e| e.to_string())?,
-        }),
-        None => Ok(GameScan {
+    // Scan local et catalogue (cache ou réseau) en parallèle.
+    let scan = tauri::async_runtime::spawn_blocking(move || {
+        root.map(|r| detect::scan_steam(&r)).transpose()
+    });
+    let (scan, games_catalog) = tokio::join!(scan, catalog.games(&app));
+    let Some(games) = scan
+        .map_err(|e| e.to_string())?
+        .map_err(|e| e.to_string())?
+    else {
+        return Ok(GameScan {
             steam_found: false,
             games: Vec::new(),
-        }),
+        });
+    };
+
+    Ok(GameScan {
+        steam_found: true,
+        games: games
+            .into_iter()
+            .map(|game| {
+                let profile = games_catalog
+                    .as_ref()
+                    .and_then(|c| c.by_steam_app_id(game.app_id))
+                    .cloned();
+                // Sans catalogue (premier lancement hors ligne), on se rabat
+                // sur la détection du moteur.
+                let moddable = match (&games_catalog, &profile) {
+                    (Some(_), Some(p)) => p.supported,
+                    (Some(_), None) => false,
+                    (None, _) => game.engine == Engine::Unity,
+                };
+                GameEntry {
+                    game,
+                    profile,
+                    moddable,
+                }
+            })
+            .collect(),
     })
-    .await
-    .map_err(|e| e.to_string())?
 }
 
 /// Couleur d'accent CSS du jeu, extraite de sa jaquette.
@@ -132,8 +179,15 @@ fn mime(file: &std::path::Path) -> &'static str {
 pub fn run() {
     tauri::Builder::default()
         .manage(Library::default())
+        .manage(Catalog::new())
         .register_asynchronous_uri_scheme_protocol("artwork", artwork_protocol)
-        .invoke_handler(tauri::generate_handler![list_games, game_accent])
+        .invoke_handler(tauri::generate_handler![
+            list_games,
+            game_accent,
+            catalog::search_mods,
+            catalog::get_mod,
+            catalog::mod_description,
+        ])
         .run(tauri::generate_context!())
         .expect("échec du démarrage de Modalia");
 }

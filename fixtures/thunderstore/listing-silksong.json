@@ -1,0 +1,126 @@
+{
+ "count": 437,
+ "next": "https://thunderstore.io/api/cyberstorm/listing/hollow-knight-silksong/?deprecated=False&nsfw=False&ordering=most-downloaded&page=2",
+ "previous": null,
+ "results": [
+  {
+   "categories": [
+    {
+     "id": "1614",
+     "name": "(Deprecated category) Tools",
+     "slug": "tools"
+    },
+    {
+     "id": "1683",
+     "name": "Utility",
+     "slug": "utility"
+    }
+   ],
+   "community_identifier": "hollow-knight-silksong",
+   "description": "A simple and easy to use mod manager for many games using Thunderstore",
+   "download_count": 10716544,
+   "icon_url": "https://ccdn.thunderstore.io/live/repository/icons/ebkr-r2modman-3.2.20.png",
+   "is_deprecated": false,
+   "is_nsfw": false,
+   "is_pinned": true,
+   "last_updated": "2026-09-22T12:21:53.845179Z",
+   "name": "r2modman",
+   "namespace": "ebkr",
+   "rating_count": 1454,
+   "size": 363105843,
+   "datetime_created": "2025-09-19T10:38:47.527036Z"
+  },
+  {
+   "categories": [],
+   "community_identifier": "hollow-knight-silksong",
+   "description": "BepInEx modloader, preconfigured and ready to use for Silksong",
+   "download_count": 118968,
+   "icon_url": "https://ccdn.thunderstore.io/live/repository/icons/silksong_modding-BepInExPack_Silksong-1.0.3.png",
+   "is_deprecated": false,
+   "is_nsfw": false,
+   "is_pinned": true,
+   "last_updated": "2026-06-12T04:29:37.297049Z",
+   "name": "BepInExPack_Silksong",
+   "namespace": "silksong_modding",
+   "rating_count": 4,
+   "size": 694940,
+   "datetime_created": "2026-05-13T18:30:32.104658Z"
+  },
+  {
+   "categories": [],
+   "community_identifier": "hollow-knight-silksong",
+   "description": "A BepInEx patcher to fix MonoMod.RuntimeDetour's DetourContext.Dispose not working.",
+   "download_count": 7472355,
+   "icon_url": "https://ccdn.thunderstore.io/live/repository/icons/Hamunii-DetourContext_Dispose_Fix-1.0.9.png",
+   "is_deprecated": false,
+   "is_nsfw": false,
+   "is_pinned": false,
+   "last_updated": "2026-05-02T18:27:41.429217Z",
+   "name": "DetourContext_Dispose_Fix",
+   "namespace": "Hamunii",
+   "rating_count": 29,
+   "size": 29571,
+   "datetime_created": "2025-09-30T20:58:16.558240Z"
+  },
+  {
+   "categories": [],
+   "community_identifier": "hollow-knight-silksong",
+   "description": "Automatically generates MonoMod.RuntimeDetour.HookGen's MMHOOK files during the BepInEx preloader phase.",
+   "download_count": 7470913,
+   "icon_url": "https://ccdn.thunderstore.io/live/repository/icons/Hamunii-AutoHookGenPatcher-1.1.1.png",
+   "is_deprecated": false,
+   "is_nsfw": false,
+   "is_pinned": false,
+   "last_updated": "2026-05-02T18:31:33.825214Z",
+   "name": "AutoHookGenPatcher",
+   "namespace": "Hamunii",
+   "rating_count": 49,
+   "size": 76119,
+   "datetime_created": "2025-09-30T21:01:08.591169Z"
+  },
+  {
+   "categories": [
+    {
+     "id": "1615",
+     "name": "Libraries",
+     "slug": "libraries"
+    }
+   ],
+   "community_identifier": "hollow-knight-silksong",
+   "description": "Easy and convenient .NET detouring library, powered by MonoMod.RuntimeDetour.",
+   "download_count": 6341604,
+   "icon_url": "https://ccdn.thunderstore.io/live/repository/icons/MonoDetour-MonoDetour-0.7.16.png",
+   "is_deprecated": false,
+   "is_nsfw": false,
+   "is_pinned": false,
+   "last_updated": "2026-09-09T21:16:19.158495Z",
+   "name": "MonoDetour",
+   "namespace": "MonoDetour",
+   "rating_count": 21,
+   "size": 140385,
+   "datetime_created": "2025-10-03T01:18:48.745339Z"
+  },
+  {
+   "categories": [
+    {
+     "id": "1615",
+     "name": "Libraries",
+     "slug": "libraries"
+    }
+   ],
+   "community_identifier": "hollow-knight-silksong",
+   "description": "HarmonyX interop & BepInEx 5 logger integration for MonoDetour. Initializes MonoDetour early as a side effect.",
+   "download_count": 6330304,
+   "icon_url": "https://ccdn.thunderstore.io/live/repository/icons/MonoDetour-MonoDetour_BepInEx_5-0.7.16.png",
+   "is_deprecated": false,
+   "is_nsfw": false,
+   "is_pinned": false,
+   "last_updated": "2026-09-09T21:16:25.622736Z",
+   "name": "MonoDetour_BepInEx_5",
+   "namespace": "MonoDetour",
+   "rating_count": 20,
+   "size": 44409,
+   "datetime_created": "2025-10-03T01:18:55.034786Z"
+  }
+ ]
+}
