@@ -60,6 +60,8 @@ Une couleur d'état s'emploie toujours en **contour 20 % + fond 10 % + texte ple
 - Chargement : `Skeleton` (reflet `animate-shimmer`), aux dimensions du contenu final.
 - Bouton principal : le libellé glisse au survol (effet repris du `MainButton` d'Unalia).
 - `prefers-reduced-motion` est respecté globalement.
+- **Intro de lancement** (`components/intro.tsx`, environ 1,6 s) : les lettres de MODALIA apparaissent une à une (fondu, légère montée, du flou au net, jamais masquées : une lettre à moitié coupée se lit comme un bug), un reflet irisé les traverse, un halo s'ouvre et une ligne se trace. Le logo s'envole ensuite vers l'en-tête (FLIP : on part d'un grand texte et on le réduit, pour garder des lettres nettes). Pendant l'intro, les entrées `animate-fade-up` de l'écran sont en pause (`.intro-pending`) et reprennent au moment de l'envol. Un clic ou une touche passe l'intro. Elle se joue une fois par lancement.
+- Piège Tailwind v4 : `translate-*` utilise la propriété CSS `translate`, qui s'ajoute à `transform`. Sur un élément animé par une keyframe en `transform`, ne pas mettre de classe `translate-*`.
 
 ## Composants (`@modalia/ui`)
 

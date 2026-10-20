@@ -1,9 +1,10 @@
 "use client";
 
-import { Badge } from "@modalia/ui";
-import { type CSSProperties, useEffect, useState } from "react";
+import { Badge, cn } from "@modalia/ui";
+import { type CSSProperties, useEffect, useRef, useState } from "react";
 
 import { Ambience } from "@/components/ambience";
+import { Intro, introPlayed } from "@/components/intro";
 import { GamePicker } from "@/components/home/game-picker";
 import { type SteamGame, gameAccent } from "@/lib/engine";
 
@@ -12,17 +13,36 @@ export function HomeScreen() {
 	const [focused, setFocused] = useState<SteamGame | null>(null);
 	const accent = useAccent(focused?.appId ?? null);
 
+	const brand = useRef<HTMLSpanElement>(null);
+	const [intro, setIntro] = useState<"playing" | "revealing" | "done">(() =>
+		introPlayed() ? "done" : "playing",
+	);
+	const reveal = useRef(() => setIntro("revealing")).current;
+	const finish = useRef(() => setIntro("done")).current;
+
 	return (
 		<main
-			className="accent-transition relative min-h-dvh overflow-hidden"
+			className={cn("accent-transition relative min-h-dvh overflow-hidden", intro === "playing" && "intro-pending")}
 			style={accent ? ({ "--accent": accent } as CSSProperties) : undefined}
 		>
+			{intro !== "done" && <Intro target={brand} onReveal={reveal} onDone={finish} />}
+
 			<Ambience appId={focused?.appId ?? null} />
 
 			<header className="relative z-10 flex h-14 items-center pl-22 pr-6">
 				<span className="flex items-center gap-2 text-lg font-bold tracking-tight">
-					<span className="italic">MODALIA</span>
-					<Badge>ALPHA</Badge>
+					{/* Destination de l'envol de l'intro : caché tant qu'il n'est pas arrivé. */}
+					<span ref={brand} className={cn("text-xl italic", intro !== "done" && "opacity-0")}>
+						MODALIA
+					</span>
+					<Badge
+						className={cn(
+							"transition-[opacity,transform] duration-500 ease-out",
+							intro === "done" ? "opacity-100" : "translate-x-1 opacity-0",
+						)}
+					>
+						ALPHA
+					</Badge>
 				</span>
 			</header>
 

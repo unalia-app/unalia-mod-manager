@@ -2,3 +2,108 @@
 @import "@modalia/ui/styles.css";
 
 @source "../../../../packages/ui/src";
+
+/* Animation de lancement (components/intro.tsx). */
+
+@keyframes intro-letter {
+	from {
+		opacity: 0;
+		filter: blur(12px);
+		transform: translateY(0.3em) scale(1.08);
+	}
+	60% {
+		filter: blur(0);
+	}
+	/* `none` et pas `blur(0)` : WebKit découpe un élément filtré à sa
+	   boîte, ce qui tranchait l'italique de la dernière lettre. */
+	to {
+		opacity: 1;
+		filter: none;
+		transform: none;
+	}
+}
+
+/* Le reflet est un dégradé fixe à l'échelle du mot : chaque lettre en
+   affiche sa portion (background-attachment) et il glisse d'un bloc. */
+@keyframes intro-sheen {
+	from {
+		background-position: 140% 0;
+	}
+	to {
+		background-position: -60% 0;
+	}
+}
+
+@keyframes intro-bloom {
+	0% {
+		opacity: 0;
+		transform: translate(-50%, -50%) scale(0.5);
+	}
+	45% {
+		opacity: 1;
+	}
+	100% {
+		opacity: 0.55;
+		transform: translate(-50%, -50%) scale(1.25);
+	}
+}
+
+@keyframes intro-line {
+	from {
+		transform: scaleX(0);
+	}
+	to {
+		transform: scaleX(1);
+	}
+}
+
+/* L'italique déborde de la boîte de chaque lettre : marge intérieure
+   compensée par une marge négative pour l'englober sans décaler le mot. */
+.intro-letter,
+.intro-sheen {
+	margin-inline: -0.12em;
+	padding-inline: 0.12em;
+}
+
+.intro-letter {
+	animation: intro-letter 620ms var(--ease-out) both;
+}
+
+.intro-sheen {
+	background-image: linear-gradient(
+		105deg,
+		transparent 38%,
+		rgb(255 255 255 / 0.95) 46%,
+		oklch(0.86 0.09 300) 50%,
+		oklch(0.86 0.08 220) 54%,
+		transparent 62%
+	);
+	background-size: 250% 100%;
+	background-attachment: fixed;
+	animation: intro-sheen 640ms 380ms cubic-bezier(0.45, 0, 0.2, 1) both;
+}
+
+/* Lettres légèrement en retrait pour que le reflet ressorte ; elles
+   reprennent le blanc de l'en-tête pendant l'envol. */
+.intro-word {
+	color: rgb(255 255 255 / 0.82);
+	transition: color 500ms ease-out;
+}
+
+.intro-word[data-flying] {
+	color: #fff;
+}
+
+.intro-bloom {
+	animation: intro-bloom 1100ms var(--ease-out) both;
+}
+
+.intro-line {
+	transform-origin: center;
+	animation: intro-line 700ms 300ms var(--ease-out) both;
+}
+
+/* Tant que l'intro couvre l'écran, les entrées de l'accueil attendent. */
+.intro-pending .animate-fade-up {
+	animation-play-state: paused;
+}

@@ -1,6 +1,8 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 
+import { DevShortcuts } from "@/components/dev-shortcuts";
+
 import { interTight, poppins } from "./fonts";
 import "./globals.css";
 
@@ -16,6 +18,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
 				    cette zone sert à la déplacer. */}
 				<div data-tauri-drag-region className="fixed inset-x-0 top-0 z-50 h-11" />
 				{children}
+				<DevShortcuts />
 			</body>
 		</html>
 	);
