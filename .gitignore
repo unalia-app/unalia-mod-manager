@@ -1,0 +1,28 @@
+# Node
+node_modules/
+.pnpm-store/
+.turbo/
+
+# Next
+.next/
+out/
+next-env.d.ts
+*.tsbuildinfo
+
+# Rust / Tauri
+target/
+apps/desktop/src-tauri/gen/
+
+# OS / éditeurs
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Env
+.env*
+!.env.example
+
+# Captures Playwright
+.playwright-mcp/

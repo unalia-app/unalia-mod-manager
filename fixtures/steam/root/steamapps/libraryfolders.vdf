@@ -1,0 +1,35 @@
+"libraryfolders"
+{
+	"0"
+	{
+		"path"		"{{FIXTURE}}/root"
+		"label"		""
+		"contentid"		"1234567890123456789"
+		"totalsize"		"0"
+		"apps"
+		{
+			"1030300"		"7340032"
+			"228980"		"1048576"
+		}
+	}
+	"1"
+	{
+		"path"		"{{FIXTURE}}/library-d"
+		"label"		"Jeux"
+		"contentid"		"9876543210987654321"
+		"totalsize"		"2000398934016"
+		"apps"
+		{
+			"2000001"		"104857600"
+			"2000002"		"52428800"
+		}
+	}
+	"2"
+	{
+		"path"		"{{FIXTURE}}/disque-debranche"
+		"label"		""
+		"apps"
+		{
+		}
+	}
+}

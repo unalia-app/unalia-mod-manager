@@ -1,0 +1,8 @@
+{
+  "name": "@modalia/mod-engine",
+  "private": true,
+  "scripts": {
+    "test": "cargo test -p mod-engine",
+    "lint": "cargo clippy -p mod-engine --all-targets -- -D warnings"
+  }
+}

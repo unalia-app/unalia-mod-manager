@@ -1,0 +1,16 @@
+{
+  "name": "modalia",
+  "private": true,
+  "packageManager": "pnpm@10.17.0",
+  "scripts": {
+    "dev": "turbo run dev",
+    "build": "turbo run build",
+    "test": "turbo run test",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "desktop": "pnpm --filter @modalia/desktop tauri dev"
+  },
+  "devDependencies": {
+    "turbo": "^2.11.9"
+  }
+}

@@ -1,0 +1,23 @@
+"AppState"
+{
+	"appid"		"1030300"
+	"universe"		"1"
+	"name"		"Hollow Knight: Silksong"
+	"StateFlags"		"4"
+	"installdir"		"Hollow Knight Silksong"
+	"LastUpdated"		"1757000000"
+	"SizeOnDisk"		"7340032"
+	"buildid"		"19000000"
+	"InstalledDepots"
+	{
+		"1030301"
+		{
+			"manifest"		"1111111111111111111"
+			"size"		"7340032"
+		}
+	}
+	"UserConfig"
+	{
+		"language"		"french"
+	}
+}

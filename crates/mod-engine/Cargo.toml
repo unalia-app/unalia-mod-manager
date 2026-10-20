@@ -1,0 +1,17 @@
+[package]
+name = "mod-engine"
+version = "0.1.0"
+edition.workspace = true
+repository.workspace = true
+description = "Moteur de Modalia : détection des jeux, sources, loaders, déploiement des mods"
+
+[dependencies]
+serde.workspace = true
+thiserror.workspace = true
+
+[target.'cfg(windows)'.dependencies]
+winreg = "0.56"
+
+[dev-dependencies]
+serde_json.workspace = true
+tempfile = "3"
