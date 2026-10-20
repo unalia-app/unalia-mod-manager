@@ -130,11 +130,61 @@
 	@apply rounded-xl border border-line bg-surface backdrop-blur-xl backdrop-saturate-150;
 }
 
+/*
+ * Verre « liquide » pour les petits contrôles posés sur une image (bouton
+ * d'une carte, badge sur une jaquette) : verre sombre teinté, lisible sur
+ * une image claire comme sombre. Liseré clair en haut pour l'effet de
+ * verre. Réservé aux petites surfaces (backdrop-filter, voir plus haut).
+ */
+@utility liquid-glass {
+	background: linear-gradient(180deg, rgb(28 28 32 / 0.55), rgb(10 10 12 / 0.62));
+	backdrop-filter: blur(14px) saturate(170%);
+	border: 1px solid rgb(255 255 255 / 0.16);
+	box-shadow:
+		inset 0 1px 0 rgb(255 255 255 / 0.22),
+		inset 0 -1px 0 rgb(0 0 0 / 0.2),
+		0 4px 14px rgb(0 0 0 / 0.35);
+	color: #fff;
+	text-shadow: 0 1px 1px rgb(0 0 0 / 0.35);
+}
+
 @utility scrollbar-hide {
 	scrollbar-width: none;
 	&::-webkit-scrollbar {
 		display: none;
 	}
+}
+
+/*
+ * Barres de défilement (WebView2 sous Windows : macOS a déjà les siennes en
+ * surimpression). Fines, invisibles au repos ; visibles pendant le
+ * défilement (`data-scrolling` posé par `ScrollActivity`) ou au survol.
+ */
+::-webkit-scrollbar {
+	width: 10px;
+	height: 10px;
+}
+
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+	background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+	border: 3px solid transparent;
+	border-radius: 9999px;
+	background-clip: padding-box;
+	background-color: transparent;
+}
+
+html[data-scrolling]::-webkit-scrollbar-thumb,
+html[data-scrolling] *::-webkit-scrollbar-thumb,
+::-webkit-scrollbar-thumb:hover {
+	background-color: rgb(255 255 255 / 0.22);
+}
+
+::-webkit-scrollbar-thumb:active {
+	background-color: rgb(255 255 255 / 0.32);
 }
 
 @media (prefers-reduced-motion: reduce) {

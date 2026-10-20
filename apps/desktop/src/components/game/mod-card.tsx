@@ -144,7 +144,8 @@ function QuickInstall({ appId, modId, name }: { appId: number; modId: string; na
 				// cas d'échec, pour ne pas perdre l'info.
 				!busy && !failed &&
 					"translate-y-1 opacity-0 group-hover:translate-y-0 group-hover:opacity-100 focus-visible:translate-y-0 focus-visible:opacity-100",
-				failed ? "bg-danger text-bg" : busy ? "bg-black/70 text-fg backdrop-blur-md" : "bg-white text-bg hover:bg-white/85",
+				// Verre sombre : lisible sur une icône blanche comme sombre.
+				failed ? "bg-danger text-bg" : "liquid-glass hover:brightness-125",
 			)}
 		>
 			{busy ? (

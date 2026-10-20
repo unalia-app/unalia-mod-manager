@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 
 import { DevShortcuts } from "@/components/dev-shortcuts";
+import { ScrollActivity } from "@/components/scroll-activity";
 import { Toaster } from "@/components/toaster";
 
 import { interTight, poppins } from "./fonts";
@@ -17,6 +18,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
 			<body>
 				{children}
 				<Toaster />
+				<ScrollActivity />
 				<DevShortcuts />
 			</body>
 		</html>

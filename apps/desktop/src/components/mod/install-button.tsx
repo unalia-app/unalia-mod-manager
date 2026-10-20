@@ -167,8 +167,8 @@ export function InstallStateBadge({ appId, modId, className }: { appId: number; 
 	return (
 		<span
 			className={cn(
-				"inline-flex items-center gap-1 rounded-full border px-2 py-0.5 font-tight text-[11px] font-semibold tracking-wide backdrop-blur-md",
-				accent ? "border-accent/30 bg-black/50 text-accent" : "border-success/30 bg-black/50 text-success",
+				"liquid-glass inline-flex items-center gap-1 rounded-full px-2 py-0.5 font-tight text-[11px] font-semibold tracking-wide",
+				accent ? "text-accent" : "text-success",
 				className,
 			)}
 		>
