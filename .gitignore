@@ -26,3 +26,6 @@ Thumbs.db
 
 # Captures Playwright
 .playwright-mcp/
+
+# Steam de démo (pnpm demo), contient des assets officiels
+.demo/
