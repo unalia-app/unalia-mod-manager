@@ -45,6 +45,8 @@ windows:
         refreshenv
       }
     - npm install -g pnpm@10.17.0
+    # Le dossier des commandes globales de npm n'est pas dans le PATH de l'image.
+    - $env:Path = "$(npm prefix -g);$env:Path"
     - node -v; pnpm -v; cargo -V
   script:
     - pnpm install --frozen-lockfile
