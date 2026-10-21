@@ -133,7 +133,7 @@ export function Discover({ community, appId }: { community: string; appId: numbe
 						<Notice icon={<PackageSearch className="size-5 text-fg-muted" />} title="No mods found">
 							{query
 								? `No mod matches “${query}”. Try fewer words.`
-								: "This game has no mods on Thunderstore yet."}
+								: `This game has no mods on ${community.startsWith("nexus:") ? "Nexus Mods" : "Thunderstore"} yet.`}
 						</Notice>
 					</div>
 				)}

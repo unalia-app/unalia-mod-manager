@@ -1,12 +1,13 @@
 "use client";
 
 import { Button, cn } from "@modalia/ui";
-import { ArrowUp, Check, Clock, Download, RotateCw } from "lucide-react";
+import { ArrowUp, Check, Clock, Download, ExternalLink, RotateCw } from "lucide-react";
 
 import { type InstallProgress, cancelPending } from "@/lib/engine";
 import { bytes, timeLeft } from "@/lib/format";
 import { usePendingOp } from "@/lib/game-status";
 import { clearError, install, overallProgress, useActiveInstall, useInstalled, useModUpdate } from "@/lib/installs";
+import { openExternal } from "@/lib/open";
 
 /**
  * Un clic : le bouton devient lui-même la barre de progression
@@ -17,11 +18,14 @@ export function InstallButton({
 	modId,
 	modName,
 	dependencyCount,
+	hint,
 }: {
 	appId: number;
 	modId: string;
 	modName: string;
 	dependencyCount: number;
+	/** Précision sous le bouton (ex. confirmation sur Nexus pour un compte gratuit). */
+	hint?: string;
 }) {
 	const installed = useInstalled(appId)?.find((m) => m.id === modId);
 	const active = useActiveInstall(appId, modId);
@@ -55,6 +59,33 @@ export function InstallButton({
 					</span>
 				</div>
 				<span className="text-right text-[11px] whitespace-pre-line text-fg-subtle">{sublabel(progress, speed)}</span>
+			</div>
+		);
+	}
+
+	// Compte Nexus gratuit : Nexus veut un clic sur son site. Le lien
+	// `nxm://` revient à Modalia, qui enchaîne tout seul.
+	if (active?.status === "website") {
+		return (
+			<div className="flex max-w-64 flex-col items-end gap-2 text-right">
+				<Button
+					size="lg"
+					variant="outline"
+					leftIcon={<ExternalLink className="size-4 text-accent" />}
+					onClick={() => void openExternal(active.url)}
+				>
+					Finish on Nexus Mods
+				</Button>
+				<span className="text-[11px] leading-snug text-fg-subtle">
+					Click <span className="text-fg-muted">Slow download</span> on the page that opened. Modalia installs it right after ·{" "}
+					<button
+						type="button"
+						className="cursor-pointer text-fg-muted underline-offset-2 hover:underline"
+						onClick={() => clearError(appId, modId)}
+					>
+						Cancel
+					</button>
+				</span>
 			</div>
 		);
 	}
@@ -140,6 +171,7 @@ export function InstallButton({
 					+ {dependencyCount} {dependencyCount > 1 ? "dependencies" : "dependency"}
 				</span>
 			)}
+			{hint && <span className="max-w-64 text-right text-[11px] leading-snug text-fg-faint">{hint}</span>}
 		</div>
 	);
 }

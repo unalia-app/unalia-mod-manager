@@ -10,12 +10,17 @@ use std::path::Path;
 use std::sync::Mutex as SyncMutex;
 use std::time::{Duration, Instant};
 
-use mod_engine::installer::{self, Installer, Paths, Progress, Target, Update};
+use mod_engine::installer::{
+    self, InstallError, Installer, NexusFile, NexusInstall, Paths, Progress, Target, Update,
+};
 use mod_engine::launch::{self, LaunchTarget, PendingOp, ProcessWatcher};
+use mod_engine::sources::SourceError;
+use mod_engine::sources::nexus::{self as nexus_source, Account, NxmLink, Requirement};
 use mod_engine::state::{InstalledMod, State as ModState};
 use serde::Serialize;
 use tauri::async_runtime::Mutex;
 use tauri::{AppHandle, Emitter, Manager, State};
+use tauri_plugin_deep_link::DeepLinkExt;
 use tauri_plugin_opener::OpenerExt;
 
 use crate::catalog::Catalog;
@@ -134,8 +139,16 @@ const UNKNOWN_GAME: &str = "This game isn't in your library anymore. Go back hom
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase", tag = "status")]
 pub enum Outcome<T> {
-    Done { value: T },
+    Done {
+        value: T,
+    },
     Queued,
+    /// Le site doit donner son accord (Nexus, compte gratuit) : l'interface
+    /// ouvre `url`, le lien `nxm://` du bouton « Mod Manager Download »
+    /// revient à Modalia qui termine l'installation.
+    Browser {
+        url: String,
+    },
 }
 
 // ---------------------------------------------------------------- état
@@ -274,6 +287,15 @@ pub async fn check_updates(
         .await
         .list(&game_key(app_id))
         .map_err(|e| e.to_string())?;
+    if game.profile.nexus.is_some() {
+        return Ok(installer::available_updates_nexus(
+            &catalog.nexus,
+            &catalog.github,
+            &game.profile,
+            &installed,
+        )
+        .await);
+    }
     Ok(installer::available_updates(&catalog.thunderstore, &game.community, &installed).await)
 }
 
@@ -297,6 +319,16 @@ pub async fn install_mod(
     mod_id: String,
 ) -> Result<Outcome<Vec<InstalledMod>>, String> {
     let game = library.game(app_id).ok_or(UNKNOWN_GAME)?;
+    if game.profile.nexus.is_some() {
+        if mods.is_running(&game) {
+            return Err(close_first(&game));
+        }
+        return match run_nexus_install(&app, app_id, &game, &mod_id, NexusFile::Main).await {
+            Ok(done) => Ok(Outcome::Done { value: done.mods }),
+            Err(NexusFailure::Website(url)) => Ok(Outcome::Browser { url }),
+            Err(NexusFailure::Error(message)) => Err(message),
+        };
+    }
     if mods.is_running(&game) {
         queue(
             &app,
@@ -407,6 +439,125 @@ async fn run_install(
         })
         .await;
     result.map_err(|e| error_message(&e))
+}
+
+/// Événements de progression, pas plus d'un par 1 %.
+fn progress_emitter<'a>(
+    app: &'a AppHandle,
+    app_id: u32,
+    mod_id: &'a str,
+) -> impl FnMut(Progress) + 'a {
+    let mut last = None;
+    move |progress| {
+        let step = match &progress {
+            Progress::Downloading {
+                index,
+                received,
+                size,
+                ..
+            } => Some((
+                *index,
+                0,
+                size.map(|s| received * 100 / s.max(1))
+                    .unwrap_or(*received >> 16),
+            )),
+            Progress::Extracting {
+                index, done, size, ..
+            } => Some((*index, 1, done * 100 / (*size).max(1))),
+            _ => None,
+        };
+        if step.is_some() && step == last {
+            return;
+        }
+        last = step;
+        let _ = app.emit(
+            "install-progress",
+            InstallEvent {
+                app_id,
+                mod_id: mod_id.to_owned(),
+                progress,
+            },
+        );
+    }
+}
+
+enum NexusFailure {
+    /// Compte gratuit : il faut passer par le site, à cette adresse.
+    Website(String),
+    Error(String),
+}
+
+fn close_first(game: &KnownGame) -> String {
+    format!(
+        "Close {} first, then try again.\nMods can't be changed while the game is running.",
+        game.profile.name
+    )
+}
+
+/// Installe un mod Nexus (et ses frameworks, depuis GitHub).
+async fn run_nexus_install(
+    app: &AppHandle,
+    app_id: u32,
+    game: &KnownGame,
+    mod_id: &str,
+    file: NexusFile<'_>,
+) -> Result<NexusInstall, NexusFailure> {
+    let catalog = app.state::<Catalog>();
+    let mods = app.state::<Mods>();
+    let nexus_id = nexus_source::parse_mod_key(mod_id)
+        .ok_or_else(|| NexusFailure::Error("This mod doesn't exist on Nexus Mods.".into()))?;
+    let installer = Installer {
+        source: &catalog.nexus,
+        catalog: None,
+        client: &catalog.client,
+        paths: &mods.paths,
+    };
+    let key = game_key(app_id);
+    let target = Target {
+        game: &key,
+        game_dir: &game.dir,
+        community: &game.community,
+    };
+    let result = {
+        let _fetching = mods.fetching.lock().await;
+        let mut state = mods.state.lock().await;
+        installer
+            .install_nexus(
+                &mut state,
+                &target,
+                &game.profile,
+                &catalog.github,
+                nexus_id,
+                file,
+                progress_emitter(app, app_id, mod_id),
+            )
+            .await
+    };
+    match result {
+        Ok(done) => Ok(done),
+        Err(InstallError::Source(SourceError::WebsiteOnly { .. })) => Err(NexusFailure::Website(
+            website_download_url(&catalog, game, nexus_id).await,
+        )),
+        Err(error) => Err(NexusFailure::Error(error_message(&error))),
+    }
+}
+
+/// Page de téléchargement du fichier principal sur Nexus : son bouton
+/// « Slow download » ouvre le lien `nxm://` qui revient à Modalia.
+async fn website_download_url(catalog: &Catalog, game: &KnownGame, mod_id: u32) -> String {
+    let domain = game
+        .profile
+        .nexus
+        .as_ref()
+        .map_or("", |n| n.domain.as_str());
+    let page = format!("https://www.nexusmods.com/{domain}/mods/{mod_id}");
+    match catalog.nexus.mod_info(domain, mod_id).await {
+        Ok(info) => match info.main_file() {
+            Some(file) => format!("{page}?tab=files&file_id={}&nmm=1", file.file_id),
+            None => format!("{page}?tab=files"),
+        },
+        Err(_) => format!("{page}?tab=files"),
+    }
 }
 
 #[tauri::command]
@@ -609,6 +760,15 @@ async fn apply_pending(app: &AppHandle, app_id: u32, game: &KnownGame) {
     let mut failed = Vec::new();
     for op in ops {
         let result = match &op {
+            PendingOp::Install { mod_id } if game.profile.nexus.is_some() => {
+                match run_nexus_install(app, app_id, game, mod_id, NexusFile::Main).await {
+                    Ok(_) => Ok(()),
+                    Err(NexusFailure::Website(_)) => {
+                        Err("Nexus Mods needs you to start this download from its website.".into())
+                    }
+                    Err(NexusFailure::Error(message)) => Err(message),
+                }
+            }
             PendingOp::Install { mod_id } => {
                 run_install(app, app_id, game, mod_id).await.map(|_| ())
             }
@@ -658,4 +818,219 @@ fn error_message(error: &dyn std::error::Error) -> String {
         message.push_str(&details.join(": "));
     }
     message
+}
+
+// ---------------------------------------------------------------- Nexus
+
+/// Réglage où vit la clé API Nexus de l'utilisateur.
+const NEXUS_KEY: &str = "nexus_api_key";
+
+/// Au démarrage : clé Nexus enregistrée (en dev, repli sur `NEXUS_API_KEY`
+/// du `.env` à la racine du dépôt), et liens `nxm://`.
+pub fn nexus_setup(app: &AppHandle) {
+    let saved = tauri::async_runtime::block_on(async {
+        app.state::<Mods>()
+            .state
+            .lock()
+            .await
+            .setting(NEXUS_KEY)
+            .ok()
+            .flatten()
+    });
+    let key = saved.or_else(dev_nexus_key);
+    let connected = key.is_some();
+    app.state::<Catalog>().nexus.set_api_key(key);
+    if connected {
+        register_nxm(app);
+    }
+
+    let handle = app.clone();
+    app.deep_link().on_open_url(move |event| {
+        for url in event.urls() {
+            tauri::async_runtime::spawn(handle_nxm(handle.clone(), url.to_string()));
+        }
+    });
+    // Modalia lancé par un lien `nxm://`.
+    if let Ok(Some(urls)) = app.deep_link().get_current() {
+        for url in urls {
+            tauri::async_runtime::spawn(handle_nxm(app.clone(), url.to_string()));
+        }
+    }
+}
+
+/// Clé de développement, jamais lue dans un build de release.
+fn dev_nexus_key() -> Option<String> {
+    if !cfg!(debug_assertions) {
+        return None;
+    }
+    if let Ok(key) = std::env::var("NEXUS_API_KEY") {
+        return Some(key);
+    }
+    let env = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../.env");
+    std::fs::read_to_string(env).ok()?.lines().find_map(|line| {
+        let value = line.trim().strip_prefix("NEXUS_API_KEY=")?;
+        let value = value.trim().trim_matches(['"', '\'']);
+        (!value.is_empty()).then(|| value.to_owned())
+    })
+}
+
+/// Modalia devient l'appli qui ouvre les liens « Mod Manager Download » de
+/// Nexus (Windows, Linux ; macOS le fait à l'installation de l'appli).
+fn register_nxm(app: &AppHandle) {
+    #[cfg(any(windows, target_os = "linux"))]
+    if let Err(error) = app.deep_link().register("nxm") {
+        eprintln!("couldn't register nxm:// links: {error}");
+    }
+    #[cfg(not(any(windows, target_os = "linux")))]
+    let _ = app;
+}
+
+/// Compte Nexus connecté, ou `None`.
+#[tauri::command]
+pub async fn nexus_account(catalog: State<'_, Catalog>) -> Result<Option<Account>, String> {
+    if !catalog.nexus.connected() {
+        return Ok(None);
+    }
+    catalog
+        .nexus
+        .account()
+        .await
+        .map(Some)
+        .map_err(|e| e.to_string())
+}
+
+/// Vérifie la clé auprès de Nexus, puis l'enregistre sur cette machine.
+#[tauri::command]
+pub async fn nexus_connect(
+    app: AppHandle,
+    catalog: State<'_, Catalog>,
+    mods: State<'_, Mods>,
+    api_key: String,
+) -> Result<Account, String> {
+    let key = api_key.trim().to_owned();
+    if key.is_empty() || key.len() > 512 || key.chars().any(char::is_whitespace) {
+        return Err("This doesn't look like a Nexus Mods API key.".into());
+    }
+    let previous = catalog.nexus.connected();
+    catalog.nexus.set_api_key(Some(key.clone()));
+    let account = match catalog.nexus.account().await {
+        Ok(account) => account,
+        Err(error) => {
+            if !previous {
+                catalog.nexus.set_api_key(None);
+            }
+            return Err(error.to_string());
+        }
+    };
+    mods.state
+        .lock()
+        .await
+        .set_setting(NEXUS_KEY, Some(&key))
+        .map_err(|e| e.to_string())?;
+    register_nxm(&app);
+    Ok(account)
+}
+
+#[tauri::command]
+pub async fn nexus_disconnect(
+    catalog: State<'_, Catalog>,
+    mods: State<'_, Mods>,
+) -> Result<(), String> {
+    catalog.nexus.set_api_key(None);
+    mods.state
+        .lock()
+        .await
+        .set_setting(NEXUS_KEY, None)
+        .map_err(|e| e.to_string())
+}
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct NexusInstalled {
+    app_id: u32,
+    mod_id: String,
+    /// Nom du mod installé, s'il l'a été.
+    name: Option<String>,
+    missing: Vec<Requirement>,
+    error: Option<String>,
+}
+
+/// Lien `nxm://` venu du site : installe le fichier choisi, dans le jeu
+/// qui correspond.
+async fn handle_nxm(app: AppHandle, url: String) {
+    let Some(link) = NxmLink::parse(&url) else {
+        return;
+    };
+    // Lancé par le lien : la bibliothèque se remplit au premier affichage.
+    let mut found = None;
+    for _ in 0..60 {
+        found = app
+            .state::<Library>()
+            .games
+            .lock()
+            .unwrap()
+            .iter()
+            .find(|(_, g)| {
+                g.profile
+                    .nexus
+                    .as_ref()
+                    .is_some_and(|n| n.domain == link.domain)
+            })
+            .map(|(id, g)| (*id, g.clone()));
+        if found.is_some() {
+            break;
+        }
+        tokio::time::sleep(Duration::from_millis(500)).await;
+    }
+    let mod_id = nexus_source::mod_key(link.mod_id);
+    let Some((app_id, game)) = found else {
+        let _ = app.emit(
+            "nexus-installed",
+            NexusInstalled {
+                app_id: 0,
+                mod_id,
+                name: None,
+                missing: Vec::new(),
+                error: Some(format!(
+                    "This link is for a game Modalia can't find ({}).",
+                    link.domain
+                )),
+            },
+        );
+        return;
+    };
+    let mods = app.state::<Mods>();
+    let result = if mods.is_running(&game) {
+        Err(close_first(&game))
+    } else {
+        run_nexus_install(&app, app_id, &game, &mod_id, NexusFile::Link(&link))
+            .await
+            .map_err(|failure| match failure {
+                NexusFailure::Website(_) => {
+                    "Nexus Mods refused this link. It may have expired: click the download button again.".into()
+                }
+                NexusFailure::Error(message) => message,
+            })
+    };
+    let event = match result {
+        Ok(done) => NexusInstalled {
+            app_id,
+            name: done
+                .mods
+                .iter()
+                .find(|m| m.id == mod_id)
+                .map(|m| m.name.clone()),
+            mod_id,
+            missing: done.missing,
+            error: None,
+        },
+        Err(error) => NexusInstalled {
+            app_id,
+            mod_id,
+            name: None,
+            missing: Vec::new(),
+            error: Some(error),
+        },
+    };
+    let _ = app.emit("nexus-installed", event);
 }

@@ -9,8 +9,10 @@ import { Ambience } from "@/components/ambience";
 import { AppHeader } from "@/components/app-header";
 import { GameCover } from "@/components/game-cover";
 import { Discover } from "@/components/game/discover";
+import { GameUpdatedBanner } from "@/components/game/game-updated-banner";
 import { GameSwitcher } from "@/components/game/game-switcher";
 import { MyMods } from "@/components/game/my-mods";
+import { NexusConnect } from "@/components/game/nexus-connect";
 import { PendingBanner } from "@/components/game/pending-banner";
 import { PlayButton } from "@/components/game/play-button";
 import { Notice } from "@/components/notice";
@@ -85,7 +87,9 @@ export function GameScreen() {
 								{/* `truncate` coupe ce qui dépasse : le pb-1 laisse la place aux jambages (g, j, p). */}
 								<h1 className="mt-2 truncate pb-1 text-4xl leading-tight font-semibold tracking-tight">{game.name}</h1>
 								<p className="mt-1.5 text-sm text-fg-subtle">
-									Community mods from Thunderstore. Modalia installs the loader and dependencies for you.
+									{game.profile.nexus
+										? "Mods from Nexus Mods. Frameworks like RED4ext and redscript install on their own, from their authors."
+										: "Community mods from Thunderstore. Modalia installs the loader and dependencies for you."}
 								</p>
 							</div>
 							<div className="shrink-0 animate-fade-up pb-1 [animation-delay:90ms]">
@@ -94,6 +98,7 @@ export function GameScreen() {
 						</section>
 
 						<PendingBanner appId={game.appId} />
+						<GameUpdatedBanner game={game} />
 
 						<div className="mt-10 animate-fade-up [animation-delay:120ms]">
 							<Segmented label="Game sections" variant="tabs" items={tabs} value={tab} onChange={setTab} />
@@ -101,7 +106,10 @@ export function GameScreen() {
 
 						<div className="mt-6 animate-fade-up [animation-delay:160ms]">
 							{tab === "discover" ? (
-								<Discover community={game.profile.community} appId={game.appId} />
+								<>
+									{game.profile.nexus && <NexusConnect />}
+									<Discover community={game.profile.community} appId={game.appId} />
+								</>
 							) : (
 								<MyMods appId={game.appId} onDiscover={() => setTab("discover")} />
 							)}
@@ -149,7 +157,7 @@ function NotModdable({ game }: { game: SteamGame }) {
 	return (
 		<div className="glass mt-16 max-w-xl">
 			<Notice icon={<Gamepad2 className="size-5 text-fg-muted" />} title={`${game.name} isn't supported yet`} action={<BackHome />}>
-				Modalia supports BepInEx, MelonLoader and Shimloader games for now. More are coming soon.
+				Modalia supports BepInEx, MelonLoader and Shimloader games, and Cyberpunk 2077, for now. More are coming soon.
 			</Notice>
 		</div>
 	);

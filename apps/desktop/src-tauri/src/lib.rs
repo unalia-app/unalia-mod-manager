@@ -46,6 +46,8 @@ struct KnownGame {
     manual: bool,
     /// Exécutables connus du catalogue pour ce jeu.
     exe_names: Vec<String>,
+    /// Profil du jeu : source des mods (Nexus), frameworks.
+    profile: GameProfile,
 }
 
 #[derive(Clone, Default)]
@@ -154,6 +156,7 @@ async fn list_games(
             game: SteamGame {
                 app_id,
                 name: profile.name.clone(),
+                last_updated: exe_modified(&dir, &profile.exe_names),
                 engine: detect_engine(&dir),
                 library: dir.clone(),
                 install_dir: dir,
@@ -177,6 +180,7 @@ async fn list_games(
                     community: profile.community.clone(),
                     manual: e.source == "manual",
                     exe_names: profile.exe_names.clone(),
+                    profile: profile.clone(),
                 },
             ))
         })
@@ -219,7 +223,7 @@ async fn add_manual_game(
         "Modalia needs to be online once to recognize games.\nThe Thunderstore game list couldn't be downloaded.",
     )?;
     let (profile, game_dir) = games.locate_game(&dir).ok_or(
-        "Modalia doesn't recognize this game.\nPick the folder that contains the game's .exe. Modalia knows the games listed on Thunderstore.",
+        "Modalia doesn't recognize this game.\nPick the folder that contains the game's .exe. Modalia knows the games listed on Thunderstore, and Cyberpunk 2077.",
     )?;
     if !profile.supported {
         return Err(format!(
@@ -243,6 +247,17 @@ async fn add_manual_game(
         })
         .map_err(|e| e.to_string())?;
     Ok(app_id)
+}
+
+/// Hors de Steam, la date de la dernière mise à jour est celle de
+/// l'exécutable du jeu.
+fn exe_modified(dir: &std::path::Path, exe_names: &[String]) -> Option<i64> {
+    exe_names
+        .iter()
+        .filter_map(|name| fs::metadata(dir.join(name)).ok()?.modified().ok())
+        .max()
+        .and_then(|t| t.duration_since(UNIX_EPOCH).ok())
+        .map(|d| d.as_secs() as i64)
 }
 
 /// Couleur d'accent CSS du jeu, extraite de sa jaquette.
@@ -382,12 +397,22 @@ fn mime(file: &std::path::Path) -> &'static str {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
+        // En premier : un lien `nxm://` ouvert pendant que Modalia tourne
+        // relance l'appli, qui passe le lien à la fenêtre déjà ouverte.
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.unminimize();
+                let _ = window.set_focus();
+            }
+        }))
+        .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .manage(Library::default())
         .manage(Catalog::new())
         .setup(|app| {
             app.manage(mods::Mods::open(app.handle())?);
+            mods::nexus_setup(app.handle());
             tauri::async_runtime::spawn(mods::watch(app.handle().clone()));
             Ok(())
         })
@@ -408,6 +433,9 @@ pub fn run() {
             mods::check_updates,
             mods::game_status,
             mods::play_game,
+            mods::nexus_account,
+            mods::nexus_connect,
+            mods::nexus_disconnect,
         ])
         .run(tauri::generate_context!())
         .expect("Modalia failed to start");

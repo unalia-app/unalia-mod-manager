@@ -13,9 +13,10 @@ import { Markdown } from "@/components/markdown";
 import { InstallButton } from "@/components/mod/install-button";
 import { Notice } from "@/components/notice";
 import { useAccent } from "@/hooks/use-accent";
-import { type DependencyInfo, type ModDetails, type SteamGame, getMod, modDescription } from "@/lib/engine";
+import { type DependencyInfo, type ModDetails, type SteamGame, getMod, modDescription, sourceName } from "@/lib/engine";
 import { compactNumber, relativeDate } from "@/lib/format";
 import { findGame, gameHref, modHref } from "@/lib/games-store";
+import { useNexusAccount } from "@/lib/nexus";
 import { openExternal } from "@/lib/open";
 
 type Load<T> = { status: "loading" } | { status: "ready"; value: T } | { status: "error"; message: string };
@@ -41,14 +42,16 @@ export function ModScreen() {
 				if (!current) return;
 				setGame(found);
 				if (!found?.profile) throw new Error("This game isn't supported.");
-				return getMod(found.profile.community, modId);
+				const community = found.profile.community;
+				return getMod(community, modId).then((mod) => ({ mod, community }));
 			})
-			.then((mod) => {
-				if (!current || !mod) return;
+			.then((loaded) => {
+				if (!current || !loaded) return;
+				const { mod, community } = loaded;
 				setDetails({ status: "ready", value: mod });
 				const version = mod.versions[0]?.number;
 				if (!version) return setDescription({ status: "ready", value: "" });
-				return modDescription(mod.id, version).then(
+				return modDescription(community, mod.id, version).then(
 					(markdown) => current && setDescription({ status: "ready", value: markdown }),
 					(e: unknown) => current && setDescription({ status: "error", message: String(e) }),
 				);
@@ -116,8 +119,19 @@ function ModDetailsView({
 }) {
 	const latest = mod.versions[0];
 	const community = game.profile?.community ?? "";
-	const authorUrl = `https://thunderstore.io/c/${community}/p/${mod.author}/`;
+	const nexus = game.profile?.nexus ?? null;
+	const source = sourceName(game);
+	// Nexus ne publie pas de page d'auteur stable par nom : texte simple.
+	const authorUrl = nexus ? null : `https://thunderstore.io/c/${community}/p/${mod.author}/`;
 	const extraDependencies = mod.dependencies.filter((d) => !d.loader).length;
+	const account = useNexusAccount();
+	const hint = !nexus
+		? undefined
+		: account === null && !mod.direct
+			? "Connect your Nexus Mods account on the game page first"
+			: account && !account.premium && !mod.direct
+				? "Nexus asks free accounts to confirm each download on its website"
+				: undefined;
 
 	return (
 		<>
@@ -127,9 +141,13 @@ function ModDetailsView({
 					<h1 className="truncate pb-1 text-4xl leading-tight font-semibold tracking-tight">{mod.name}</h1>
 					<p className="text-sm text-fg-subtle">
 						by{" "}
-						<ExternalTextLink href={authorUrl} className="text-fg-muted hover:text-fg">
-							{mod.author}
-						</ExternalTextLink>
+						{authorUrl ? (
+							<ExternalTextLink href={authorUrl} className="text-fg-muted hover:text-fg">
+								{mod.author}
+							</ExternalTextLink>
+						) : (
+							<span className="text-fg-muted">{mod.author}</span>
+						)}
 						{mod.donationUrl && (
 							<>
 								{" · "}
@@ -165,6 +183,7 @@ function ModDetailsView({
 						modId={mod.id}
 						modName={mod.name}
 						dependencyCount={extraDependencies}
+						hint={hint}
 					/>
 				</div>
 			</section>
@@ -184,7 +203,7 @@ function ModDetailsView({
 							title="Couldn't load the description"
 							details={description.message}
 						>
-							The rest of the page is up to date. You can read it on Thunderstore.
+							The rest of the page is up to date. You can read it on {source}.
 						</Notice>
 					)}
 					{description.status === "ready" &&
@@ -203,7 +222,7 @@ function ModDetailsView({
 							<ul className="-mx-1">
 								{mod.dependencies.map((d) => (
 									<li key={d.id}>
-										<DependencyRow dependency={d} appId={game.appId} />
+										<DependencyRow dependency={d} appId={game.appId} nexus={Boolean(nexus)} />
 									</li>
 								))}
 							</ul>
@@ -226,7 +245,7 @@ function ModDetailsView({
 						)}
 						<div className="flex flex-col items-start gap-1">
 							<ExternalButton href={mod.sourceUrl} icon={<ExternalLink className="size-3.5" />}>
-								View on Thunderstore
+								View on {source}
 							</ExternalButton>
 							{mod.websiteUrl && (
 								<ExternalButton href={mod.websiteUrl} icon={<Globe className="size-3.5" />}>
@@ -241,28 +260,34 @@ function ModDetailsView({
 	);
 }
 
-function DependencyRow({ dependency: d, appId }: { dependency: DependencyInfo; appId: number }) {
+function DependencyRow({ dependency: d, appId, nexus }: { dependency: DependencyInfo; appId: number; nexus: boolean }) {
 	const router = useRouter();
-	// L'icône de chaque version est publiée à une adresse prévisible.
-	const icon = `https://gcdn.thunderstore.io/live/repository/icons/${d.id}-${d.minVersion}.png`;
+	// Thunderstore publie l'icône de chaque version à une adresse prévisible.
+	const icon = nexus ? undefined : `https://gcdn.thunderstore.io/live/repository/icons/${d.id}-${d.minVersion}.png`;
+	const detail = nexus
+		? d.automatic
+			? "Installed automatically"
+			: "Install it too, from Nexus Mods"
+		: `by ${d.author} · ${d.minVersion} or newer`;
 
 	const content = (
 		<>
 			<ModIcon src={icon} className="size-9 rounded-md" />
 			<span className="min-w-0 flex-1">
 				<span className="block truncate text-sm font-medium text-fg">{d.name}</span>
-				<span className="block truncate text-[11px] text-fg-subtle">
-					by {d.author} · {d.minVersion} or newer
-				</span>
+				<span className="block truncate text-[11px] text-fg-subtle">{detail}</span>
 			</span>
 		</>
 	);
 
 	if (d.loader) {
 		return (
-			<div className="flex items-center gap-2.5 rounded-lg px-1 py-1.5" title="Installed automatically with your first mod">
+			<div
+				className="flex items-center gap-2.5 rounded-lg px-1 py-1.5"
+				title={nexus ? "Installed automatically from its author's GitHub" : "Installed automatically with your first mod"}
+			>
 				{content}
-				<Badge tone="accent">Loader</Badge>
+				<Badge tone="accent">{nexus ? "Framework" : "Loader"}</Badge>
 			</div>
 		);
 	}

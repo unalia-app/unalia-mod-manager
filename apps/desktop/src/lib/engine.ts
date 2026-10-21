@@ -4,16 +4,19 @@ import { type UnlistenFn, listen } from "@tauri-apps/api/event";
 // Miroir des types sérialisés par le moteur (serde, camelCase).
 export type Engine = "unity" | "unreal" | "unknown";
 
-/** Ce que Thunderstore sait du jeu (brique games du moteur). */
+/** Ce que Modalia sait du jeu : schéma Thunderstore ou profil écrit à la main (brique games). */
 export type GameProfile = {
 	id: string;
 	name: string;
+	/** Communauté Thunderstore, ou `nexus:<domaine>` pour un jeu Nexus Mods. */
 	community: string;
 	steamAppIds: number[];
 	loader: string;
 	supported: boolean;
 	coverUrl: string | null;
 	heroUrl: string | null;
+	/** Jeu dont les mods viennent de Nexus Mods. */
+	nexus: { domain: string; gameId: number } | null;
 };
 
 export type SteamGame = {
@@ -22,8 +25,10 @@ export type SteamGame = {
 	installDir: string;
 	library: string;
 	engine: Engine;
+	/** Dernière mise à jour du jeu (secondes Unix), si connue. */
+	lastUpdated: number | null;
 	profile: GameProfile | null;
-	/** Décidé par le moteur : profil Thunderstore avec un loader géré. */
+	/** Décidé par le moteur : profil connu, avec un loader géré. */
 	moddable: boolean;
 	/** `manual` : ajouté à la main depuis son dossier. */
 	source: "steam" | "manual";
@@ -64,15 +69,23 @@ const LOADER_LABEL: Record<string, string> = {
 	"recursive-melonloader": "MelonLoader",
 	shimloader: "Shimloader",
 	godotml: "GodotML",
+	redengine: "REDengine",
 	bepisloader: "BepisLoader",
 	umm: "Unity Mod Manager",
 	northstar: "Northstar",
 };
 
-/** Sous-titre d'un jeu : moteur, et loader quand Thunderstore le connaît. */
+/** Sous-titre d'un jeu : moteur, et loader quand Modalia le connaît. */
 export function gameSubtitle(game: SteamGame): string {
-	const loader = game.profile && (LOADER_LABEL[game.profile.loader] ?? game.profile.loader);
-	return loader && game.profile?.loader !== "none" ? `${ENGINE_LABEL[game.engine]} · ${loader}` : ENGINE_LABEL[game.engine];
+	const loader = game.profile && game.profile.loader !== "none" ? (LOADER_LABEL[game.profile.loader] ?? game.profile.loader) : null;
+	if (!loader) return ENGINE_LABEL[game.engine];
+	// Moteur maison (REDengine…) : le loader suffit.
+	return game.engine === "unknown" ? loader : `${ENGINE_LABEL[game.engine]} · ${loader}`;
+}
+
+/** Nom de la source des mods du jeu, pour les textes. */
+export function sourceName(game: SteamGame | null): string {
+	return game?.profile?.nexus ? "Nexus Mods" : "Thunderstore";
 }
 
 export type ArtworkKind = "cover" | "hero" | "header" | "logo";
@@ -153,17 +166,20 @@ export type DependencyInfo = {
 	minVersion: string;
 	/** Loader du jeu : installé à part, automatiquement. */
 	loader: boolean;
+	/** Installée avec le mod. Sinon (prérequis Nexus, compte gratuit), à installer soi-même. */
+	automatic: boolean;
 };
 
-export type ModDetails = Mod & { dependencies: DependencyInfo[] };
+/** `direct` : s'installe sans passer par le site de la source (frameworks Nexus pris sur GitHub). */
+export type ModDetails = Mod & { dependencies: DependencyInfo[]; direct: boolean };
 
 export function getMod(community: string, id: string): Promise<ModDetails> {
 	return invoke("get_mod", { community, id });
 }
 
 /** Markdown brut de la source : à nettoyer avant tout affichage (SPEC §7). */
-export function modDescription(id: string, version: string): Promise<string> {
-	return invoke("mod_description", { id, version });
+export function modDescription(community: string, id: string, version: string): Promise<string> {
+	return invoke("mod_description", { community, id, version });
 }
 
 // Installation (moteur : installer, state).
@@ -201,7 +217,13 @@ export function installedMods(appId: number): Promise<InstalledMod[]> {
 /** Fait tout de suite, ou mis en attente parce que le jeu tourne. */
 export type Outcome<T> = { status: "done"; value: T } | { status: "queued" };
 
-export function installMod(appId: number, modId: string): Promise<Outcome<InstalledMod[]>> {
+/**
+ * Une installation peut aussi demander une confirmation sur le site de la
+ * source (Nexus, compte gratuit) : le lien `nxm://` revient ensuite à Modalia.
+ */
+export type InstallOutcome = Outcome<InstalledMod[]> | { status: "browser"; url: string };
+
+export function installMod(appId: number, modId: string): Promise<InstallOutcome> {
 	return invoke("install_mod", { appId, modId });
 }
 
@@ -279,4 +301,44 @@ export function onGameStatus(handler: (status: GameStatus) => void): Promise<Unl
 export function onPendingApplied(handler: (event: PendingApplied) => void): Promise<UnlistenFn> {
 	if (!isTauri()) return Promise.resolve(() => {});
 	return listen<PendingApplied>("pending-applied", (e) => handler(e.payload));
+}
+
+// Nexus Mods (moteur : sources::nexus).
+
+export type NexusAccount = { name: string; premium: boolean };
+
+/** Prérequis Nexus que Modalia n'installe pas seul. */
+export type NexusRequirement = { modId: number | null; name: string; url: string | null };
+
+/** Fin d'une installation lancée par un lien `nxm://` du site. */
+export type NexusInstalled = {
+	appId: number;
+	modId: string;
+	name: string | null;
+	missing: NexusRequirement[];
+	error: string | null;
+};
+
+export function nexusAccount(): Promise<NexusAccount | null> {
+	if (!isTauri()) return Promise.resolve(null);
+	return invoke("nexus_account");
+}
+
+export function nexusConnect(apiKey: string): Promise<NexusAccount> {
+	return invoke("nexus_connect", { apiKey });
+}
+
+export function nexusDisconnect(): Promise<void> {
+	return invoke("nexus_disconnect");
+}
+
+export function onNexusInstalled(handler: (event: NexusInstalled) => void): Promise<UnlistenFn> {
+	if (!isTauri()) return Promise.resolve(() => {});
+	return listen<NexusInstalled>("nexus-installed", (e) => handler(e.payload));
+}
+
+/** Page Nexus d'un mod (`nexus-<id>`). */
+export function nexusModUrl(domain: string, modId: string, tab?: "files"): string {
+	const id = modId.replace(/^nexus-/, "");
+	return `https://www.nexusmods.com/${domain}/mods/${id}${tab ? `?tab=${tab}` : ""}`;
 }

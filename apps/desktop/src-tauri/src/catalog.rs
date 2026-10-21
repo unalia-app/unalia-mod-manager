@@ -1,10 +1,14 @@
-//! Catalogue des jeux moddables (schéma Thunderstore) et commandes de mods.
+//! Catalogue des jeux moddables (schéma Thunderstore, profils écrits à la
+//! main) et commandes de mods. Chaque commande s'adresse à la source du jeu :
+//! Thunderstore, ou Nexus Mods pour les communautés `nexus:<domaine>`.
 
 use std::sync::Arc;
 use std::time::Duration;
 
 use mod_engine::HttpClient;
 use mod_engine::games::{GameCatalog, SCHEMA_URL, load_catalog};
+use mod_engine::sources::github::GitHub;
+use mod_engine::sources::nexus::{self, Nexus, mod_key};
 use mod_engine::sources::thunderstore::{MOD_MANAGERS, Thunderstore};
 use mod_engine::sources::{Mod, ModSource, ModSummary, Page, SearchQuery, Sort};
 use serde::Serialize;
@@ -17,6 +21,8 @@ const SCHEMA_MAX_AGE: Duration = Duration::from_secs(24 * 3600);
 pub struct Catalog {
     pub(crate) client: HttpClient,
     pub(crate) thunderstore: Thunderstore,
+    pub(crate) nexus: Nexus,
+    pub(crate) github: GitHub,
     games: Mutex<Option<Arc<GameCatalog>>>,
 }
 
@@ -25,6 +31,8 @@ impl Catalog {
         let client = mod_engine::http_client();
         Self {
             thunderstore: Thunderstore::new(client.clone()),
+            nexus: Nexus::new(client.clone()),
+            github: GitHub::new(client.clone()),
             client,
             games: Mutex::new(None),
         }
@@ -68,6 +76,13 @@ pub async fn search_mods(
         page,
         ..Default::default()
     };
+    if nexus::domain_of(&community).is_some() {
+        return catalog
+            .nexus
+            .search(&community, &query)
+            .await
+            .map_err(|e| e.to_string());
+    }
     let (games, page) = tokio::join!(
         catalog.games(&app),
         catalog.thunderstore.search(&community, &query),
@@ -90,6 +105,9 @@ pub struct ModDetails {
     r#mod: Mod,
     /// Dépendances de la dernière version, prêtes à afficher.
     dependencies: Vec<DependencyInfo>,
+    /// S'installe sans passer par le site de la source (tout Thunderstore ;
+    /// sur Nexus, les frameworks, pris sur GitHub).
+    direct: bool,
 }
 
 #[derive(Serialize)]
@@ -101,6 +119,9 @@ pub struct DependencyInfo {
     min_version: String,
     /// Loader du jeu (ex. BepInEx) : installé à part, à la racine du jeu.
     loader: bool,
+    /// Installée automatiquement avec le mod. Sinon (prérequis Nexus pour
+    /// un compte gratuit), l'utilisateur doit l'installer lui-même.
+    automatic: bool,
 }
 
 #[tauri::command]
@@ -110,6 +131,9 @@ pub async fn get_mod(
     community: String,
     id: String,
 ) -> Result<ModDetails, String> {
+    if let Some(domain) = nexus::domain_of(&community) {
+        return nexus_mod(&app, &catalog, &community, domain, &id).await;
+    }
     let (games, found) = tokio::join!(
         catalog.games(&app),
         catalog.thunderstore.get(&community, &id),
@@ -129,6 +153,7 @@ pub async fn get_mod(
                 loader: games
                     .as_ref()
                     .is_some_and(|g| g.loader_package(&d.id).is_some()),
+                automatic: true,
                 id: d.id.clone(),
             }
         })
@@ -136,6 +161,53 @@ pub async fn get_mod(
     Ok(ModDetails {
         r#mod: found,
         dependencies,
+        direct: true,
+    })
+}
+
+/// Fiche d'un mod Nexus : ses prérequis viennent avec leur nom. Les
+/// frameworks du jeu s'installent tout seuls (depuis GitHub), les autres
+/// prérequis non (compte gratuit).
+async fn nexus_mod(
+    app: &AppHandle,
+    catalog: &Catalog,
+    community: &str,
+    domain: &str,
+    id: &str,
+) -> Result<ModDetails, String> {
+    let mod_id = nexus::parse_mod_key(id).ok_or("This mod doesn't exist on Nexus Mods.")?;
+    let (games, found, info) = tokio::join!(
+        catalog.games(app),
+        catalog.nexus.get(community, id),
+        catalog.nexus.mod_info(domain, mod_id),
+    );
+    let found = found.map_err(|e| e.to_string())?;
+    let frameworks = games
+        .as_ref()
+        .and_then(|g| g.games().iter().find(|p| p.community == community))
+        .map(|p| p.frameworks.clone())
+        .unwrap_or_default();
+    let dependencies = info
+        .map(|i| i.requirements)
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|r| {
+            let required = r.mod_id?;
+            let framework = frameworks.iter().any(|f| f.nexus_id == required);
+            Some(DependencyInfo {
+                id: mod_key(required),
+                name: r.name,
+                author: String::new(),
+                min_version: String::new(),
+                loader: framework,
+                automatic: framework,
+            })
+        })
+        .collect();
+    Ok(ModDetails {
+        r#mod: found,
+        dependencies,
+        direct: frameworks.iter().any(|f| f.nexus_id == mod_id),
     })
 }
 
@@ -143,12 +215,17 @@ pub async fn get_mod(
 #[tauri::command]
 pub async fn mod_description(
     catalog: State<'_, Catalog>,
+    community: String,
     id: String,
     version: String,
 ) -> Result<String, String> {
-    catalog
-        .thunderstore
-        .description(&id, &version)
-        .await
-        .map_err(|e| e.to_string())
+    let result = if nexus::domain_of(&community).is_some() {
+        catalog.nexus.description(&community, &id, &version).await
+    } else {
+        catalog
+            .thunderstore
+            .description(&community, &id, &version)
+            .await
+    };
+    result.map_err(|e| e.to_string())
 }
