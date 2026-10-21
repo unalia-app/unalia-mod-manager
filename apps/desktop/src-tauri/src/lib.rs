@@ -454,6 +454,7 @@ pub fn run() {
             catalog::mod_description,
             mods::installed_mods,
             mods::install_mod,
+            mods::cancel_install,
             mods::set_mod_enabled,
             mods::uninstall_mod,
             mods::restore_mod,

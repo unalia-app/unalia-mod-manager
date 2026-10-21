@@ -221,10 +221,18 @@ export type Outcome<T> = { status: "done"; value: T } | { status: "queued" };
  * Une installation peut aussi demander une confirmation sur le site de la
  * source (Nexus, compte gratuit) : le lien `nxm://` revient ensuite à Modalia.
  */
-export type InstallOutcome = Outcome<InstalledMod[]> | { status: "browser"; url: string };
+export type InstallOutcome =
+	| Outcome<InstalledMod[]>
+	| { status: "browser"; url: string }
+	| { status: "cancelled" };
 
 export function installMod(appId: number, modId: string): Promise<InstallOutcome> {
 	return invoke("install_mod", { appId, modId });
+}
+
+/** Arrête une installation en cours ou en file (le jeu n'est pas touché). */
+export function cancelInstall(appId: number, modId: string): Promise<boolean> {
+	return invoke("cancel_install", { appId, modId });
 }
 
 export function setModEnabled(appId: number, modId: string, enabled: boolean): Promise<Outcome<InstalledMod>> {
@@ -317,6 +325,8 @@ export type NexusRequirement = { modId: number | null; name: string; url: string
 export type NexusInstalled = {
 	appId: number;
 	modId: string;
+	/** Annulée par l'utilisateur : rien à signaler. */
+	cancelled: boolean;
 	name: string | null;
 	missing: NexusRequirement[];
 	error: string | null;

@@ -1,22 +1,28 @@
 "use client";
 
 import { Badge, Button, Skeleton, Spinner, Switch, cn } from "@modalia/ui";
-import { ArrowUp, Layers, Package, Trash2 } from "lucide-react";
+import { ArrowUp, ExternalLink, Layers, Package, Trash2, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
+import { progressDetail, progressLabel } from "@/components/mod/install-button";
 import { Notice } from "@/components/notice";
 import { toast } from "@/components/toaster";
 import { type InstalledMod, splitError } from "@/lib/engine";
 import { usePendingOp } from "@/lib/game-status";
 import { modHref } from "@/lib/games-store";
+import { openExternal } from "@/lib/open";
 import {
+	type ActiveInstall,
+	cancel,
 	install,
+	overallProgress,
 	remove,
 	restore,
 	toggle,
 	updateAll,
 	useActiveInstall,
+	useActiveInstalls,
 	useInstalled,
 	useModUpdate,
 	useUpdates,
@@ -39,7 +45,9 @@ export function MyMods({ appId, onDiscover }: { appId: number; onDiscover: () =>
 
 	if (mods.length === 0) {
 		return (
-			<div className="glass max-w-xl">
+			<div className="max-w-3xl">
+				<InProgress appId={appId} />
+				<div className="glass max-w-xl">
 				<Notice
 					icon={<Layers className="size-5 text-fg-muted" />}
 					title="No mods installed yet"
@@ -51,6 +59,7 @@ export function MyMods({ appId, onDiscover }: { appId: number; onDiscover: () =>
 				>
 					Mods you install show up here. Turn them on, off or remove them in one click.
 				</Notice>
+				</div>
 			</div>
 		);
 	}
@@ -59,6 +68,7 @@ export function MyMods({ appId, onDiscover }: { appId: number; onDiscover: () =>
 
 	return (
 		<div className="max-w-3xl">
+			<InProgress appId={appId} />
 			<div className="mb-3 flex items-center justify-between gap-4">
 				<p className="text-xs text-fg-subtle">
 					{active} active mod{active === 1 ? "" : "s"} · changes apply the next time you launch the game
@@ -82,6 +92,82 @@ export function MyMods({ appId, onDiscover }: { appId: number; onDiscover: () =>
 					</li>
 				))}
 			</ul>
+		</div>
+	);
+}
+
+/** Téléchargements et installations du jeu en cours, chacun annulable. */
+function InProgress({ appId }: { appId: number }) {
+	const active = useActiveInstalls(appId);
+	if (active.length === 0) return null;
+	return (
+		<section className="mb-6">
+			<h2 className="mb-2 px-1 text-xs font-semibold tracking-wide text-fg-subtle uppercase">
+				In progress ({active.length})
+			</h2>
+			<ul className="overflow-hidden rounded-xl border border-line bg-surface">
+				{active.map(([modId, a], i) => (
+					<li key={modId} className={cn(i > 0 && "border-t border-line")}>
+						<ProgressRow appId={appId} modId={modId} active={a} />
+					</li>
+				))}
+			</ul>
+		</section>
+	);
+}
+
+function ProgressRow({ appId, modId, active: a }: { appId: number; modId: string; active: ActiveInstall }) {
+	const router = useRouter();
+	const progress = a.status === "running" ? a.progress : null;
+	// « resolving » n'a pas encore de nom de paquet.
+	const name = a.name ?? (progress && "name" in progress ? progress.name : modId);
+	const value = progress ? overallProgress(progress) : 0;
+
+	return (
+		<div className="flex animate-row-in items-center gap-3 px-4 py-3">
+			<button
+				type="button"
+				onClick={() => router.push(modHref(appId, modId))}
+				className="flex min-w-0 flex-1 cursor-pointer flex-col gap-1.5 text-left"
+			>
+				<span className="flex items-baseline justify-between gap-3">
+					<span className="truncate text-sm font-medium text-fg">{name}</span>
+					<span className="shrink-0 font-tight text-[11px] text-fg-subtle">
+						{a.status === "website" ? "Waiting for Nexus Mods" : progressLabel(progress, value)}
+					</span>
+				</span>
+				{a.status === "website" ? (
+					<span className="text-[11px] text-fg-subtle">
+						Click <span className="text-fg-muted">Slow download</span> on the Nexus Mods page. Unalia installs it right after.
+					</span>
+				) : (
+					<>
+						<span className="relative h-1.5 overflow-hidden rounded-full bg-surface-strong">
+							<span
+								className="absolute inset-y-0 left-0 w-full origin-left rounded-full bg-accent transition-[scale] duration-300 ease-out"
+								style={{ scale: `${Math.max(value, 0.02)} 1` }}
+							/>
+						</span>
+						<span className="truncate text-[11px] text-fg-subtle">
+							{progressDetail(progress, a.status === "running" ? a.speed : undefined).replace("\n", " · ")}
+						</span>
+					</>
+				)}
+			</button>
+			{a.status === "website" && (
+				<Button size="sm" variant="outline" leftIcon={<ExternalLink className="size-3.5" />} onClick={() => void openExternal(a.url)}>
+					Open page
+				</Button>
+			)}
+			<button
+				type="button"
+				aria-label={`Cancel ${name}`}
+				title="Cancel"
+				onClick={() => void cancel(appId, modId)}
+				className="cursor-pointer rounded-md p-2 text-fg-subtle transition-colors hover:bg-white/10 hover:text-fg"
+			>
+				<X className="size-4" />
+			</button>
 		</div>
 	);
 }
@@ -158,7 +244,7 @@ function ModRow({ mod: m, appId }: { mod: InstalledMod; appId: number }) {
 			) : (
 				update &&
 				!pending && (
-					<Button size="sm" variant="outline" onClick={() => void install(appId, m.id)}>
+					<Button size="sm" variant="outline" onClick={() => void install(appId, m.id, m.name)}>
 						Update
 					</Button>
 				)

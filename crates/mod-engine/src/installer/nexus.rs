@@ -94,6 +94,9 @@ impl Installer<'_, Nexus> {
                 } else {
                     file.version.clone()
                 };
+                // Compte gratuit (lien du site) : une seule connexion, comme
+                // Vortex. Plusieurs connexions contourneraient le bridage.
+                let mut connections = link.map(|_| 1);
                 let url = match self
                     .source
                     .download_url(domain, mod_id, file.file_id, link)
@@ -116,13 +119,18 @@ impl Installer<'_, Nexus> {
                             )
                             .await
                         {
-                            Some(url) => url,
+                            // GitHub : pas de bridage à respecter.
+                            Some(url) => {
+                                connections = None;
+                                url
+                            }
                             None => return Err(error.into()),
                         }
                     }
                     Err(error) => return Err(error.into()),
                 };
                 let package = Package {
+                    connections,
                     id: mod_key(mod_id),
                     name: info.name.clone(),
                     author: info.author.clone(),
@@ -164,6 +172,8 @@ impl Installer<'_, Nexus> {
             fetched.push(item);
         }
 
+        // Dernière occasion d'annuler : ensuite, le jeu est modifié.
+        self.check_cancel()?;
         // Poser : frameworks d'abord (les derniers découverts sont les plus
         // profonds), le mod demandé en dernier.
         let requested = mod_key(mod_id);
@@ -258,6 +268,7 @@ impl Installer<'_, Nexus> {
                 let _ = std::fs::remove_file(archive);
                 let options = download::Options {
                     max_bytes: size,
+                    cancel: self.cancel.cloned(),
                     ..download::Options::default()
                 };
                 let fetched = download::download(
@@ -299,6 +310,7 @@ impl Installer<'_, Nexus> {
             .asset(&framework.asset)
             .ok_or_else(|| InstallError::NoFile(framework.name.clone()))?;
         Ok(Package {
+            connections: None,
             id: mod_key(framework.nexus_id),
             name: framework.name.clone(),
             author: framework

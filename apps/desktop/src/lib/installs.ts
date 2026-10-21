@@ -1,10 +1,11 @@
-import { useEffect, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useSyncExternalStore } from "react";
 
 import { toast } from "@/components/toaster";
 import {
 	type InstallProgress,
 	type InstalledMod,
 	type ModUpdate,
+	cancelInstall,
 	checkUpdates,
 	installMod,
 	installedMods,
@@ -23,13 +24,15 @@ import { openExternal } from "@/lib/open";
  * une, les suivantes attendent).
  */
 
-export type ActiveInstall =
+/** `name` : nom du mod demandé, s'il est connu (sinon, celui du paquet en cours). */
+export type ActiveInstall = { name?: string } & (
 	| { status: "queued" }
 	/** `speed` : octets par seconde (moyenne lissée), pendant un téléchargement. */
 	| { status: "running"; progress: InstallProgress; speed?: number }
 	/** Compte Nexus gratuit : téléchargement à confirmer sur la page ouverte. */
 	| { status: "website"; url: string }
-	| { status: "error"; message: string; details: string | null };
+	| { status: "error"; message: string; details: string | null }
+);
 
 type Snapshot = {
 	installed: Map<number, InstalledMod[]>;
@@ -75,13 +78,20 @@ function listenOnce() {
 	void onInstallProgress(({ appId, modId, progress }) =>
 		update((s) => {
 			const k = key(appId, modId);
-			s.active.set(k, { status: "running", progress, speed: measureSpeed(k, progress) });
+			const name = s.active.get(k)?.name;
+			s.active.set(k, { status: "running", progress, speed: measureSpeed(k, progress), name });
 		}),
 	);
 	// Lien `nxm://` du site (bouton « Mod Manager Download ») : le moteur
 	// installe seul, l'interface apprend la fin ici.
-	void onNexusInstalled(({ appId, modId, name, missing, error }) => {
+	void onNexusInstalled(({ appId, modId, name, missing, error, cancelled }) => {
 		const k = key(appId, modId);
+		if (cancelled) {
+			update((s) => {
+				s.active.delete(k);
+			});
+			return;
+		}
 		if (error) {
 			const { message, details } = splitError(error);
 			update((s) => {
@@ -147,12 +157,12 @@ export async function refreshInstalled(appId: number) {
 }
 
 /** Lance l'installation (sans attendre) : l'état suit dans le store. */
-export function install(appId: number, modId: string): Promise<void> {
+export function install(appId: number, modId: string, name?: string): Promise<void> {
 	const k = key(appId, modId);
 	const current = snapshot.active.get(k);
 	if (current && current.status !== "error" && current.status !== "website") return Promise.resolve();
 	update((s) => {
-		s.active.set(k, { status: "queued" });
+		s.active.set(k, { status: "queued", name: name ?? current?.name });
 	});
 	inFlight.add(k);
 	return installMod(appId, modId)
@@ -163,10 +173,11 @@ export function install(appId: number, modId: string): Promise<void> {
 					// Compte Nexus gratuit : la page de téléchargement s'ouvre, le lien
 					// `nxm://` reviendra avec la progression.
 					if (outcome.status === "browser") {
-						s.active.set(k, { status: "website", url: outcome.url });
+						s.active.set(k, { status: "website", url: outcome.url, name });
 						void openExternal(outcome.url);
 						return;
 					}
+					// Annulée : rien n'a changé, rien à afficher.
 					// Mis en attente : la file du jeu (game-status) prend le relais.
 					if (outcome.status === "done") {
 						s.installed.set(appId, outcome.value);
@@ -178,7 +189,7 @@ export function install(appId: number, modId: string): Promise<void> {
 				}),
 			(error: unknown) =>
 				update((s) => {
-					s.active.set(k, { status: "error", ...splitError(error) });
+					s.active.set(k, { status: "error", name, ...splitError(error) });
 				}),
 		);
 }
@@ -195,6 +206,20 @@ export function settleBackgroundInstalls(appId: number) {
 		}
 		s.updates.delete(appId);
 	});
+}
+
+/**
+ * Annule une installation : en cours ou en file, le moteur s'arrête (le jeu
+ * n'est pas touché, le déjà-téléchargé reste en cache) ; en attente du site
+ * de Nexus, on oublie simplement.
+ */
+export async function cancel(appId: number, modId: string) {
+	const active = snapshot.active.get(key(appId, modId));
+	if (active?.status === "queued" || active?.status === "running") {
+		const stopped = await cancelInstall(appId, modId);
+		if (stopped) return;
+	}
+	clearError(appId, modId);
 }
 
 export function clearError(appId: number, modId: string) {
@@ -245,6 +270,20 @@ export function useInstalled(appId: number): InstalledMod[] | undefined {
 	}, [appId]);
 	return list;
 }
+
+/** Installations du jeu en cours, en file ou à confirmer (pas les échecs). */
+export function useActiveInstalls(appId: number): [string, ActiveInstall][] {
+	const active = useSyncExternalStore(subscribe, () => snapshot.active, () => emptyActive);
+	return useMemo(
+		() =>
+			[...active]
+				.filter(([k, a]) => k.startsWith(`${appId}:`) && a.status !== "error")
+				.map(([k, a]) => [k.slice(`${appId}:`.length), a] as [string, ActiveInstall]),
+		[active, appId],
+	);
+}
+
+const emptyActive = new Map<string, ActiveInstall>();
 
 export function useActiveInstall(appId: number, modId: string): ActiveInstall | undefined {
 	return useSyncExternalStore(subscribe, () => snapshot.active.get(key(appId, modId)), () => undefined);
@@ -300,5 +339,6 @@ export function recheckUpdates(appId: number) {
 
 /** Met à jour plusieurs mods, l'un après l'autre (le moteur les traite en file). */
 export function updateAll(appId: number, updates: ModUpdate[]) {
-	for (const u of updates) void install(appId, u.modId);
+	const names = new Map((snapshot.installed.get(appId) ?? []).map((m) => [m.id, m.name]));
+	for (const u of updates) void install(appId, u.modId, names.get(u.modId));
 }

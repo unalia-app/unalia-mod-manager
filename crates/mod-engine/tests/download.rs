@@ -339,3 +339,48 @@ async fn oversized_files_are_refused_before_downloading() {
         "seule la sonde a été envoyée"
     );
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn a_cancelled_download_stops_and_resumes_later() {
+    let content = data(2 * 1024 * 1024);
+    let server = serve(content.clone(), Behavior::default());
+    let dir = tempfile::tempdir().unwrap();
+    let dest = dir.path().join("mod.zip");
+    let cancel = download::Cancel::default();
+    let cancellable = Options {
+        cancel: Some(cancel.clone()),
+        ..options(4)
+    };
+
+    let err = download::download(
+        &reqwest::Client::new(),
+        &server.url,
+        &dest,
+        &cancellable,
+        |received, _| {
+            if received > 256 * 1024 {
+                cancel.cancel();
+            }
+        },
+    )
+    .await
+    .unwrap_err();
+    assert!(matches!(err, DownloadError::Cancelled), "{err:?}");
+    assert!(!dest.exists());
+    assert!(
+        dest.with_extension("part").exists(),
+        "ce qui est arrivé est gardé"
+    );
+
+    // Relancé plus tard : il reprend et termine.
+    download::download(
+        &reqwest::Client::new(),
+        &server.url,
+        &dest,
+        &options(4),
+        |_, _| {},
+    )
+    .await
+    .unwrap();
+    assert_eq!(std::fs::read(&dest).unwrap(), *content);
+}

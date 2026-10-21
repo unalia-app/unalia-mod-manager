@@ -1,12 +1,12 @@
 "use client";
 
 import { Button, cn } from "@modalia/ui";
-import { ArrowUp, Check, Clock, Download, ExternalLink, RotateCw } from "lucide-react";
+import { ArrowUp, Check, Clock, Download, ExternalLink, RotateCw, X } from "lucide-react";
 
 import { type InstallProgress, cancelPending } from "@/lib/engine";
 import { bytes, timeLeft } from "@/lib/format";
 import { usePendingOp } from "@/lib/game-status";
-import { clearError, install, overallProgress, useActiveInstall, useInstalled, useModUpdate } from "@/lib/installs";
+import { cancel, clearError, install, overallProgress, useActiveInstall, useInstalled, useModUpdate } from "@/lib/installs";
 import { openExternal } from "@/lib/open";
 
 /**
@@ -33,7 +33,7 @@ export function InstallButton({
 	const update = useModUpdate(appId, modId);
 
 	// Le résultat (réussite ou erreur) arrive par le store, que le bouton suit.
-	const start = () => void install(appId, modId);
+	const start = () => void install(appId, modId, modName);
 
 	if (active?.status === "queued" || active?.status === "running") {
 		const progress = active.status === "running" ? active.progress : null;
@@ -55,10 +55,18 @@ export function InstallButton({
 					/>
 					<div className="absolute inset-y-0 w-1/3 animate-shimmer bg-gradient-to-r from-transparent via-white/10 to-transparent" />
 					<span className="relative flex h-full items-center justify-center gap-2 px-3 text-xs font-medium text-fg">
-						{label(progress, value)}
+						{progressLabel(progress, value)}
 					</span>
 				</div>
-				<span className="text-right text-[11px] whitespace-pre-line text-fg-subtle">{sublabel(progress, speed)}</span>
+				<span className="text-right text-[11px] whitespace-pre-line text-fg-subtle">{progressDetail(progress, speed)}</span>
+				<button
+					type="button"
+					onClick={() => void cancel(appId, modId)}
+					className="flex cursor-pointer items-center gap-1 text-[11px] text-fg-muted underline-offset-2 hover:text-fg hover:underline"
+				>
+					<X className="size-3" />
+					Cancel
+				</button>
 			</div>
 		);
 	}
@@ -177,7 +185,7 @@ export function InstallButton({
 }
 
 /** Le pourcentage est global, comme la barre ; le paquet en cours est dessous. */
-function label(progress: InstallProgress | null, value: number): string {
+export function progressLabel(progress: InstallProgress | null, value: number): string {
 	if (!progress) return "Waiting…";
 	if (progress.stage === "resolving") return "Preparing…";
 	const percent = Math.round(value * 100);
@@ -190,7 +198,7 @@ function label(progress: InstallProgress | null, value: number): string {
  * Paquet en cours, et pour les gros fichiers la quantité, la vitesse et le
  * temps restant : « 3.2 GB of 10 GB · 24 MB/s · 5 min left ».
  */
-function sublabel(progress: InstallProgress | null, speed?: number): string {
+export function progressDetail(progress: InstallProgress | null, speed?: number): string {
 	if (!progress || progress.stage === "resolving") return "Checking dependencies";
 	const which = progress.total > 1 ? `${progress.name} · ${progress.index + 1} of ${progress.total}` : progress.name;
 	if (progress.stage === "downloading" && progress.size && progress.size > 20 * 1024 * 1024) {

@@ -17,6 +17,8 @@ use std::fs::{self, File};
 use std::io::{self, Read};
 use std::path::{Component, Path, PathBuf};
 
+use crate::download::Cancel;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Limits {
     /// Taille décompressée totale maximale.
@@ -58,6 +60,8 @@ pub enum ArchiveError {
     Unsupported(&'static str),
     #[error("couldn't extract the archive")]
     Io(#[from] io::Error),
+    #[error("the extraction was cancelled")]
+    Cancelled,
 }
 
 /// Extrait `archive` dans `dest`, qui ne doit pas exister. Renvoie les
@@ -76,6 +80,18 @@ pub fn extract_with_progress(
     archive: &Path,
     dest: &Path,
     limits: Limits,
+    on_progress: impl FnMut(u64, u64),
+) -> Result<Vec<String>, ArchiveError> {
+    extract_cancellable(archive, dest, limits, None, on_progress)
+}
+
+/// Comme `extract_with_progress`, arrêtée au prochain fichier si `cancel`
+/// est levé : rien n'est laissé à moitié extrait.
+pub fn extract_cancellable(
+    archive: &Path,
+    dest: &Path,
+    limits: Limits,
+    cancel: Option<&Cancel>,
     mut on_progress: impl FnMut(u64, u64),
 ) -> Result<Vec<String>, ArchiveError> {
     let staging = dest.with_extension("partial");
@@ -84,7 +100,7 @@ pub fn extract_with_progress(
     }
     fs::create_dir_all(&staging)?;
 
-    match extract_into(archive, &staging, limits, &mut on_progress) {
+    match extract_into(archive, &staging, limits, cancel, &mut on_progress) {
         Ok(files) => {
             fs::rename(&staging, dest)?;
             Ok(files)
@@ -119,18 +135,24 @@ fn extract_into(
     archive: &Path,
     dir: &Path,
     limits: Limits,
+    cancel: Option<&Cancel>,
     on_progress: &mut impl FnMut(u64, u64),
 ) -> Result<Vec<String>, ArchiveError> {
     match format(archive)? {
-        Format::Zip => extract_zip(archive, dir, limits, on_progress),
-        Format::SevenZip => extract_7z(archive, dir, limits, on_progress),
+        Format::Zip => extract_zip(archive, dir, limits, cancel, on_progress),
+        Format::SevenZip => extract_7z(archive, dir, limits, cancel, on_progress),
     }
+}
+
+fn cancelled(cancel: Option<&Cancel>) -> bool {
+    cancel.is_some_and(Cancel::is_cancelled)
 }
 
 fn extract_zip(
     archive: &Path,
     dir: &Path,
     limits: Limits,
+    cancel: Option<&Cancel>,
     on_progress: &mut impl FnMut(u64, u64),
 ) -> Result<Vec<String>, ArchiveError> {
     let mut zip = zip::ZipArchive::new(File::open(archive)?)?;
@@ -144,6 +166,9 @@ fn extract_zip(
     let mut files = Vec::new();
     let mut total: u64 = 0;
     for i in 0..zip.len() {
+        if cancelled(cancel) {
+            return Err(ArchiveError::Cancelled);
+        }
         let mut entry = zip.by_index(i)?;
         // Un nom illisible (pas UTF-8) : archive considérée comme abîmée.
         let raw = entry.name()?.into_owned();
@@ -199,6 +224,7 @@ fn extract_7z(
     archive: &Path,
     dir: &Path,
     limits: Limits,
+    cancel: Option<&Cancel>,
     on_progress: &mut impl FnMut(u64, u64),
 ) -> Result<Vec<String>, ArchiveError> {
     let compressed = fs::metadata(archive)?.len().max(1);
@@ -215,6 +241,10 @@ fn extract_7z(
     // les siennes.
     let mut refused: Option<ArchiveError> = None;
     let result = reader.for_each_entries(|entry, data| {
+        if cancelled(cancel) {
+            refused = Some(ArchiveError::Cancelled);
+            return Ok(false);
+        }
         let raw = entry.name().to_owned();
         if entry.is_anti_item() {
             return Ok(true);

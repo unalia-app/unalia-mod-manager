@@ -123,6 +123,7 @@ impl World {
             catalog: Some(&self.catalog),
             client: &self.client,
             paths: &self.paths,
+            cancel: None,
         };
         let target = Target {
             game: "steam:1030300",
@@ -478,6 +479,7 @@ async fn prefetch_downloads_without_touching_the_game() {
         catalog: Some(&w.catalog),
         client: &w.client,
         paths: &w.paths,
+        cancel: None,
     };
     let target = Target {
         game: "steam:1030300",
@@ -570,4 +572,40 @@ async fn melonloader_games_install_through_their_rules() {
     installer::uninstall(&mut w.state, game, &w.game, COOL).unwrap();
     installer::uninstall(&mut w.state, game, &w.game, MELON).unwrap();
     assert_eq!(snapshot(&w.game), before);
+}
+
+#[tokio::test]
+async fn a_cancelled_install_leaves_the_game_untouched() {
+    use mod_engine::download::Cancel;
+
+    let mut w = World::new().await;
+    w.publish_knight().await;
+    let before = snapshot(&w.game);
+    let cancel = Cancel::default();
+    let trigger = cancel.clone();
+    let installer = Installer {
+        source: &w.source,
+        catalog: Some(&w.catalog),
+        client: &w.client,
+        paths: &w.paths,
+        cancel: Some(&cancel),
+    };
+    let target = Target {
+        game: "steam:1030300",
+        game_dir: &w.game,
+        community: COMMUNITY,
+    };
+    // Le loader est déjà posé quand l'utilisateur annule, pendant le
+    // paquet suivant : tout est retiré.
+    let err = installer
+        .install(&mut w.state, &target, KNIGHT, |p| {
+            if matches!(p, Progress::Installing { index: 1, .. }) {
+                trigger.cancel();
+            }
+        })
+        .await
+        .unwrap_err();
+    assert!(matches!(err, InstallError::Cancelled), "{err:?}");
+    assert_eq!(snapshot(&w.game), before);
+    assert!(w.state.list("steam:1030300").unwrap().is_empty());
 }

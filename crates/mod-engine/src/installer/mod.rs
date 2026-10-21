@@ -18,7 +18,7 @@ use serde::Serialize;
 use crate::HttpClient;
 use crate::archive::{self, ArchiveError, Limits};
 use crate::deploy::{self, DeployError, Deployment};
-use crate::download::{self, DownloadError};
+use crate::download::{self, Cancel, DownloadError};
 use crate::games::GameCatalog;
 use crate::loaders::bepinex::BepInEx;
 use crate::loaders::rules::RulesLoader;
@@ -114,11 +114,16 @@ pub enum InstallError {
     NotInstalled,
     #[error("couldn't access Unalia's storage")]
     Io(#[from] std::io::Error),
+    #[error("the install was cancelled")]
+    Cancelled,
 }
 
 /// Un paquet prêt à télécharger, quelle que soit sa source.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Package {
+    /// Connexions simultanées permises par la source (Nexus gratuit : une
+    /// seule, comme Vortex). `None` : la valeur par défaut.
+    pub connections: Option<usize>,
     pub id: String,
     pub name: String,
     pub author: String,
@@ -132,6 +137,7 @@ impl Package {
     fn of_step(step: &PlanStep) -> Self {
         let version = &step.version.number;
         Self {
+            connections: None,
             id: step.id.clone(),
             name: step.name.clone(),
             author: step
@@ -164,6 +170,9 @@ pub struct Installer<'a, S> {
     pub catalog: Option<&'a GameCatalog>,
     pub client: &'a HttpClient,
     pub paths: &'a Paths,
+    /// Annulation demandée par l'utilisateur : respectée pendant les
+    /// téléchargements et extractions, jamais au milieu d'un déploiement.
+    pub cancel: Option<&'a Cancel>,
 }
 
 impl<S: ModSource> Installer<'_, S> {
@@ -183,6 +192,10 @@ impl<S: ModSource> Installer<'_, S> {
         let total = plan.steps.len();
         let mut done: Vec<Done> = Vec::new();
         for (index, step) in plan.steps.iter().enumerate() {
+            if let Err(error) = self.check_cancel() {
+                rollback(target.game_dir, &done);
+                return Err(error);
+            }
             let previous = existing.iter().find(|m| m.id == step.id).cloned();
             match self
                 .install_step(
@@ -293,6 +306,8 @@ impl<S: ModSource> Installer<'_, S> {
             placements,
             loader_root,
         };
+        // Dernière occasion d'annuler : ensuite, le jeu est modifié.
+        self.check_cancel()?;
         deploy_package(target, fetched, previous, existing)
     }
 
@@ -329,9 +344,12 @@ impl<S: ModSource> Installer<'_, S> {
         let sha256 = if archive.is_file() {
             download::sha256_file(&archive)?
         } else {
+            let defaults = download::Options::default();
             let options = download::Options {
                 expected_sha256: package.sha256.clone(),
-                ..download::Options::default()
+                connections: package.connections.unwrap_or(defaults.connections),
+                cancel: self.cancel.cloned(),
+                ..defaults
             };
             download::download(
                 self.client,
@@ -349,9 +367,12 @@ impl<S: ModSource> Installer<'_, S> {
                 },
             )
             .await
-            .map_err(|source| InstallError::Download {
-                name: name.clone(),
-                source,
+            .map_err(|source| match source {
+                DownloadError::Cancelled => InstallError::Cancelled,
+                source => InstallError::Download {
+                    name: name.clone(),
+                    source,
+                },
             })?
             .sha256
         };
@@ -377,15 +398,22 @@ impl<S: ModSource> Installer<'_, S> {
             // asynchrone doit rester libre. La progression revient par canal.
             let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
             let (from, to) = (archive.clone(), store_dir.clone());
+            let cancel = self.cancel.cloned();
             let job = tokio::task::spawn_blocking(move || {
                 let mut last = 0;
-                archive::extract_with_progress(&from, &to, Limits::default(), |done, size| {
-                    // Un message par Mo suffit à l'affichage.
-                    if done - last >= 1024 * 1024 || done == size {
-                        last = done;
-                        let _ = tx.send((done, size));
-                    }
-                })
+                archive::extract_cancellable(
+                    &from,
+                    &to,
+                    Limits::default(),
+                    cancel.as_ref(),
+                    |done, size| {
+                        // Un message par Mo suffit à l'affichage.
+                        if done - last >= 1024 * 1024 || done == size {
+                            last = done;
+                            let _ = tx.send((done, size));
+                        }
+                    },
+                )
             });
             while let Some((done, size)) = rx.recv().await {
                 on_progress(Progress::Extracting {
@@ -399,6 +427,9 @@ impl<S: ModSource> Installer<'_, S> {
             let extracted = job
                 .await
                 .map_err(|e| InstallError::Io(std::io::Error::other(e)))?;
+            if let Err(ArchiveError::Cancelled) = extracted {
+                return Err(InstallError::Cancelled);
+            }
             if let Err(source) = extracted {
                 // Archive illisible : on la retire du cache pour qu'un nouvel
                 // essai la télécharge à nouveau.
@@ -408,6 +439,13 @@ impl<S: ModSource> Installer<'_, S> {
         }
 
         Ok((store_dir, sha256))
+    }
+
+    fn check_cancel(&self) -> Result<(), InstallError> {
+        match self.cancel {
+            Some(cancel) if cancel.is_cancelled() => Err(InstallError::Cancelled),
+            _ => Ok(()),
+        }
     }
 
     /// Archive d'une version dans le cache des téléchargements.

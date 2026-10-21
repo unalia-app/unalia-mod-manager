@@ -10,6 +10,7 @@ use std::path::Path;
 use std::sync::Mutex as SyncMutex;
 use std::time::{Duration, Instant};
 
+use mod_engine::download::Cancel;
 use mod_engine::installer::{
     self, InstallError, Installer, NexusFile, NexusInstall, Paths, Progress, Target, Update,
 };
@@ -51,6 +52,8 @@ pub struct Mods {
     /// Installations en attente déjà téléchargées et extraites : à la
     /// fermeture du jeu, il ne reste qu'à poser les liens.
     ready: SyncMutex<HashSet<(u32, String)>>,
+    /// Drapeau d'annulation de chaque installation en cours ou en file.
+    cancels: SyncMutex<HashMap<(u32, String), Cancel>>,
 }
 
 impl Mods {
@@ -79,6 +82,7 @@ impl Mods {
             starting: SyncMutex::default(),
             fetching: Mutex::new(()),
             ready: SyncMutex::default(),
+            cancels: SyncMutex::default(),
         })
     }
 
@@ -87,6 +91,23 @@ impl Mods {
     fn is_running(&self, game: &KnownGame) -> bool {
         let exes = self.processes.lock().unwrap().running_exes();
         launch::is_running(&game.dir, &exes)
+    }
+
+    /// Début d'une installation : son drapeau d'annulation.
+    fn begin(&self, app_id: u32, mod_id: &str) -> Cancel {
+        let cancel = Cancel::default();
+        self.cancels
+            .lock()
+            .unwrap()
+            .insert((app_id, mod_id.to_owned()), cancel.clone());
+        cancel
+    }
+
+    fn end(&self, app_id: u32, mod_id: &str) {
+        self.cancels
+            .lock()
+            .unwrap()
+            .remove(&(app_id, mod_id.to_owned()));
     }
 
     fn is_starting(&self, app_id: u32) -> bool {
@@ -149,6 +170,8 @@ pub enum Outcome<T> {
     Browser {
         url: String,
     },
+    /// Annulée par l'utilisateur : rien n'a changé dans le jeu.
+    Cancelled,
 }
 
 // ---------------------------------------------------------------- état
@@ -326,6 +349,7 @@ pub async fn install_mod(
         return match run_nexus_install(&app, app_id, &game, &mod_id, NexusFile::Main).await {
             Ok(done) => Ok(Outcome::Done { value: done.mods }),
             Err(NexusFailure::Website(url)) => Ok(Outcome::Browser { url }),
+            Err(NexusFailure::Cancelled) => Ok(Outcome::Cancelled),
             Err(NexusFailure::Error(message)) => Err(message),
         };
     }
@@ -343,8 +367,11 @@ pub async fn install_mod(
         tauri::async_runtime::spawn(prefetch(app.clone(), app_id, game, mod_id));
         return Ok(Outcome::Queued);
     }
-    let value = run_install(&app, app_id, &game, &mod_id).await?;
-    Ok(Outcome::Done { value })
+    match run_install(&app, app_id, &game, &mod_id).await {
+        Ok(value) => Ok(Outcome::Done { value }),
+        Err(InstallError::Cancelled) => Ok(Outcome::Cancelled),
+        Err(error) => Err(error_message(&error)),
+    }
 }
 
 /// Télécharge et extrait en arrière-plan une installation mise en attente.
@@ -362,6 +389,7 @@ async fn prefetch(app: AppHandle, app_id: u32, game: KnownGame, mod_id: String) 
         catalog: games_catalog.as_deref(),
         client: &catalog.client,
         paths: &mods.paths,
+        cancel: None,
     };
     let target = Target {
         game: &key,
@@ -384,15 +412,18 @@ async fn run_install(
     app_id: u32,
     game: &KnownGame,
     mod_id: &str,
-) -> Result<Vec<InstalledMod>, String> {
+) -> Result<Vec<InstalledMod>, InstallError> {
     let catalog = app.state::<Catalog>();
     let mods = app.state::<Mods>();
     let games_catalog = catalog.games(app).await;
+    // Avant d'attendre son tour : on peut annuler une installation en file.
+    let cancel = mods.begin(app_id, mod_id);
     let installer = Installer {
         source: &catalog.thunderstore,
         catalog: games_catalog.as_deref(),
         client: &catalog.client,
         paths: &mods.paths,
+        cancel: Some(&cancel),
     };
     let key = game_key(app_id);
     let target = Target {
@@ -400,45 +431,20 @@ async fn run_install(
         game_dir: &game.dir,
         community: &game.community,
     };
-
-    let _fetching = mods.fetching.lock().await;
-    let mut state = mods.state.lock().await;
-    // Pas plus d'un événement par 1 % : l'interface n'en a pas besoin.
-    let mut last = None;
-    let result = installer
-        .install(&mut state, &target, mod_id, |progress| {
-            let step = match &progress {
-                Progress::Downloading {
-                    index,
-                    received,
-                    size,
-                    ..
-                } => Some((
-                    *index,
-                    0,
-                    size.map(|s| received * 100 / s.max(1))
-                        .unwrap_or(*received >> 16),
-                )),
-                Progress::Extracting {
-                    index, done, size, ..
-                } => Some((*index, 1, done * 100 / (*size).max(1))),
-                _ => None,
-            };
-            if step.is_some() && step == last {
-                return;
-            }
-            last = step;
-            let _ = app.emit(
-                "install-progress",
-                InstallEvent {
-                    app_id,
-                    mod_id: mod_id.to_owned(),
-                    progress,
-                },
-            );
-        })
-        .await;
-    result.map_err(|e| error_message(&e))
+    let result = {
+        let _fetching = mods.fetching.lock().await;
+        let mut state = mods.state.lock().await;
+        installer
+            .install(
+                &mut state,
+                &target,
+                mod_id,
+                progress_emitter(app, app_id, mod_id),
+            )
+            .await
+    };
+    mods.end(app_id, mod_id);
+    result
 }
 
 /// Événements de progression, pas plus d'un par 1 %.
@@ -484,6 +490,7 @@ fn progress_emitter<'a>(
 enum NexusFailure {
     /// Compte gratuit : il faut passer par le site, à cette adresse.
     Website(String),
+    Cancelled,
     Error(String),
 }
 
@@ -506,11 +513,13 @@ async fn run_nexus_install(
     let mods = app.state::<Mods>();
     let nexus_id = nexus_source::parse_mod_key(mod_id)
         .ok_or_else(|| NexusFailure::Error("This mod doesn't exist on Nexus Mods.".into()))?;
+    let cancel = mods.begin(app_id, mod_id);
     let installer = Installer {
         source: &catalog.nexus,
         catalog: None,
         client: &catalog.client,
         paths: &mods.paths,
+        cancel: Some(&cancel),
     };
     let key = game_key(app_id);
     let target = Target {
@@ -533,8 +542,10 @@ async fn run_nexus_install(
             )
             .await
     };
+    mods.end(app_id, mod_id);
     match result {
         Ok(done) => Ok(done),
+        Err(InstallError::Cancelled) => Err(NexusFailure::Cancelled),
         Err(InstallError::Source(SourceError::WebsiteOnly { .. })) => Err(NexusFailure::Website(
             website_download_url(&catalog, game, nexus_id).await,
         )),
@@ -558,6 +569,24 @@ async fn website_download_url(catalog: &Catalog, game: &KnownGame, mod_id: u32) 
         },
         Err(_) => format!("{page}?tab=files"),
     }
+}
+
+/// Arrête une installation en cours ou en file. Ce qui est déjà téléchargé
+/// reste en cache pour une prochaine fois ; le jeu n'est pas touché.
+#[tauri::command]
+pub async fn cancel_install(
+    mods: State<'_, Mods>,
+    app_id: u32,
+    mod_id: String,
+) -> Result<bool, String> {
+    let cancel = mods.cancels.lock().unwrap().get(&(app_id, mod_id)).cloned();
+    Ok(match cancel {
+        Some(cancel) => {
+            cancel.cancel();
+            true
+        }
+        None => false,
+    })
 }
 
 #[tauri::command]
@@ -766,12 +795,14 @@ async fn apply_pending(app: &AppHandle, app_id: u32, game: &KnownGame) {
                     Err(NexusFailure::Website(_)) => {
                         Err("Nexus Mods needs you to start this download from its website.".into())
                     }
+                    Err(NexusFailure::Cancelled) => Err("The install was cancelled.".into()),
                     Err(NexusFailure::Error(message)) => Err(message),
                 }
             }
-            PendingOp::Install { mod_id } => {
-                run_install(app, app_id, game, mod_id).await.map(|_| ())
-            }
+            PendingOp::Install { mod_id } => run_install(app, app_id, game, mod_id)
+                .await
+                .map(|_| ())
+                .map_err(|e| error_message(&e)),
             PendingOp::SetEnabled { mod_id, enabled } => {
                 let mut state = mods.state.lock().await;
                 installer::set_enabled(&mut state, &key, &game.dir, mod_id, *enabled)
@@ -1001,6 +1032,8 @@ pub async fn nexus_disconnect(
 struct NexusInstalled {
     app_id: u32,
     mod_id: String,
+    /// Annulée par l'utilisateur (pas une erreur à afficher).
+    cancelled: bool,
     /// Nom du mod installé, s'il l'a été.
     name: Option<String>,
     missing: Vec<Requirement>,
@@ -1040,6 +1073,7 @@ async fn handle_nxm(app: AppHandle, url: String) {
             "nexus-installed",
             NexusInstalled {
                 app_id: 0,
+                cancelled: false,
                 mod_id,
                 name: None,
                 missing: Vec::new(),
@@ -1053,15 +1087,16 @@ async fn handle_nxm(app: AppHandle, url: String) {
     };
     let mods = app.state::<Mods>();
     let result = if mods.is_running(&game) {
-        Err(close_first(&game))
+        Err(Some(close_first(&game)))
     } else {
         run_nexus_install(&app, app_id, &game, &mod_id, NexusFile::Link(&link))
             .await
             .map_err(|failure| match failure {
-                NexusFailure::Website(_) => {
-                    "Nexus Mods refused this link. It may have expired: click the download button again.".into()
-                }
-                NexusFailure::Error(message) => message,
+                NexusFailure::Website(_) => Some(
+                    "Nexus Mods refused this link. It may have expired: click the download button again.".into(),
+                ),
+                NexusFailure::Cancelled => None,
+                NexusFailure::Error(message) => Some(message),
             })
     };
     let event = match result {
@@ -1073,15 +1108,17 @@ async fn handle_nxm(app: AppHandle, url: String) {
                 .find(|m| m.id == mod_id)
                 .map(|m| m.name.clone()),
             mod_id,
+            cancelled: false,
             missing: done.missing,
             error: None,
         },
         Err(error) => NexusInstalled {
             app_id,
             mod_id,
+            cancelled: error.is_none(),
             name: None,
             missing: Vec::new(),
-            error: Some(error),
+            error,
         },
     };
     let _ = app.emit("nexus-installed", event);

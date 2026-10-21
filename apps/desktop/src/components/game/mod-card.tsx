@@ -1,7 +1,7 @@
 "use client";
 
 import { Badge, Skeleton, Spinner, cn } from "@modalia/ui";
-import { ArrowUp, Download, ExternalLink, Package, RotateCw } from "lucide-react";
+import { ArrowUp, Download, ExternalLink, Package, RotateCw, X } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 
@@ -10,7 +10,7 @@ import type { ModSummary } from "@/lib/engine";
 import { compactNumber, relativeDate } from "@/lib/format";
 import { usePendingOp } from "@/lib/game-status";
 import { modHref } from "@/lib/games-store";
-import { install, overallProgress, useActiveInstall, useInstalled, useModUpdate } from "@/lib/installs";
+import { cancel, install, overallProgress, useActiveInstall, useInstalled, useModUpdate } from "@/lib/installs";
 import { openExternal } from "@/lib/open";
 
 /**
@@ -103,7 +103,13 @@ export function ModCard({
 					</span>
 					<span aria-hidden>·</span>
 					<span className="truncate">{relativeDate(mod.updatedAt)}</span>
-					{category && <Badge className="ml-auto max-w-[45%] truncate">{category}</Badge>}
+					{/* Le texte est tronqué dans le badge, pas le badge lui-même : même
+					    marge à gauche et à droite. */}
+					{category && (
+						<Badge className="ml-auto max-w-[45%] min-w-0 shrink" title={category}>
+							<span className="min-w-0 truncate">{category}</span>
+						</Badge>
+					)}
 				</div>
 			</div>
 		</article>
@@ -136,12 +142,13 @@ function QuickInstall({ appId, modId, name }: { appId: number; modId: string; na
 	return (
 		<button
 			type="button"
-			disabled={busy}
-			aria-label={busy ? `Installing ${name}` : `${label} ${name}`}
+			aria-label={busy ? `Cancel installing ${name}` : `${label} ${name}`}
 			title={failed ? active.message : website ? "Click Slow download on Nexus Mods, Unalia does the rest" : undefined}
-			onClick={() => void (website ? openExternal(website) : install(appId, modId))}
+			onClick={() =>
+				void (busy ? cancel(appId, modId) : website ? openExternal(website) : install(appId, modId, name))
+			}
 			className={cn(
-				"absolute right-2 bottom-2 z-20 flex h-7 min-w-[4.5rem] cursor-pointer items-center justify-center gap-1.5 rounded-full px-2.5 font-tight text-[11px] font-semibold shadow-lg transition-[opacity,translate,background-color] duration-200 ease-out disabled:cursor-default",
+				"group/quick absolute right-2 bottom-2 z-20 flex h-7 min-w-[4.5rem] cursor-pointer items-center justify-center gap-1.5 rounded-full px-2.5 font-tight text-[11px] font-semibold shadow-lg transition-[opacity,translate,background-color] duration-200 ease-out",
 				// Au survol seulement : sur toute une grille, un bouton par carte
 				// se répète trop. Il reste affiché pendant l'installation et en
 				// cas d'échec, pour ne pas perdre l'info.
@@ -153,8 +160,15 @@ function QuickInstall({ appId, modId, name }: { appId: number; modId: string; na
 		>
 			{busy ? (
 				<>
-					<Spinner className="size-3 border-[1.5px]" />
-					{percent !== null ? `${percent}%` : "…"}
+					{/* En cours : l'avancement, et au survol de quoi l'arrêter. */}
+					<span className="flex items-center gap-1.5 group-hover/quick:hidden group-focus-visible/quick:hidden">
+						<Spinner className="size-3 border-[1.5px]" />
+						{percent !== null ? `${percent}%` : "…"}
+					</span>
+					<span className="hidden items-center gap-1 group-hover/quick:flex group-focus-visible/quick:flex">
+						<X className="size-3" strokeWidth={2.5} />
+						Cancel
+					</span>
 				</>
 			) : (
 				<>

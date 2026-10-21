@@ -7,6 +7,8 @@
 //! - **Reprise** : l'avancement de chaque morceau est noté à côté du fichier
 //!   (`.part.json`). Une coupure réseau est retentée automatiquement, et un
 //!   téléchargement interrompu (Modalia fermé) reprend où il en était.
+//! - **Annulable** : un drapeau partagé (`Cancel`) arrête tout au prochain
+//!   bloc reçu. Ce qui est déjà arrivé est gardé pour reprendre plus tard.
 //! - **Espace disque** vérifié avant de commencer.
 //! - **Empreinte SHA-256** toujours calculée et conservée, vérifiée si la
 //!   source en publie une (SPEC §7). Le fichier n'apparaît sous son nom final
@@ -15,6 +17,7 @@
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -24,6 +27,27 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use crate::HttpClient;
+
+/// Drapeau d'annulation partagé entre l'interface et le travail en cours.
+#[derive(Debug, Clone, Default)]
+pub struct Cancel(Arc<AtomicBool>);
+
+impl Cancel {
+    pub fn cancel(&self) {
+        self.0.store(true, Ordering::Relaxed);
+    }
+
+    pub fn is_cancelled(&self) -> bool {
+        self.0.load(Ordering::Relaxed)
+    }
+}
+
+fn check(cancel: Option<&Cancel>) -> Result<(), DownloadError> {
+    match cancel {
+        Some(c) if c.is_cancelled() => Err(DownloadError::Cancelled),
+        _ => Ok(()),
+    }
+}
 
 /// Aucune archive de mod légitime n'approche cette taille.
 pub const MAX_DOWNLOAD_BYTES: u64 = 128 * 1024 * 1024 * 1024;
@@ -41,6 +65,8 @@ pub struct Options {
     pub space_factor: f64,
     /// Nouvelles tentatives par morceau après une coupure.
     pub retries: u32,
+    /// Annulation demandée par l'utilisateur.
+    pub cancel: Option<Cancel>,
 }
 
 impl Default for Options {
@@ -52,6 +78,7 @@ impl Default for Options {
             parallel_from: 32 * 1024 * 1024,
             space_factor: 2.2,
             retries: 5,
+            cancel: None,
         }
     }
 }
@@ -77,6 +104,8 @@ pub enum DownloadError {
     Protocol(String),
     #[error("couldn't save the download")]
     Io(#[from] io::Error),
+    #[error("the download was cancelled")]
+    Cancelled,
 }
 
 /// Télécharge `url` vers `dest`. `on_progress(reçu, total)` est appelé au
@@ -88,6 +117,7 @@ pub async fn download(
     options: &Options,
     mut on_progress: impl FnMut(u64, Option<u64>),
 ) -> Result<Downloaded, DownloadError> {
+    check(options.cancel.as_ref())?;
     if let Some(dir) = dest.parent() {
         fs::create_dir_all(dir)?;
     }
@@ -147,13 +177,14 @@ pub async fn download(
         // fichier entier, on la lit d'une traite.
         _ => {
             let _ = fs::remove_file(&partial);
-            single(probe, &partial, total, options.max_bytes, &mut on_progress).await
+            single(probe, &partial, total, options, &mut on_progress).await
         }
     };
     let size = match outcome {
         Ok(size) => size,
-        // Coupure : on garde `.part` et son journal pour reprendre.
-        Err(error @ DownloadError::Network(_)) => return Err(error),
+        // Coupure ou annulation : on garde `.part` et son journal pour
+        // reprendre.
+        Err(error @ (DownloadError::Network(_) | DownloadError::Cancelled)) => return Err(error),
         Err(error) => {
             let _ = fs::remove_file(&partial);
             let _ = fs::remove_file(&journal);
@@ -191,15 +222,16 @@ async fn single(
     mut response: reqwest::Response,
     partial: &Path,
     total: Option<u64>,
-    max_bytes: u64,
+    options: &Options,
     on_progress: &mut impl FnMut(u64, Option<u64>),
 ) -> Result<u64, DownloadError> {
     let mut file = File::create(partial)?;
     let mut received = 0u64;
     while let Some(chunk) = response.chunk().await? {
+        check(options.cancel.as_ref())?;
         received += chunk.len() as u64;
         // On ne croit pas Content-Length : on compte ce qui arrive.
-        if received > max_bytes {
+        if received > options.max_bytes {
             return Err(DownloadError::TooLarge);
         }
         file.write_all(&chunk)?;
@@ -241,6 +273,7 @@ async fn resumable(
             }
             let mut received = fs::metadata(partial)?.len();
             while let Some(chunk) = response.chunk().await? {
+                check(options.cancel.as_ref())?;
                 received += chunk.len() as u64;
                 if received > options.max_bytes {
                     return Err(DownloadError::TooLarge);
@@ -357,9 +390,18 @@ async fn parallel(
             journal.clone(),
             tx.clone(),
         );
-        let retries = options.retries;
+        let (retries, cancel) = (options.retries, options.cancel.clone());
         tasks.spawn(async move {
-            fetch_segment(&client, &url, &partial, &journal, index, retries, &tx).await
+            fetch_segment(
+                &client,
+                &url,
+                &partial,
+                &journal,
+                index,
+                (retries, cancel.as_ref()),
+                &tx,
+            )
+            .await
         });
     }
     drop(tx);
@@ -397,7 +439,7 @@ async fn fetch_segment(
     partial: &Path,
     journal: &Mutex<Journal>,
     index: usize,
-    retries: u32,
+    (retries, cancel): (u32, Option<&Cancel>),
     progress: &tokio::sync::mpsc::UnboundedSender<u64>,
 ) -> Result<(), DownloadError> {
     let mut attempts = 0;
@@ -422,6 +464,7 @@ async fn fetch_segment(
             file.seek(SeekFrom::Start(next))?;
             let mut position = next;
             while let Some(chunk) = response.chunk().await? {
+                check(cancel)?;
                 // Un serveur qui en envoie plus que demandé n'écrase pas le
                 // morceau voisin.
                 let room = (end + 1 - position) as usize;

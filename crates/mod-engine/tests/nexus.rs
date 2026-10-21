@@ -248,6 +248,7 @@ impl World {
             catalog: None,
             client: &self.client,
             paths: &self.paths,
+            cancel: None,
         };
         let target = Target {
             game: GAME,
