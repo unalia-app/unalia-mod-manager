@@ -235,6 +235,19 @@ export function cancelInstall(appId: number, modId: string): Promise<boolean> {
 	return invoke("cancel_install", { appId, modId });
 }
 
+/** Téléchargement interrompu (appli quittée, réseau perdu), reprenable. */
+export type PausedDownload = { appId: number; modId: string; name: string; received: number; total: number | null };
+
+export function pausedDownloads(appId: number): Promise<PausedDownload[]> {
+	if (!isTauri()) return Promise.resolve([]);
+	return invoke("paused_downloads", { appId });
+}
+
+/** Jette un téléchargement en pause et ce qu'il avait déjà reçu. */
+export function discardDownload(appId: number, modId: string): Promise<void> {
+	return invoke("discard_download", { appId, modId });
+}
+
 export function setModEnabled(appId: number, modId: string, enabled: boolean): Promise<Outcome<InstalledMod>> {
 	return invoke("set_mod_enabled", { appId, modId, enabled });
 }

@@ -368,7 +368,12 @@ impl<S: ModSource> Installer<'_, S> {
             )
             .await
             .map_err(|source| match source {
-                DownloadError::Cancelled => InstallError::Cancelled,
+                // Annuler, c'est renoncer : le début du fichier part aussi.
+                // (Quitter l'appli, elle, garde de quoi reprendre.)
+                DownloadError::Cancelled => {
+                    discard_partial(&archive);
+                    InstallError::Cancelled
+                }
                 source => InstallError::Download {
                     name: name.clone(),
                     source,
@@ -550,6 +555,38 @@ fn owned_elsewhere(
             .find(|f| wanted.contains(&f.to_ascii_lowercase()))?;
         Some((path.clone(), m.name.clone()))
     })
+}
+
+/// Retire le début d'un téléchargement et son journal de reprise.
+fn discard_partial(archive: &Path) {
+    let _ = fs::remove_file(archive.with_extension("part"));
+    let _ = fs::remove_file(archive.with_extension("part.json"));
+}
+
+/// Débuts de téléchargement d'un mod (toutes versions) laissés dans le
+/// cache, ex. après avoir quitté l'appli : de quoi reprendre, ou à jeter.
+/// Noms : `<id>-<version>.part` et son journal `.part.json`.
+pub fn partial_downloads(paths: &Paths, id: &str) -> Vec<PathBuf> {
+    let prefix = format!("{id}-");
+    let Ok(entries) = fs::read_dir(&paths.downloads) else {
+        return Vec::new();
+    };
+    entries
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| {
+            p.file_name().and_then(|n| n.to_str()).is_some_and(|n| {
+                n.starts_with(&prefix) && (n.ends_with(".part") || n.ends_with(".part.json"))
+            })
+        })
+        .collect()
+}
+
+/// Jette les débuts de téléchargement d'un mod.
+pub fn discard_partial_downloads(paths: &Paths, id: &str) {
+    for file in partial_downloads(paths, id) {
+        let _ = fs::remove_file(file);
+    }
 }
 
 /// Segment de chemin sûr tiré d'une version (`1.2/beta` → `1.2_beta`).

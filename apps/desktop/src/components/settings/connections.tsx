@@ -200,7 +200,7 @@ function ApiKeyForm({ onCancel }: { onCancel: () => void }) {
 						placeholder="Personal API key"
 						autoComplete="off"
 						spellCheck={false}
-						// biome-ignore lint/a11y/noAutofocus: le formulaire s'ouvre sur demande, pour y coller la clé.
+						// Le formulaire s'ouvre sur demande, pour y coller la clé.
 						autoFocus
 						className="h-full min-w-0 flex-1 bg-transparent text-sm text-fg outline-none placeholder:text-fg-faint"
 					/>

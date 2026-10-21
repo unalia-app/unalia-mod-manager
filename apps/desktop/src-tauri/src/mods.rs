@@ -18,7 +18,7 @@ use mod_engine::launch::{self, LaunchTarget, PendingOp, ProcessWatcher};
 use mod_engine::sources::SourceError;
 use mod_engine::sources::nexus::{self as nexus_source, Account, NxmLink, Requirement};
 use mod_engine::state::{InstalledMod, State as ModState};
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tauri::async_runtime::Mutex;
 use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_deep_link::DeepLinkExt;
@@ -54,6 +54,8 @@ pub struct Mods {
     ready: SyncMutex<HashSet<(u32, String)>>,
     /// Drapeau d'annulation de chaque installation en cours ou en file.
     cancels: SyncMutex<HashMap<(u32, String), Cancel>>,
+    /// Téléchargements en cours ou interrompus (voir `Paused`).
+    paused: SyncMutex<Paused>,
 }
 
 impl Mods {
@@ -83,6 +85,7 @@ impl Mods {
             fetching: Mutex::new(()),
             ready: SyncMutex::default(),
             cancels: SyncMutex::default(),
+            paused: SyncMutex::new(Paused::load(data.join("downloads.json"))),
         })
     }
 
@@ -444,6 +447,7 @@ async fn run_install(
             .await
     };
     mods.end(app_id, mod_id);
+    settle_download(&mods, app_id, mod_id, result.as_ref().err());
     result
 }
 
@@ -476,6 +480,27 @@ fn progress_emitter<'a>(
             return;
         }
         last = step;
+        // Noté sur disque : si l'appli est quittée, le téléchargement
+        // apparaîtra « en pause » au prochain lancement.
+        if let Progress::Downloading {
+            name,
+            received,
+            size,
+            ..
+        } = &progress
+        {
+            app.state::<Mods>()
+                .paused
+                .lock()
+                .unwrap()
+                .track(PausedDownload {
+                    app_id,
+                    mod_id: mod_id.to_owned(),
+                    name: name.clone(),
+                    received: *received,
+                    total: *size,
+                });
+        }
         let _ = app.emit(
             "install-progress",
             InstallEvent {
@@ -485,6 +510,138 @@ fn progress_emitter<'a>(
             },
         );
     }
+}
+
+/// Téléchargement interrompu (appli quittée, réseau perdu) : affiché « en
+/// pause » avec de quoi reprendre là où il en était, ou le jeter.
+#[derive(Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PausedDownload {
+    app_id: u32,
+    mod_id: String,
+    /// Paquet en cours au moment de l'arrêt.
+    name: String,
+    received: u64,
+    total: Option<u64>,
+}
+
+/// Journal des téléchargements en cours, gardé dans `downloads.json`. Hors
+/// de la base : celle-ci reste verrouillée pendant toute une installation.
+struct Paused {
+    file: std::path::PathBuf,
+    entries: HashMap<(u32, String), PausedDownload>,
+    saved_at: Option<Instant>,
+}
+
+impl Paused {
+    fn load(file: std::path::PathBuf) -> Self {
+        let entries = std::fs::read(&file)
+            .ok()
+            .and_then(|bytes| serde_json::from_slice::<Vec<PausedDownload>>(&bytes).ok())
+            .unwrap_or_default()
+            .into_iter()
+            .map(|d| ((d.app_id, d.mod_id.clone()), d))
+            .collect();
+        Self {
+            file,
+            entries,
+            saved_at: None,
+        }
+    }
+
+    fn save(&mut self) {
+        let list: Vec<&PausedDownload> = self.entries.values().collect();
+        if let Ok(json) = serde_json::to_vec(&list) {
+            let tmp = self.file.with_extension("tmp");
+            if std::fs::write(&tmp, json).is_ok() {
+                let _ = std::fs::rename(tmp, &self.file);
+            }
+        }
+        self.saved_at = Some(Instant::now());
+    }
+
+    /// Avancement d'un téléchargement : sur disque toutes les 2 s au plus.
+    fn track(&mut self, download: PausedDownload) {
+        let fresh = !self
+            .entries
+            .contains_key(&(download.app_id, download.mod_id.clone()));
+        self.entries
+            .insert((download.app_id, download.mod_id.clone()), download);
+        if fresh
+            || self
+                .saved_at
+                .is_none_or(|at| at.elapsed() >= Duration::from_secs(2))
+        {
+            self.save();
+        }
+    }
+
+    fn forget(&mut self, app_id: u32, mod_id: &str) {
+        if self.entries.remove(&(app_id, mod_id.to_owned())).is_some() {
+            self.save();
+        }
+    }
+}
+
+/// Fin d'une installation : une coupure réseau laisse le téléchargement en
+/// pause (de quoi reprendre) ; le reste (réussite, annulation, erreur) le
+/// sort du journal.
+fn settle_download(mods: &Mods, app_id: u32, mod_id: &str, error: Option<&InstallError>) {
+    let interrupted = matches!(
+        error,
+        Some(InstallError::Download {
+            source: mod_engine::download::DownloadError::Network(_),
+            ..
+        })
+    );
+    if !interrupted {
+        mods.paused.lock().unwrap().forget(app_id, mod_id);
+    }
+}
+
+/// Téléchargements du jeu en pause, dont le début est toujours en cache.
+#[tauri::command]
+pub async fn paused_downloads(
+    mods: State<'_, Mods>,
+    app_id: u32,
+) -> Result<Vec<PausedDownload>, String> {
+    let active: HashSet<String> = mods
+        .cancels
+        .lock()
+        .unwrap()
+        .keys()
+        .filter(|(id, _)| *id == app_id)
+        .map(|(_, m)| m.clone())
+        .collect();
+    let mut paused = mods.paused.lock().unwrap();
+    let candidates: Vec<PausedDownload> = paused
+        .entries
+        .values()
+        .filter(|d| d.app_id == app_id && !active.contains(&d.mod_id))
+        .cloned()
+        .collect();
+    let mut kept = Vec::new();
+    for download in candidates {
+        if installer::partial_downloads(&mods.paths, &download.mod_id).is_empty() {
+            // Plus rien en cache : rien à reprendre.
+            paused.forget(app_id, &download.mod_id);
+        } else {
+            kept.push(download);
+        }
+    }
+    Ok(kept)
+}
+
+/// Jette un téléchargement en pause et ce qu'il avait déjà reçu.
+#[tauri::command]
+pub async fn discard_download(
+    mods: State<'_, Mods>,
+    app_id: u32,
+    mod_id: String,
+) -> Result<(), String> {
+    installer::discard_partial_downloads(&mods.paths, &mod_id);
+    mods.paused.lock().unwrap().forget(app_id, &mod_id);
+    Ok(())
 }
 
 enum NexusFailure {
@@ -543,6 +700,7 @@ async fn run_nexus_install(
             .await
     };
     mods.end(app_id, mod_id);
+    settle_download(&mods, app_id, mod_id, result.as_ref().err());
     match result {
         Ok(done) => Ok(done),
         Err(InstallError::Cancelled) => Err(NexusFailure::Cancelled),

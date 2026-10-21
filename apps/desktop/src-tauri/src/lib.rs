@@ -455,6 +455,8 @@ pub fn run() {
             mods::installed_mods,
             mods::install_mod,
             mods::cancel_install,
+            mods::paused_downloads,
+            mods::discard_download,
             mods::set_mod_enabled,
             mods::uninstall_mod,
             mods::restore_mod,

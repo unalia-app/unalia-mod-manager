@@ -295,6 +295,7 @@ impl Installer<'_, Nexus> {
                     return Some(asset.url.clone());
                 }
                 let _ = std::fs::remove_file(archive);
+                super::discard_partial(archive);
             }
         }
         None

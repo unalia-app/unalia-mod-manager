@@ -1,14 +1,15 @@
 "use client";
 
 import { Badge, Button, Skeleton, Spinner, Switch, cn } from "@modalia/ui";
-import { ArrowUp, ExternalLink, Layers, Package, Trash2, X } from "lucide-react";
+import { ArrowUp, ExternalLink, Layers, Package, Pause, Play, Trash2, X } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import { progressDetail, progressLabel } from "@/components/mod/install-button";
 import { Notice } from "@/components/notice";
 import { toast } from "@/components/toaster";
-import { type InstalledMod, splitError } from "@/lib/engine";
+import { type InstalledMod, type PausedDownload, discardDownload, pausedDownloads, splitError } from "@/lib/engine";
+import { bytes } from "@/lib/format";
 import { usePendingOp } from "@/lib/game-status";
 import { modHref } from "@/lib/games-store";
 import { openExternal } from "@/lib/open";
@@ -96,23 +97,84 @@ export function MyMods({ appId, onDiscover }: { appId: number; onDiscover: () =>
 	);
 }
 
-/** Téléchargements et installations du jeu en cours, chacun annulable. */
+/**
+ * Téléchargements et installations du jeu en cours, chacun annulable, puis
+ * ceux mis en pause (appli quittée) : à reprendre là où ils en étaient.
+ */
 function InProgress({ appId }: { appId: number }) {
 	const active = useActiveInstalls(appId);
-	if (active.length === 0) return null;
+	const [paused, setPaused] = useState<PausedDownload[]>([]);
+	const refresh = useCallback(() => {
+		pausedDownloads(appId).then(setPaused, () => setPaused([]));
+	}, [appId]);
+	// Une installation qui démarre ou se termine change la liste des pauses.
+	useEffect(refresh, [refresh, active.length]);
+
+	const waiting = paused.filter((p) => !active.some(([id]) => id === p.modId));
+	const count = active.length + waiting.length;
+	if (count === 0) return null;
 	return (
 		<section className="mb-6">
-			<h2 className="mb-2 px-1 text-xs font-semibold tracking-wide text-fg-subtle uppercase">
-				In progress ({active.length})
-			</h2>
+			<h2 className="mb-2 px-1 text-xs font-semibold tracking-wide text-fg-subtle uppercase">In progress ({count})</h2>
 			<ul className="overflow-hidden rounded-xl border border-line bg-surface">
 				{active.map(([modId, a], i) => (
 					<li key={modId} className={cn(i > 0 && "border-t border-line")}>
 						<ProgressRow appId={appId} modId={modId} active={a} />
 					</li>
 				))}
+				{waiting.map((p, i) => (
+					<li key={p.modId} className={cn((active.length > 0 || i > 0) && "border-t border-line")}>
+						<PausedRow appId={appId} download={p} onDiscarded={refresh} />
+					</li>
+				))}
 			</ul>
 		</section>
+	);
+}
+
+function PausedRow({ appId, download: p, onDiscarded }: { appId: number; download: PausedDownload; onDiscarded: () => void }) {
+	const value = p.total ? p.received / p.total : 0;
+	const discard = () =>
+		discardDownload(appId, p.modId).then(onDiscarded, (error: unknown) => {
+			const { message } = splitError(error);
+			toast({ title: message, tone: "error" });
+		});
+
+	return (
+		<div className="flex animate-row-in items-center gap-3 px-4 py-3">
+			<div className="flex min-w-0 flex-1 flex-col gap-1.5">
+				<span className="flex items-baseline justify-between gap-3">
+					<span className="flex min-w-0 items-center gap-1.5">
+						<Pause className="size-3.5 shrink-0 text-fg-subtle" />
+						<span className="truncate text-sm font-medium text-fg">{p.name}</span>
+					</span>
+					<span className="shrink-0 font-tight text-[11px] text-fg-subtle">
+						Paused{p.total ? ` · ${Math.round(value * 100)}%` : ""}
+					</span>
+				</span>
+				<span className="relative h-1.5 overflow-hidden rounded-full bg-surface-strong">
+					<span
+						className="absolute inset-y-0 left-0 w-full origin-left rounded-full bg-fg-faint"
+						style={{ scale: `${Math.max(value, 0.02)} 1` }}
+					/>
+				</span>
+				<span className="truncate text-[11px] text-fg-subtle">
+					{p.total ? `${bytes(p.received)} of ${bytes(p.total)} · ` : ""}picks up where it stopped
+				</span>
+			</div>
+			<Button size="sm" variant="outline" leftIcon={<Play className="size-3.5" />} onClick={() => void install(appId, p.modId, p.name)}>
+				Resume
+			</Button>
+			<button
+				type="button"
+				aria-label={`Discard ${p.name}`}
+				title="Discard what was downloaded"
+				onClick={() => void discard()}
+				className="cursor-pointer rounded-md p-2 text-fg-subtle transition-colors hover:bg-danger/10 hover:text-danger"
+			>
+				<X className="size-4" />
+			</button>
+		</div>
 	);
 }
 

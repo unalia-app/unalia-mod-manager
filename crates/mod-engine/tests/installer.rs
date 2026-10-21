@@ -609,3 +609,40 @@ async fn a_cancelled_install_leaves_the_game_untouched() {
     assert_eq!(snapshot(&w.game), before);
     assert!(w.state.list("steam:1030300").unwrap().is_empty());
 }
+
+#[test]
+fn partial_downloads_are_found_per_mod_and_discarded() {
+    use mod_engine::installer::{discard_partial_downloads, partial_downloads};
+
+    let tmp = tempfile::tempdir().unwrap();
+    let paths = Paths {
+        store: tmp.path().join("store"),
+        downloads: tmp.path().join("downloads"),
+    };
+    fs::create_dir_all(&paths.downloads).unwrap();
+    for name in [
+        "nexus-4198-1.27.5.part",
+        "nexus-4198-1.27.5.part.json",
+        "nexus-4198-1.27.4.zip",
+        "nexus-41980-1.0.part",
+        "Author-Mod-1.0.0.part",
+    ] {
+        fs::write(paths.downloads.join(name), b"x").unwrap();
+    }
+    let mut found: Vec<_> = partial_downloads(&paths, "nexus-4198")
+        .into_iter()
+        .map(|p| p.file_name().unwrap().to_string_lossy().into_owned())
+        .collect();
+    found.sort();
+    assert_eq!(
+        found,
+        ["nexus-4198-1.27.5.part", "nexus-4198-1.27.5.part.json"]
+    );
+
+    discard_partial_downloads(&paths, "nexus-4198");
+    assert!(partial_downloads(&paths, "nexus-4198").is_empty());
+    // Les autres mods et l'archive complète ne bougent pas.
+    assert!(paths.downloads.join("nexus-4198-1.27.4.zip").is_file());
+    assert!(paths.downloads.join("nexus-41980-1.0.part").is_file());
+    assert_eq!(partial_downloads(&paths, "Author-Mod").len(), 1);
+}
