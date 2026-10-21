@@ -5,6 +5,7 @@
 
 pub mod github;
 pub mod nexus;
+pub mod nexus_sso;
 pub mod thunderstore;
 
 use std::future::Future;

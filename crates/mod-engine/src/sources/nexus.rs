@@ -51,6 +51,7 @@ pub fn domain_of(community: &str) -> Option<&str> {
 pub struct Account {
     pub name: String,
     pub premium: bool,
+    pub avatar_url: Option<String>,
 }
 
 /// Lien `nxm://<domaine>/mods/<mod>/files/<fichier>?key=…&expires=…`.
@@ -190,6 +191,7 @@ impl Nexus {
         Ok(Account {
             name: user.name,
             premium: user.is_premium,
+            avatar_url: user.profile_url.filter(|u| u.starts_with("https://")),
         })
     }
 
@@ -782,6 +784,8 @@ struct User {
     name: String,
     #[serde(default)]
     is_premium: bool,
+    /// Malgré son nom, l'adresse de l'avatar.
+    profile_url: Option<String>,
 }
 
 #[derive(Deserialize)]
