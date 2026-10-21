@@ -305,12 +305,21 @@ async fn artwork_file(app: &AppHandle, app_id: u32, kind: ArtworkKind) -> Option
     {
         return Some(file);
     }
-    let remote = library.remote_art.lock().unwrap().get(&app_id).cloned()?;
-    let (url, name) = match kind {
-        ArtworkKind::Cover => (remote.cover?, "cover"),
-        ArtworkKind::Hero | ArtworkKind::HeroBlur => (remote.hero?, "hero"),
-        ArtworkKind::Header | ArtworkKind::Logo => return None,
+    let remote = library
+        .remote_art
+        .lock()
+        .unwrap()
+        .get(&app_id)
+        .cloned()
+        .unwrap_or_default();
+    let thunderstore = match kind {
+        ArtworkKind::Cover => remote.cover.map(|u| (u, "cover")),
+        ArtworkKind::Hero | ArtworkKind::HeroBlur => remote.hero.map(|u| (u, "hero")),
+        ArtworkKind::Header | ArtworkKind::Logo => None,
     };
+    // Sinon, les images publiques de la page Steam du jeu : utile pour une
+    // copie GOG ou Epic d'un jeu aussi vendu sur Steam.
+    let (url, name) = thunderstore.or_else(|| steam_store_art(app_id, kind))?;
     let extension = url
         .rsplit('.')
         .next()
@@ -337,6 +346,25 @@ async fn artwork_file(app: &AppHandle, app_id: u32, kind: ArtworkKind) -> Option
             .ok()?;
     }
     Some(file)
+}
+
+/// Image publique de la page Steam d'un jeu. Les jeux sans identifiant
+/// Steam ont un identifiant dérivé, bit de poids fort à 1 (`manual_app_id`) :
+/// rien à chercher pour eux.
+fn steam_store_art(app_id: u32, kind: ArtworkKind) -> Option<(String, &'static str)> {
+    if app_id & 0x8000_0000 != 0 {
+        return None;
+    }
+    let (file, name) = match kind {
+        ArtworkKind::Cover => ("library_600x900_2x.jpg", "steam-cover"),
+        ArtworkKind::Hero | ArtworkKind::HeroBlur => ("library_hero.jpg", "steam-hero"),
+        ArtworkKind::Header => ("header.jpg", "steam-header"),
+        ArtworkKind::Logo => ("logo.png", "steam-logo"),
+    };
+    Some((
+        format!("https://cdn.cloudflare.steamstatic.com/steam/apps/{app_id}/{file}"),
+        name,
+    ))
 }
 
 /// En dev, `MODALIA_STEAM_ROOT` remplace la recherche automatique (ex. pour
