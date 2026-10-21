@@ -5,11 +5,8 @@ import { Check, ExternalLink, KeyRound, LogOut } from "lucide-react";
 import { type FormEvent, type ReactNode, useState } from "react";
 
 import { toast } from "@/components/toaster";
-import { splitError } from "@/lib/engine";
+import { openNexusSignIn, splitError } from "@/lib/engine";
 import { connectNexus, disconnectNexus, loginNexus, useNexusStatus } from "@/lib/nexus";
-import { openExternal } from "@/lib/open";
-
-const API_KEYS_PAGE = "https://next.nexusmods.com/settings/api-keys";
 
 /** Comptes des sources de mods, sur le modèle des Connections d'Unalia. */
 export function Connections() {
@@ -64,9 +61,12 @@ function NexusCard() {
 	};
 
 	const connect = async () => {
-		// Sans l'approbation de Nexus, la clé personnelle est la seule voie.
+		// Sans l'approbation de Nexus, la clé personnelle est la seule voie :
+		// la fenêtre Nexus s'ouvre sur la page des clés, où l'on se connecte
+		// d'abord. Cette connexion au site sert ensuite aux téléchargements.
 		if (!status?.sso) {
 			setKeyForm(true);
+			openNexusSignIn().catch(fail);
 			return;
 		}
 		setBusy(true);
@@ -146,7 +146,7 @@ function NexusCard() {
 					</Button>
 				)}
 				{busy && status?.sso && (
-					<p className="mt-2 text-xs text-fg-subtle">Click Authorise on the Nexus Mods page that opened in your browser.</p>
+					<p className="mt-2 text-xs text-fg-subtle">Sign in and click Authorise in the Nexus Mods window.</p>
 				)}
 			</div>
 		</ConnectionCard>
@@ -179,16 +179,16 @@ function ApiKeyForm({ onCancel }: { onCancel: () => void }) {
 	return (
 		<form onSubmit={submit} className="max-w-xl">
 			<p className="text-xs leading-relaxed text-fg-subtle">
-				Until Nexus approves Modalia's one-click login, link your account with your personal API key. Open{" "}
+				Sign in to Nexus Mods in the window that opened: Modalia remembers it for your downloads. Then copy the Personal
+				API Key at the bottom of that page and paste it here. It never leaves this computer.{" "}
 				<button
 					type="button"
-					onClick={() => void openExternal(API_KEYS_PAGE)}
+					onClick={() => void openNexusSignIn()}
 					className="inline-flex cursor-pointer items-center gap-0.5 text-fg-muted underline underline-offset-2 hover:text-fg"
 				>
-					your API keys
+					Open the window again
 					<ExternalLink className="size-3" />
 				</button>
-				, copy the Personal API Key at the bottom of the page, and paste it here. It never leaves this computer.
 			</p>
 			<div className="mt-3 flex gap-2">
 				<label className="flex h-9 min-w-0 flex-1 items-center gap-2 rounded-md border border-line-strong bg-surface-strong px-3 focus-within:border-white/30 focus-within:ring-2 focus-within:ring-white/20">

@@ -130,7 +130,7 @@ function ModDetailsView({
 		: account === null && !mod.direct
 			? "Link your Nexus Mods account in Settings first"
 			: account && !account.premium && !mod.direct
-				? "Nexus asks free accounts to confirm each download on its website"
+				? "Free Nexus accounts confirm each download with one click, in the Nexus window"
 				: undefined;
 
 	return (

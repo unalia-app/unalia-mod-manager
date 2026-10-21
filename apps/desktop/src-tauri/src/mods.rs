@@ -143,9 +143,9 @@ pub enum Outcome<T> {
         value: T,
     },
     Queued,
-    /// Le site doit donner son accord (Nexus, compte gratuit) : l'interface
-    /// ouvre `url`, le lien `nxm://` du bouton « Mod Manager Download »
-    /// revient à Modalia qui termine l'installation.
+    /// Le site doit donner son accord (Nexus, compte gratuit) : sa page
+    /// `url` s'ouvre dans la fenêtre Nexus de Modalia, le lien `nxm://` du
+    /// bouton « Slow download » y est intercepté et l'installation continue.
     Browser {
         url: String,
     },
@@ -325,7 +325,10 @@ pub async fn install_mod(
         }
         return match run_nexus_install(&app, app_id, &game, &mod_id, NexusFile::Main).await {
             Ok(done) => Ok(Outcome::Done { value: done.mods }),
-            Err(NexusFailure::Website(url)) => Ok(Outcome::Browser { url }),
+            Err(NexusFailure::Website(url)) => {
+                show_nexus_window(&app, &url)?;
+                Ok(Outcome::Browser { url })
+            }
             Err(NexusFailure::Error(message)) => Err(message),
         };
     }
@@ -920,12 +923,14 @@ pub async fn nexus_login(
     mods: State<'_, Mods>,
 ) -> Result<Account, String> {
     let application = NEXUS_SSO_APP.ok_or("Nexus Mods hasn't approved Modalia's login yet.")?;
-    let opener = app.clone();
+    let window = app.clone();
     let key = mod_engine::sources::nexus_sso::login(
         mod_engine::sources::nexus_sso::SSO_URL,
         application,
+        // Dans la fenêtre Nexus : la connexion au site faite ici sert
+        // ensuite aux téléchargements.
         move |url| {
-            let _ = opener.opener().open_url(url, None::<&str>);
+            let _ = show_nexus_window(&window, &url);
         },
     )
     .await
@@ -957,6 +962,10 @@ async fn save_nexus_key(
         .set_setting(NEXUS_KEY, Some(&key))
         .map_err(|e| e.to_string())?;
     register_nxm(app);
+    // Compte lié : la fenêtre de connexion a fini son travail.
+    if let Some(window) = app.get_webview_window(NEXUS_WINDOW) {
+        let _ = window.close();
+    }
     Ok(account)
 }
 
@@ -1077,4 +1086,81 @@ async fn handle_nxm(app: AppHandle, url: String) {
         },
     };
     let _ = app.emit("nexus-installed", event);
+}
+
+// ---------------------------------------------------------------- fenêtre Nexus
+
+const NEXUS_WINDOW: &str = "nexus";
+/// Page des clés API : Nexus y demande de se connecter d'abord.
+const NEXUS_API_KEYS: &str = "https://next.nexusmods.com/settings/api-keys";
+
+/// Le site Nexus, dans une fenêtre de Modalia plutôt que dans le
+/// navigateur. On s'y connecte une fois, en liant son compte ; la session
+/// reste. Ensuite, Nexus demande aux comptes gratuits un clic sur son site
+/// pour chaque fichier : l'utilisateur le fait ici, et le lien `nxm://` qui
+/// en sort revient directement à Modalia.
+///
+/// Cette fenêtre affiche un site distant : aucune permission (les
+/// capabilities ne visent que `main`), donc aucun accès aux commandes du
+/// moteur. Modalia n'y lit rien : seuls les liens `nxm://` sont interceptés.
+pub fn show_nexus_window(app: &AppHandle, url: &str) -> Result<(), String> {
+    let target: tauri::Url = url.parse().map_err(|_| "Invalid Nexus Mods address.")?;
+    let on_nexus = target.scheme() == "https"
+        && target
+            .host_str()
+            .is_some_and(|h| h == "nexusmods.com" || h.ends_with(".nexusmods.com"));
+    if !on_nexus {
+        return Err("This page isn't on Nexus Mods.".into());
+    }
+    if let Some(window) = app.get_webview_window(NEXUS_WINDOW) {
+        window.navigate(target).map_err(|e| e.to_string())?;
+        let _ = window.unminimize();
+        let _ = window.show();
+        let _ = window.set_focus();
+        return Ok(());
+    }
+    let handle = app.clone();
+    let mut builder =
+        tauri::WebviewWindowBuilder::new(app, NEXUS_WINDOW, tauri::WebviewUrl::External(target))
+            .title("Nexus Mods · Modalia")
+            .inner_size(1100.0, 820.0)
+            .min_inner_size(720.0, 560.0)
+            .center()
+            .on_navigation(move |url| match url.scheme() {
+                // Le bouton « Slow download » : on installe, la fenêtre a fini.
+                "nxm" => {
+                    let app = handle.clone();
+                    let link = url.to_string();
+                    tauri::async_runtime::spawn(async move {
+                        if let Some(window) = app.get_webview_window(NEXUS_WINDOW) {
+                            let _ = window.close();
+                        }
+                        handle_nxm(app, link).await;
+                    });
+                    false
+                }
+                // La connexion peut passer par Google, Discord… : tout site HTTPS.
+                "https" | "about" | "blob" | "data" => true,
+                _ => false,
+            });
+    if let Some(main) = app.get_webview_window("main") {
+        builder = builder.parent(&main).map_err(|e| e.to_string())?;
+    }
+    builder.build().map_err(|e| e.to_string())?;
+    Ok(())
+}
+
+/// Rouvre une page Nexus dans sa fenêtre (bouton « Finish in the Nexus
+/// window »).
+#[tauri::command]
+pub async fn open_nexus_page(app: AppHandle, url: String) -> Result<(), String> {
+    show_nexus_window(&app, &url)
+}
+
+/// Liaison du compte sans SSO : la fenêtre Nexus s'ouvre sur la page des
+/// clés API. L'utilisateur s'y connecte (la session servira aux
+/// téléchargements), puis colle sa clé personnelle dans Modalia.
+#[tauri::command]
+pub async fn open_nexus_sign_in(app: AppHandle) -> Result<(), String> {
+    show_nexus_window(&app, NEXUS_API_KEYS)
 }

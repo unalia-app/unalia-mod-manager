@@ -463,6 +463,8 @@ pub fn run() {
             mods::play_game,
             mods::nexus_status,
             mods::nexus_login,
+            mods::open_nexus_page,
+            mods::open_nexus_sign_in,
             mods::nexus_connect,
             mods::nexus_disconnect,
         ])

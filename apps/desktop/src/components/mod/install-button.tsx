@@ -3,11 +3,10 @@
 import { Button, cn } from "@modalia/ui";
 import { ArrowUp, Check, Clock, Download, ExternalLink, RotateCw } from "lucide-react";
 
-import { type InstallProgress, cancelPending } from "@/lib/engine";
+import { type InstallProgress, cancelPending, openNexusPage } from "@/lib/engine";
 import { bytes, timeLeft } from "@/lib/format";
 import { usePendingOp } from "@/lib/game-status";
 import { clearError, install, overallProgress, useActiveInstall, useInstalled, useModUpdate } from "@/lib/installs";
-import { openExternal } from "@/lib/open";
 
 /**
  * Un clic : le bouton devient lui-même la barre de progression
@@ -63,8 +62,8 @@ export function InstallButton({
 		);
 	}
 
-	// Compte Nexus gratuit : Nexus veut un clic sur son site. Le lien
-	// `nxm://` revient à Modalia, qui enchaîne tout seul.
+	// Compte Nexus gratuit : Nexus veut un clic sur son site, dans la
+	// fenêtre Nexus de Modalia. Le lien `nxm://` revient, la suite est seule.
 	if (active?.status === "website") {
 		return (
 			<div className="flex max-w-64 flex-col items-end gap-2 text-right">
@@ -72,12 +71,12 @@ export function InstallButton({
 					size="lg"
 					variant="outline"
 					leftIcon={<ExternalLink className="size-4 text-accent" />}
-					onClick={() => void openExternal(active.url)}
+					onClick={() => void openNexusPage(active.url)}
 				>
-					Finish on Nexus Mods
+					Finish in the Nexus window
 				</Button>
 				<span className="text-[11px] leading-snug text-fg-subtle">
-					Click <span className="text-fg-muted">Slow download</span> on the page that opened. Modalia installs it right after ·{" "}
+					Click <span className="text-fg-muted">Slow download</span> in the Nexus Mods window. Modalia installs it right after ·{" "}
 					<button
 						type="button"
 						className="cursor-pointer text-fg-muted underline-offset-2 hover:underline"
