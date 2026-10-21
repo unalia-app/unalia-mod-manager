@@ -17,12 +17,23 @@ use std::time::{Duration, SystemTime};
 
 use serde::Serialize;
 
+use crate::loaders::rules::InstallRules;
+
 pub use schema::SchemaError;
 
 pub const SCHEMA_URL: &str = "https://thunderstore.io/api/experimental/schema/dev/latest/";
 
-/// Loader géré par le prototype (SPEC §5).
-pub const SUPPORTED_LOADER: &str = "bepinex";
+/// Loaders que Modalia sait installer, avec les règles de placement du
+/// schéma (`loaders::rules`).
+pub const SUPPORTED_LOADERS: [&str; 7] = [
+    "bepinex",
+    "bepisloader",
+    "melonloader",
+    "recursive-melonloader",
+    "shimloader",
+    "umm",
+    "northstar",
+];
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -44,6 +55,9 @@ pub struct GameProfile {
     pub cover_url: Option<String>,
     /// Bannière 1920×620.
     pub hero_url: Option<String>,
+    /// Où vont les fichiers des mods de ce jeu.
+    #[serde(skip)]
+    pub install_rules: InstallRules,
 }
 
 /// Paquet qui *est* un loader (ex. `silksong_modding-BepInExPack_Silksong`) :
@@ -89,6 +103,11 @@ impl GameCatalog {
 
     pub fn by_steam_app_id(&self, app_id: u32) -> Option<&GameProfile> {
         self.by_steam_app_id.get(&app_id).map(|&i| &self.games[i])
+    }
+
+    /// Jeu d'une communauté Thunderstore.
+    pub fn by_community(&self, community: &str) -> Option<&GameProfile> {
+        self.games.iter().find(|g| g.community == community)
     }
 
     pub fn by_id(&self, id: &str) -> Option<&GameProfile> {

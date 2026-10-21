@@ -64,6 +64,9 @@ const LOADER_LABEL: Record<string, string> = {
 	"recursive-melonloader": "MelonLoader",
 	shimloader: "Shimloader",
 	godotml: "GodotML",
+	bepisloader: "BepisLoader",
+	umm: "Unity Mod Manager",
+	northstar: "Northstar",
 };
 
 /** Sous-titre d'un jeu : moteur, et loader quand Thunderstore le connaît. */

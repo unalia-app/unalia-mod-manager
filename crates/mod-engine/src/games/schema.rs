@@ -6,7 +6,8 @@ use std::collections::HashMap;
 
 use serde::Deserialize;
 
-use super::{GameProfile, LoaderPackage, SUPPORTED_LOADER};
+use super::{GameProfile, LoaderPackage, SUPPORTED_LOADERS};
+use crate::loaders::rules::{InstallRule, InstallRules, Tracking};
 
 /// Les chemins d'images du schéma sont relatifs à ce CDN.
 const ASSET_BASE: &str = "https://gcdn.thunderstore.io/live/community/";
@@ -51,6 +52,41 @@ struct R2modman {
     exe_names: Vec<String>,
     data_folder_name: Option<String>,
     game_instance_type: Option<String>,
+    #[serde(default)]
+    install_rules: Vec<RawRule>,
+    #[serde(default)]
+    relative_file_exclusions: Option<Vec<String>>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RawRule {
+    route: String,
+    #[serde(default)]
+    default_file_extensions: Vec<String>,
+    tracking_method: Tracking,
+    #[serde(default)]
+    sub_routes: Vec<RawRule>,
+    #[serde(default)]
+    is_default_location: bool,
+}
+
+/// Règles aplaties : une sous-route devient `route/sous-route`.
+fn flatten(rules: Vec<RawRule>, parent: &str, out: &mut Vec<InstallRule>) {
+    for rule in rules {
+        let route = if parent.is_empty() {
+            rule.route.clone()
+        } else {
+            format!("{parent}/{}", rule.route)
+        };
+        out.push(InstallRule {
+            route: route.clone(),
+            extensions: rule.default_file_extensions,
+            tracking: rule.tracking_method,
+            default: rule.is_default_location,
+        });
+        flatten(rule.sub_routes, &route, out);
+    }
 }
 
 #[derive(Deserialize)]
@@ -118,6 +154,16 @@ fn profile(game: Game, communities: &HashMap<String, Community>) -> Option<GameP
         .unwrap_or_else(|| game.label.clone());
     let loader = entry.package_loader.unwrap_or_else(|| "none".into());
     let community_meta = communities.get(&community).map(|c| &c.meta);
+    let mut rules = Vec::new();
+    flatten(entry.install_rules, "", &mut rules);
+    let mut install_rules = InstallRules {
+        rules,
+        exclusions: entry.relative_file_exclusions.unwrap_or_default(),
+    };
+    // Jeux MelonLoader sans règles détaillées : conventions de MelonLoader.
+    if install_rules.rules.is_empty() && loader == "recursive-melonloader" {
+        install_rules.rules = InstallRules::melonloader_defaults().rules;
+    }
 
     Some(GameProfile {
         steam_app_ids: entry
@@ -126,7 +172,8 @@ fn profile(game: Game, communities: &HashMap<String, Community>) -> Option<GameP
             .filter(|d| d.platform == "steam")
             .filter_map(|d| d.identifier.as_deref()?.parse().ok())
             .collect(),
-        supported: loader == SUPPORTED_LOADER,
+        supported: SUPPORTED_LOADERS.contains(&loader.as_str()) && install_rules.installable(),
+        install_rules,
         loader,
         exe_names: entry.exe_names,
         data_folder_name: entry.data_folder_name.filter(|d| !d.is_empty()),

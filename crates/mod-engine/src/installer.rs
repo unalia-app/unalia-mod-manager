@@ -17,6 +17,7 @@ use crate::deploy::{self, DeployError, Deployment};
 use crate::download::{self, DownloadError};
 use crate::games::GameCatalog;
 use crate::loaders::bepinex::BepInEx;
+use crate::loaders::rules::RulesLoader;
 use crate::loaders::{Loader, PackageKind, Placement};
 use crate::resolver::{self, Installed, PlanStep, ResolveError};
 use crate::sources::ModSource;
@@ -199,7 +200,9 @@ impl<S: ModSource> Installer<'_, S> {
         .await?;
         if plan.steps.iter().any(|s| s.loader)
             && installed.loader.is_none()
-            && BepInEx.installed_manually(target.game_dir)
+            && self
+                .loader_for(target.community)
+                .installed_manually(target.game_dir)
         {
             return Err(InstallError::LoaderPresent);
         }
@@ -226,7 +229,11 @@ impl<S: ModSource> Installer<'_, S> {
             deploy::undeploy(target.game_dir, &old.deployment, false);
         }
         let loader_root = step.loader.then(|| self.loader_root(&step.id)).flatten();
-        let placements = placements(&step.id, loader_root.as_deref(), &store_dir)?;
+        let placements = self.loader_for(target.community).place(
+            &step.id,
+            &package_kind(loader_root.as_deref()),
+            &list_files(&store_dir)?,
+        );
         let deployment = match deploy::deploy(&store_dir, target.game_dir, &placements) {
             Ok(d) => d,
             Err(source) => {
@@ -258,6 +265,7 @@ impl<S: ModSource> Installer<'_, S> {
             installed_at: now(),
             store_dir: store_dir.to_string_lossy().into_owned(),
             deployment,
+            placements,
         })
     }
 
@@ -361,6 +369,23 @@ impl<S: ModSource> Installer<'_, S> {
         Ok((store_dir, sha256))
     }
 
+    /// Adaptateur du jeu : ses règles de placement si le catalogue les
+    /// connaît, sinon BepInEx (catalogue indisponible, premier lancement hors
+    /// ligne).
+    fn loader_for(&self, community: &str) -> Box<dyn Loader + '_> {
+        match self
+            .catalog
+            .and_then(|c| c.by_community(community))
+            .filter(|g| g.install_rules.installable())
+        {
+            Some(game) => Box::new(RulesLoader {
+                loader: &game.loader,
+                rules: &game.install_rules,
+            }),
+            None => Box::new(BepInEx),
+        }
+    }
+
     fn loader_root(&self, id: &str) -> Option<String> {
         self.catalog?
             .loader_package(id)
@@ -400,12 +425,30 @@ fn rollback(game_dir: &Path, done: &[Done]) {
 /// jour ratée). Au mieux : l'utilisateur pourra réinstaller sinon.
 fn redeploy(game_dir: &Path, old: &InstalledMod) {
     let store = Path::new(&old.store_dir);
-    if let Ok(placements) = placements(&old.id, old.loader_root.as_deref(), store) {
+    if let Ok(placements) = placements_of(old) {
         let _ = deploy::deploy(store, game_dir, &placements);
     }
 }
 
-/// Où vont les fichiers d'un paquet extrait.
+fn package_kind(loader_root: Option<&str>) -> PackageKind {
+    match loader_root {
+        Some(root) => PackageKind::Loader {
+            root_folder: root.to_owned(),
+        },
+        None => PackageKind::Mod,
+    }
+}
+
+/// Placements enregistrés à l'installation ; pour un mod installé avant
+/// leur ajout, recalcul avec les règles BepInEx d'alors.
+fn placements_of(m: &InstalledMod) -> std::io::Result<Vec<Placement>> {
+    if !m.placements.is_empty() {
+        return Ok(m.placements.clone());
+    }
+    placements(&m.id, m.loader_root.as_deref(), Path::new(&m.store_dir))
+}
+
+/// Où vont les fichiers d'un paquet extrait, selon les règles BepInEx.
 fn placements(
     id: &str,
     loader_root: Option<&str>,
@@ -499,13 +542,12 @@ pub fn set_enabled(
     }
     if enabled {
         let store = Path::new(&m.store_dir);
-        m.deployment =
-            deploy::deploy(store, game_dir, &placements(id, None, store)?).map_err(|source| {
-                InstallError::Deploy {
-                    name: m.name.clone(),
-                    source,
-                }
-            })?;
+        m.deployment = deploy::deploy(store, game_dir, &placements_of(&m)?).map_err(|source| {
+            InstallError::Deploy {
+                name: m.name.clone(),
+                source,
+            }
+        })?;
     } else {
         deploy::undeploy(game_dir, &m.deployment, false);
         m.deployment = Deployment::default();
@@ -542,14 +584,11 @@ pub fn restore(
     let mut m = removed;
     if m.enabled {
         let store = Path::new(&m.store_dir);
-        m.deployment = deploy::deploy(
-            store,
-            game_dir,
-            &placements(&m.id, m.loader_root.as_deref(), store)?,
-        )
-        .map_err(|source| InstallError::Deploy {
-            name: m.name.clone(),
-            source,
+        m.deployment = deploy::deploy(store, game_dir, &placements_of(&m)?).map_err(|source| {
+            InstallError::Deploy {
+                name: m.name.clone(),
+                source,
+            }
         })?;
     }
     state.save(&m)?;

@@ -149,7 +149,7 @@ function NotModdable({ game }: { game: SteamGame }) {
 	return (
 		<div className="glass mt-16 max-w-xl">
 			<Notice icon={<Gamepad2 className="size-5 text-fg-muted" />} title={`${game.name} isn't supported yet`} action={<BackHome />}>
-				Modalia starts with games that use BepInEx. More are coming soon.
+				Modalia supports BepInEx, MelonLoader and Shimloader games for now. More are coming soon.
 			</Notice>
 		</div>
 	);

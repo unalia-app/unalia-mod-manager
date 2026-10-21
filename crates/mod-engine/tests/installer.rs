@@ -28,6 +28,7 @@ struct World {
     source: Thunderstore,
     client: reqwest::Client,
     state: State,
+    community: &'static str,
 }
 
 impl World {
@@ -52,6 +53,7 @@ impl World {
             client,
             server,
             game,
+            community: COMMUNITY,
             _tmp: tmp,
         }
     }
@@ -69,7 +71,7 @@ impl World {
                 "dependencies": deps, "download_url": format!("{}{download}", self.server.url()),
                 "date_created": "2026-01-01T00:00:00Z", "website_url": ""
             },
-            "community_listings": [{ "community": COMMUNITY, "categories": ["Mods"] }]
+            "community_listings": [{ "community": self.community, "categories": ["Mods"] }]
         });
         self.server
             .mock(
@@ -125,7 +127,7 @@ impl World {
         let target = Target {
             game: "steam:1030300",
             game_dir: &self.game,
-            community: COMMUNITY,
+            community: self.community,
         };
         let mut events = Vec::new();
         let result = installer
@@ -502,4 +504,70 @@ async fn prefetch_downloads_without_touching_the_game() {
     for d in downloads {
         d.expect(1).assert_async().await;
     }
+}
+
+#[tokio::test]
+async fn melonloader_games_install_through_their_rules() {
+    const MELON: &str = "LavaGang-MelonLoader";
+    const COOL: &str = "Author-CoolMod";
+    let mut w = World::new().await;
+    w.community = "backpack-hero";
+    let before = snapshot(&w.game);
+    w.publish(
+        MELON,
+        "0.6.6",
+        &[],
+        zip_bytes(&[
+            ("version.dll", b"proxy"),
+            ("MelonLoader/net6/MelonLoader.dll", b"core"),
+            ("manifest.json", b"{}"),
+        ]),
+    )
+    .await;
+    w.publish(
+        COOL,
+        "1.0.0",
+        &["LavaGang-MelonLoader-0.6.6"],
+        zip_bytes(&[
+            ("CoolMod.dll", b"cool"),
+            ("Shared.lib.dll", b"lib"),
+            ("UserData/cool.cfg", b"cfg"),
+            ("manifest.json", b"{}"),
+        ]),
+    )
+    .await;
+
+    let installed = w.install(COOL).await.0.unwrap();
+    assert!(
+        installed
+            .iter()
+            .find(|m| m.id == MELON)
+            .unwrap()
+            .is_loader()
+    );
+    assert!(w.game.join("version.dll").is_file());
+    assert!(w.game.join("MelonLoader/net6/MelonLoader.dll").is_file());
+    assert!(w.game.join("Mods/CoolMod.dll").is_file());
+    assert!(w.game.join("UserLibs/Shared.lib.dll").is_file());
+    // Pas de route `UserData` chez ce jeu : route par défaut, chemin gardé.
+    assert!(
+        w.game
+            .join("UserData/ModManager")
+            .join(COOL)
+            .join("UserData/cool.cfg")
+            .is_file()
+    );
+    assert!(!w.game.join("manifest.json").exists());
+
+    // Désactiver puis réactiver suit les placements enregistrés.
+    let game = "steam:1030300";
+    installer::set_enabled(&mut w.state, game, &w.game, COOL, false).unwrap();
+    assert!(!w.game.join("Mods/CoolMod.dll").exists());
+    installer::set_enabled(&mut w.state, game, &w.game, COOL, true).unwrap();
+    assert!(w.game.join("Mods/CoolMod.dll").is_file());
+
+    // Tout retirer rend le jeu intact.
+    installer::uninstall(&mut w.state, game, &w.game, COOL).unwrap();
+    installer::uninstall(&mut w.state, game, &w.game, MELON).unwrap();
+    assert_eq!(snapshot(&w.game), before);
 }

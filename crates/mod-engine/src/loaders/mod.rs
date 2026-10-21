@@ -4,12 +4,15 @@
 //! nombreux, relu par le mainteneur (SPEC §6.3, §7 : revue renforcée).
 
 pub mod bepinex;
+pub mod rules;
 
 use std::path::Path;
 
+use serde::{Deserialize, Serialize};
+
 /// Un fichier du paquet extrait, et sa destination dans le dossier du jeu.
 /// Chemins relatifs avec des `/`.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Placement {
     pub source: String,
     pub target: String,

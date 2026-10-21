@@ -732,6 +732,315 @@
     "discordUrl": "https://discord.com/invite/wXS2FpJpCt"
    },
    "r2modman": null
+  },
+  "palworld": {
+   "uuid": "60b24eb2-791f-43bf-91da-f19139f6738f",
+   "label": "palworld",
+   "meta": {
+    "displayName": "Palworld",
+    "iconUrl": "palworld/palworld-cover-360x480.webp"
+   },
+   "distributions": [
+    {
+     "platform": "steam",
+     "identifier": "1623730"
+    }
+   ],
+   "r2modman": [
+    {
+     "meta": {
+      "displayName": "Palworld",
+      "iconUrl": "palworld/palworld-cover-360x480.webp"
+     },
+     "internalFolderName": "Palworld",
+     "dataFolderName": "Pal",
+     "distributions": [
+      {
+       "platform": "steam",
+       "identifier": "1623730"
+      }
+     ],
+     "settingsIdentifier": "Palworld",
+     "packageIndex": "https://thunderstore.io/c/palworld/api/v1/package-listing-index/",
+     "steamFolderName": "Palworld",
+     "exeNames": [
+      "Palworld.exe"
+     ],
+     "gameInstanceType": "game",
+     "gameSelectionDisplayMode": "visible",
+     "additionalSearchStrings": [
+      "palworld",
+      "幻兽帕鲁"
+     ],
+     "packageLoader": "shimloader",
+     "installRules": [
+      {
+       "route": "shimloader/mod",
+       "isDefaultLocation": true,
+       "defaultFileExtensions": [],
+       "trackingMethod": "subdir",
+       "subRoutes": []
+      },
+      {
+       "route": "shimloader/pak",
+       "isDefaultLocation": false,
+       "defaultFileExtensions": [],
+       "trackingMethod": "subdir",
+       "subRoutes": []
+      },
+      {
+       "route": "shimloader/cfg",
+       "isDefaultLocation": false,
+       "defaultFileExtensions": [],
+       "trackingMethod": "none",
+       "subRoutes": []
+      },
+      {
+       "route": "shimloader/overlay",
+       "isDefaultLocation": false,
+       "defaultFileExtensions": [],
+       "trackingMethod": "subdir",
+       "subRoutes": []
+      }
+     ],
+     "relativeFileExclusions": null
+    }
+   ],
+   "thunderstore": {
+    "displayName": "Palworld",
+    "listed": true,
+    "meta": {
+     "icon": "palworld/palworld-icon-192x192.webp",
+     "cover": "palworld/palworld-cover-360x480.webp",
+     "background": "palworld/palworld-bg-1920x1080.webp",
+     "hero": "palworld/palworld-bg-1920x620.webp"
+    },
+    "categories": {
+     "mods": {
+      "label": "Mods"
+     },
+     "modpacks": {
+      "label": "Modpacks"
+     },
+     "tools": {
+      "label": "Tools"
+     },
+     "libraries": {
+      "label": "Libraries"
+     },
+     "misc": {
+      "label": "Misc"
+     },
+     "audio": {
+      "label": "Audio"
+     }
+    },
+    "sections": {
+     "mods": {
+      "name": "Mods",
+      "excludeCategories": [
+       "modpacks"
+      ]
+     },
+     "modpacks": {
+      "name": "Modpacks",
+      "requireCategories": [
+       "modpacks"
+      ]
+     }
+    }
+   }
+  },
+  "brotato": {
+   "uuid": "b20dbe1e-1f04-4c5a-849b-481a5b3758e5",
+   "label": "brotato",
+   "meta": {
+    "displayName": "Brotato",
+    "iconUrl": "brotato/brotato-cover-360x480.webp"
+   },
+   "distributions": [
+    {
+     "platform": "steam",
+     "identifier": "1942280"
+    }
+   ],
+   "r2modman": [
+    {
+     "meta": {
+      "displayName": "Brotato",
+      "iconUrl": "brotato/brotato-cover-360x480.webp"
+     },
+     "internalFolderName": "Brotato",
+     "dataFolderName": "",
+     "distributions": [
+      {
+       "platform": "steam",
+       "identifier": "1942280"
+      }
+     ],
+     "settingsIdentifier": "Brotato",
+     "packageIndex": "https://thunderstore.io/c/brotato/api/v1/package-listing-index/",
+     "steamFolderName": "Brotato",
+     "exeNames": [
+      "Brotato.exe"
+     ],
+     "gameInstanceType": "game",
+     "gameSelectionDisplayMode": "visible",
+     "additionalSearchStrings": [
+      "土豆兄弟"
+     ],
+     "packageLoader": "godotml",
+     "installRules": [
+      {
+       "route": "mods",
+       "defaultFileExtensions": [],
+       "trackingMethod": "package-zip",
+       "subRoutes": [],
+       "isDefaultLocation": true
+      }
+     ],
+     "relativeFileExclusions": null
+    }
+   ],
+   "thunderstore": {
+    "displayName": "Brotato",
+    "listed": true,
+    "meta": {
+     "icon": "brotato/brotato-icon-192x192.webp",
+     "cover": "brotato/brotato-cover-360x480.webp",
+     "hero": "brotato/brotato-bg-1920x620.webp"
+    },
+    "categories": {
+     "mods": {
+      "label": "Mods"
+     },
+     "modpacks": {
+      "label": "Modpacks"
+     },
+     "weapons": {
+      "label": "Weapons"
+     },
+     "audio": {
+      "label": "Audio"
+     },
+     "tools": {
+      "label": "Tools"
+     },
+     "libraries": {
+      "label": "Libraries"
+     },
+     "misc": {
+      "label": "Misc"
+     }
+    },
+    "sections": {
+     "mods": {
+      "name": "Mods",
+      "excludeCategories": [
+       "modpacks"
+      ]
+     },
+     "modpacks": {
+      "name": "Modpacks",
+      "requireCategories": [
+       "modpacks"
+      ]
+     }
+    },
+    "discordUrl": "https://discord.gg/j39jE6k"
+   }
+  },
+  "dale-dawson-stationery-supplies": {
+   "uuid": "f02a7d1c-62b3-484b-8b34-6cc87a342521",
+   "label": "dale-dawson-stationery-supplies",
+   "meta": {
+    "displayName": "Dale & Dawson Stationery Supplies",
+    "iconUrl": "dale-dawson-stationery-supplies/dale-dawson-stationery-supplies-cover-360x480.webp"
+   },
+   "distributions": [
+    {
+     "platform": "steam",
+     "identifier": "2920570"
+    }
+   ],
+   "r2modman": [
+    {
+     "meta": {
+      "displayName": "Dale & Dawson Stationery Supplies",
+      "iconUrl": "dale-dawson-stationery-supplies/dale-dawson-stationery-supplies-cover-360x480.webp"
+     },
+     "internalFolderName": "DaleAndDawson",
+     "dataFolderName": "DDSS_Data",
+     "distributions": [
+      {
+       "platform": "steam",
+       "identifier": "2920570"
+      }
+     ],
+     "settingsIdentifier": "DaleAndDawson",
+     "packageIndex": "https://thunderstore.io/c/dale-dawson-stationery-supplies/api/v1/package-listing-index/",
+     "steamFolderName": "Dale&Dawson",
+     "exeNames": [
+      "DDSS.exe"
+     ],
+     "gameInstanceType": "game",
+     "gameSelectionDisplayMode": "visible",
+     "additionalSearchStrings": [
+      "戴尔与道森文具店"
+     ],
+     "packageLoader": "recursive-melonloader",
+     "installRules": [],
+     "relativeFileExclusions": null
+    }
+   ],
+   "thunderstore": {
+    "displayName": "Dale & Dawson Stationery Supplies",
+    "listed": true,
+    "meta": {
+     "icon": "dale-dawson-stationery-supplies/dale-dawson-stationery-supplies-icon-192x192.webp",
+     "cover": "dale-dawson-stationery-supplies/dale-dawson-stationery-supplies-cover-360x480.webp",
+     "background": "dale-dawson-stationery-supplies/dale-dawson-stationery-supplies-bg-1920x1080.webp",
+     "hero": "dale-dawson-stationery-supplies/dale-dawson-stationery-supplies-bg-1920x620.webp"
+    },
+    "categories": {
+     "mods": {
+      "label": "Mods"
+     },
+     "modpacks": {
+      "label": "Modpacks"
+     },
+     "tools": {
+      "label": "Tools"
+     },
+     "libraries": {
+      "label": "Libraries"
+     },
+     "misc": {
+      "label": "Misc"
+     },
+     "audio": {
+      "label": "Audio"
+     }
+    },
+    "sections": {
+     "mods": {
+      "name": "Mods",
+      "excludeCategories": [
+       "modpacks"
+      ]
+     },
+     "modpacks": {
+      "name": "Modpacks",
+      "requireCategories": [
+       "modpacks"
+      ]
+     }
+    },
+    "discordUrl": "https://discord.gg/2Wn3N2P",
+    "autolistPackageIds": [
+     "LavaGang-MelonLoader"
+    ]
+   }
   }
  },
  "communities": {
@@ -947,6 +1256,145 @@
    },
    "discordUrl": "https://discord.gg/XeyYqRdRGC",
    "wikiUrl": "https://lethal.wiki/"
+  },
+  "palworld": {
+   "displayName": "Palworld",
+   "listed": true,
+   "meta": {
+    "icon": "palworld/palworld-icon-192x192.webp",
+    "cover": "palworld/palworld-cover-360x480.webp",
+    "background": "palworld/palworld-bg-1920x1080.webp",
+    "hero": "palworld/palworld-bg-1920x620.webp"
+   },
+   "categories": {
+    "mods": {
+     "label": "Mods"
+    },
+    "modpacks": {
+     "label": "Modpacks"
+    },
+    "tools": {
+     "label": "Tools"
+    },
+    "libraries": {
+     "label": "Libraries"
+    },
+    "misc": {
+     "label": "Misc"
+    },
+    "audio": {
+     "label": "Audio"
+    }
+   },
+   "sections": {
+    "mods": {
+     "name": "Mods",
+     "excludeCategories": [
+      "modpacks"
+     ]
+    },
+    "modpacks": {
+     "name": "Modpacks",
+     "requireCategories": [
+      "modpacks"
+     ]
+    }
+   }
+  },
+  "brotato": {
+   "displayName": "Brotato",
+   "listed": true,
+   "meta": {
+    "icon": "brotato/brotato-icon-192x192.webp",
+    "cover": "brotato/brotato-cover-360x480.webp",
+    "hero": "brotato/brotato-bg-1920x620.webp"
+   },
+   "categories": {
+    "mods": {
+     "label": "Mods"
+    },
+    "modpacks": {
+     "label": "Modpacks"
+    },
+    "weapons": {
+     "label": "Weapons"
+    },
+    "audio": {
+     "label": "Audio"
+    },
+    "tools": {
+     "label": "Tools"
+    },
+    "libraries": {
+     "label": "Libraries"
+    },
+    "misc": {
+     "label": "Misc"
+    }
+   },
+   "sections": {
+    "mods": {
+     "name": "Mods",
+     "excludeCategories": [
+      "modpacks"
+     ]
+    },
+    "modpacks": {
+     "name": "Modpacks",
+     "requireCategories": [
+      "modpacks"
+     ]
+    }
+   },
+   "discordUrl": "https://discord.gg/j39jE6k"
+  },
+  "dale-dawson-stationery-supplies": {
+   "displayName": "Dale & Dawson Stationery Supplies",
+   "listed": true,
+   "meta": {
+    "icon": "dale-dawson-stationery-supplies/dale-dawson-stationery-supplies-icon-192x192.webp",
+    "cover": "dale-dawson-stationery-supplies/dale-dawson-stationery-supplies-cover-360x480.webp",
+    "background": "dale-dawson-stationery-supplies/dale-dawson-stationery-supplies-bg-1920x1080.webp",
+    "hero": "dale-dawson-stationery-supplies/dale-dawson-stationery-supplies-bg-1920x620.webp"
+   },
+   "categories": {
+    "mods": {
+     "label": "Mods"
+    },
+    "modpacks": {
+     "label": "Modpacks"
+    },
+    "tools": {
+     "label": "Tools"
+    },
+    "libraries": {
+     "label": "Libraries"
+    },
+    "misc": {
+     "label": "Misc"
+    },
+    "audio": {
+     "label": "Audio"
+    }
+   },
+   "sections": {
+    "mods": {
+     "name": "Mods",
+     "excludeCategories": [
+      "modpacks"
+     ]
+    },
+    "modpacks": {
+     "name": "Modpacks",
+     "requireCategories": [
+      "modpacks"
+     ]
+    }
+   },
+   "discordUrl": "https://discord.gg/2Wn3N2P",
+   "autolistPackageIds": [
+    "LavaGang-MelonLoader"
+   ]
   }
  },
  "packageInstallers": {},
@@ -985,6 +1433,31 @@
    "packageId": "silksong_modding-BepInExPack_Silksong",
    "rootFolder": "BepInExPack",
    "loader": "bepinex"
+  },
+  {
+   "packageId": "GodotModding-GodotModLoader",
+   "rootFolder": "",
+   "loader": "godotml"
+  },
+  {
+   "packageId": "0xFFF7-votv_shimloader",
+   "rootFolder": "",
+   "loader": "shimloader"
+  },
+  {
+   "packageId": "Thunderstore-unreal_shimloader",
+   "rootFolder": "",
+   "loader": "shimloader"
+  },
+  {
+   "packageId": "HomeSafetyHotline_Modding-MelonLoader_HomeSafetyHotline",
+   "rootFolder": "",
+   "loader": "recursive-melonloader"
+  },
+  {
+   "packageId": "SHMCD_Modding-MelonLoader_SHMCD",
+   "rootFolder": "",
+   "loader": "recursive-melonloader"
   }
  ]
 }

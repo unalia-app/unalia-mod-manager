@@ -62,18 +62,47 @@ fn maps_steam_app_ids_to_profiles() {
 }
 
 #[test]
-fn other_loaders_are_known_but_not_supported() {
+fn loaders_with_install_rules_are_supported() {
     let catalog = catalog();
-    let backpack = catalog.by_id("backpack-hero").unwrap();
-    assert_eq!(backpack.loader, "melonloader");
-    assert!(!backpack.supported);
+    for (id, loader) in [
+        ("backpack-hero", "melonloader"),
+        ("palworld", "shimloader"),
+        // Pas de règles dans le schéma : conventions MelonLoader par défaut.
+        ("dale-dawson-stationery-supplies", "recursive-melonloader"),
+    ] {
+        let game = catalog.by_id(id).unwrap();
+        assert_eq!(game.loader, loader);
+        assert!(game.supported, "{id} devrait être pris en charge");
+        assert!(game.install_rules.installable());
+    }
+}
+
+#[test]
+fn games_whose_mods_ship_as_archives_are_not_supported_yet() {
+    // Godot : l'archive est posée telle quelle (package-zip).
+    let brotato = catalog().by_id("brotato").unwrap().clone();
+    assert_eq!(brotato.loader, "godotml");
+    assert!(!brotato.supported);
 }
 
 #[test]
 fn games_without_an_installable_entry_are_skipped() {
     let catalog = catalog();
     assert!(catalog.by_id("107zxz-inscryption-multiplayer").is_none());
-    assert_eq!(catalog.games().len(), 4);
+    assert_eq!(catalog.games().len(), 7);
+}
+
+#[test]
+fn sub_routes_are_flattened() {
+    let backpack = catalog().by_id("backpack-hero").unwrap().clone();
+    let routes: Vec<_> = backpack
+        .install_rules
+        .rules
+        .iter()
+        .map(|r| r.route.as_str())
+        .collect();
+    assert!(routes.contains(&"MelonLoader/Managed"), "{routes:?}");
+    assert!(routes.contains(&"MelonLoader/Libs"));
 }
 
 #[test]
@@ -278,6 +307,7 @@ fn store_paths_can_be_rebased_after_a_move() {
         installed_at: 0,
         store_dir: dir.into(),
         deployment: Deployment::default(),
+        placements: Vec::new(),
     };
     state
         .save_all(&[

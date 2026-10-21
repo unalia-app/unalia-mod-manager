@@ -11,6 +11,7 @@ use serde::Serialize;
 
 use crate::deploy::Deployment;
 use crate::launch::PendingOp;
+use crate::loaders::Placement;
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -34,6 +35,11 @@ pub struct InstalledMod {
     pub store_dir: String,
     #[serde(skip)]
     pub deployment: Deployment,
+    /// Où va chaque fichier du stockage : réutilisé tel quel pour
+    /// réactiver, annuler un retrait ou revenir en arrière. Vide pour les
+    /// mods installés avant son ajout (on recalcule alors).
+    #[serde(skip)]
+    pub placements: Vec<Placement>,
 }
 
 impl InstalledMod {
@@ -69,6 +75,7 @@ CREATE TABLE IF NOT EXISTS installed_mods (
     installed_at INTEGER NOT NULL,
     store_dir    TEXT NOT NULL,
     deployment   TEXT NOT NULL,
+    placements   TEXT NOT NULL DEFAULT '[]',
     PRIMARY KEY (game, id)
 );
 
@@ -113,6 +120,7 @@ impl State {
     fn init(conn: Connection) -> Result<Self, StateError> {
         conn.pragma_update(None, "journal_mode", "WAL")?;
         conn.execute_batch(SCHEMA)?;
+        migrate(&conn)?;
         Ok(Self { conn })
     }
 
@@ -143,7 +151,10 @@ impl State {
         let tx = self.conn.transaction()?;
         for m in mods {
             tx.execute(
-                "INSERT OR REPLACE INTO installed_mods VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+                "INSERT OR REPLACE INTO installed_mods
+                 (game, id, name, author, version, icon_url, loader_root, enabled, explicit,
+                  sha256, installed_at, store_dir, deployment, placements)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
                 params![
                     m.game,
                     m.id,
@@ -158,6 +169,7 @@ impl State {
                     m.installed_at,
                     m.store_dir,
                     serde_json::to_string(&m.deployment)?,
+                    serde_json::to_string(&m.placements)?,
                 ],
             )?;
         }
@@ -254,14 +266,29 @@ impl State {
 struct Row {
     m: InstalledMod,
     deployment: String,
+    placements: String,
 }
 
 impl Row {
     fn finish(self) -> Result<InstalledMod, StateError> {
         let mut m = self.m;
         m.deployment = serde_json::from_str(&self.deployment)?;
+        m.placements = serde_json::from_str(&self.placements)?;
         Ok(m)
     }
+}
+
+/// Bases créées par une version précédente : colonnes ajoutées depuis.
+fn migrate(conn: &Connection) -> rusqlite::Result<()> {
+    let has_placements = conn
+        .prepare("SELECT 1 FROM pragma_table_info('installed_mods') WHERE name = 'placements'")?
+        .exists([])?;
+    if !has_placements {
+        conn.execute_batch(
+            "ALTER TABLE installed_mods ADD COLUMN placements TEXT NOT NULL DEFAULT '[]'",
+        )?;
+    }
+    Ok(())
 }
 
 fn row(r: &rusqlite::Row<'_>) -> rusqlite::Result<Row> {
@@ -280,7 +307,9 @@ fn row(r: &rusqlite::Row<'_>) -> rusqlite::Result<Row> {
             installed_at: r.get("installed_at")?,
             store_dir: r.get("store_dir")?,
             deployment: Deployment::default(),
+            placements: Vec::new(),
         },
         deployment: r.get("deployment")?,
+        placements: r.get("placements")?,
     })
 }
