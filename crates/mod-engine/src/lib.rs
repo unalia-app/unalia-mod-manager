@@ -26,7 +26,10 @@ pub fn http_client() -> HttpClient {
             env!("CARGO_PKG_VERSION"),
             " (+https://gitlab.com/reverss/modalia)"
         ))
-        .timeout(std::time::Duration::from_secs(30))
+        // Pas de délai total : un gros mod met des minutes à arriver. On
+        // coupe seulement une connexion qui ne répond plus.
+        .connect_timeout(std::time::Duration::from_secs(15))
+        .read_timeout(std::time::Duration::from_secs(30))
         .build()
         .expect("client HTTP")
 }
