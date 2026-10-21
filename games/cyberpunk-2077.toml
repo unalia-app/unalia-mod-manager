@@ -1,5 +1,11 @@
 # Cyberpunk 2077 : mods sur Nexus Mods, placés par l'adaptateur REDengine.
 #
+# Échelle de sources : un mod Nexus dont l'auteur publie le même fichier
+# sur GitHub s'installe depuis GitHub, sans clic sur le site. Le dépôt vient
+# de la description du mod, ou de `mirrors` ci-dessous quand la description
+# ne le cite pas. Dans les deux cas, Nexus doit reconnaître l'empreinte du
+# fichier comme celle de ce mod : une liste fausse ne peut rien installer.
+#
 # Les frameworks sont publiés par leurs auteurs à la fois sur Nexus et sur
 # GitHub : Modalia les installe depuis GitHub, sans clic sur Nexus, dès
 # qu'un mod en a besoin. Un framework est requis quand un fichier du mod
@@ -62,3 +68,8 @@ nexus_id = 7780
 github = "psiberx/cp2077-codeware"
 asset = "Codeware-{version}.zip"
 marker = "red4ext/plugins/Codeware/Codeware.dll"
+
+[[mirrors]]
+name = "Mod Settings"
+nexus_id = 4885
+github = "jackhumbert/mod_settings"

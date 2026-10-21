@@ -517,6 +517,23 @@ pub fn sha256_file(path: &Path) -> io::Result<String> {
     Ok(hex(&hasher.finalize()))
 }
 
+/// Empreinte MD5 d'un fichier : celle que Nexus sait retrouver
+/// (`md5_search`). Jamais utilisée pour la sécurité, seulement pour
+/// reconnaître un fichier identique publié ailleurs.
+pub fn md5_file(path: &Path) -> io::Result<String> {
+    use md5::{Digest as _, Md5};
+    let mut file = File::open(path)?;
+    let mut hasher = Md5::new();
+    let mut buffer = vec![0; 1024 * 1024];
+    loop {
+        match file.read(&mut buffer)? {
+            0 => break,
+            n => hasher.update(&buffer[..n]),
+        }
+    }
+    Ok(hex(&hasher.finalize()))
+}
+
 fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
 }

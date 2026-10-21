@@ -22,6 +22,7 @@ toml = "1.1.8"
 tokio-tungstenite = { version = "0.30.0", features = ["rustls-tls-webpki-roots"] }
 uuid = { version = "1.28.0", features = ["v4"] }
 futures-util = { version = "0.3.34", default-features = false, features = ["sink"] }
+md-5 = "0.11.0"
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.56"

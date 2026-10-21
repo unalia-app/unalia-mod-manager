@@ -4,7 +4,7 @@
 
 use serde::Deserialize;
 
-use super::{GameProfile, NexusGame};
+use super::{GameProfile, Mirror, NexusGame};
 use crate::loaders::rules::InstallRules;
 
 const PROFILES: [&str; 1] = [include_str!("../../../../games/cyberpunk-2077.toml")];
@@ -25,6 +25,8 @@ struct RawProfile {
     nexus: Option<NexusGame>,
     #[serde(default)]
     frameworks: Vec<crate::loaders::redengine::Framework>,
+    #[serde(default)]
+    mirrors: Vec<Mirror>,
 }
 
 pub fn profiles() -> Vec<GameProfile> {
@@ -51,6 +53,7 @@ pub fn profiles() -> Vec<GameProfile> {
                 nexus: raw.nexus,
                 install_rules: InstallRules::default(),
                 frameworks: raw.frameworks,
+                mirrors: raw.mirrors,
             }
         })
         .collect()

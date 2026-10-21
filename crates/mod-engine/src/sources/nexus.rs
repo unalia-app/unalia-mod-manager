@@ -123,6 +123,9 @@ pub struct ModFile {
 pub struct ModInfo {
     pub mod_id: u32,
     pub name: String,
+    /// Description brute (BBCode) : on y cherche une source officielle de
+    /// l'auteur.
+    pub description: String,
     pub author: String,
     pub version: String,
     pub thumbnail_url: Option<String>,
@@ -202,6 +205,7 @@ impl Nexus {
         Ok(ModInfo {
             mod_id,
             name: node.name.clone(),
+            description: node.description.clone().unwrap_or_default(),
             author: node.author.clone().unwrap_or_default(),
             version: node.version.clone().unwrap_or_default(),
             thumbnail_url: node.thumbnail_url.clone(),
@@ -268,12 +272,35 @@ impl Nexus {
             })
     }
 
+    /// Fichiers de Nexus identiques, octet pour octet, au fichier
+    /// d'empreinte `md5` : (mod, fichier).
+    pub async fn md5_search(
+        &self,
+        domain: &str,
+        md5: &str,
+    ) -> Result<Vec<(u32, u32)>, SourceError> {
+        if md5.len() != 32 || !md5.chars().all(|c| c.is_ascii_hexdigit()) {
+            return Ok(Vec::new());
+        }
+        match self
+            .rest::<Vec<Md5Match>>(&format!("/games/{domain}/mods/md5_search/{md5}.json"))
+            .await
+        {
+            Ok(matches) => Ok(matches
+                .into_iter()
+                .map(|m| (m.r#mod.mod_id, m.file_details.file_id))
+                .collect()),
+            Err(SourceError::NotFound { .. }) => Ok(Vec::new()),
+            Err(error) => Err(error),
+        }
+    }
+
     async fn node(&self, domain: &str, mod_id: u32) -> Result<ModNode, SourceError> {
         let data: LegacyData = self
             .graphql(
                 &format!(
                     "query($ids: [CompositeDomainWithIdInput!]!) {{
-                        legacyModsByDomain(ids: $ids) {{ nodes {{ {MOD_FIELDS} gameId
+                        legacyModsByDomain(ids: $ids) {{ nodes {{ {MOD_FIELDS} gameId description
                             modRequirements {{ nexusRequirements {{ nodes {{
                                 modId modName gameId externalRequirement url
                             }} }} }}
@@ -690,6 +717,7 @@ struct ModNode {
     status: Option<String>,
     mod_category: Option<Category>,
     game_id: Option<u32>,
+    description: Option<String>,
     mod_requirements: Option<Requirements>,
 }
 
@@ -789,6 +817,22 @@ struct User {
 }
 
 #[derive(Deserialize)]
+struct Md5Match {
+    r#mod: Md5Mod,
+    file_details: Md5File,
+}
+
+#[derive(Deserialize)]
+struct Md5Mod {
+    mod_id: u32,
+}
+
+#[derive(Deserialize)]
+struct Md5File {
+    file_id: u32,
+}
+
+#[derive(Deserialize)]
 struct CdnLink {
     #[serde(rename = "URI")]
     uri: String,
@@ -858,6 +902,7 @@ mod tests {
         let mut info = ModInfo {
             mod_id: 1,
             name: String::new(),
+            description: String::new(),
             author: String::new(),
             version: String::new(),
             thumbnail_url: None,

@@ -10,6 +10,10 @@
 //! Tout le lot est transactionnel, comme une installation Thunderstore.
 
 use std::collections::HashSet;
+use std::path::Path;
+
+/// Dépôts GitHub essayés au plus pour un mod (chacun coûte une requête).
+const MIRROR_CANDIDATES: usize = 4;
 
 use serde::Serialize;
 
@@ -17,11 +21,13 @@ use super::{
     Done, Fetched, InstallError, Installer, Package, Progress, Target, deploy_package, list_files,
     rollback,
 };
+use crate::download;
 use crate::games::GameProfile;
 use crate::loaders::redengine::{Framework, RedEngine, needed_frameworks};
 use crate::loaders::{Loader, PackageKind};
-use crate::sources::github::GitHub;
-use crate::sources::nexus::{Nexus, NxmLink, Requirement, mod_key};
+use crate::sources::SourceError;
+use crate::sources::github::{GitHub, repos_in};
+use crate::sources::nexus::{ModFile, ModInfo, Nexus, NxmLink, Requirement, mod_key};
 use crate::state::{InstalledMod, State};
 
 /// Ce que l'utilisateur a demandé.
@@ -83,14 +89,38 @@ impl Installer<'_, Nexus> {
                 }
                 .cloned()
                 .ok_or_else(|| InstallError::NoFile(info.name.clone()))?;
-                let url = self
-                    .source
-                    .download_url(domain, mod_id, file.file_id, link)
-                    .await?;
                 let version = if file.version.is_empty() {
                     info.version.clone()
                 } else {
                     file.version.clone()
+                };
+                let url = match self
+                    .source
+                    .download_url(domain, mod_id, file.file_id, link)
+                    .await
+                {
+                    Ok(url) => url,
+                    // Compte gratuit : avant d'envoyer sur le site, on
+                    // cherche le même fichier chez l'auteur, ailleurs.
+                    Err(error @ SourceError::WebsiteOnly { .. }) if link.is_none() => {
+                        let archive = self.archive_path(&mod_key(mod_id), &version);
+                        match self
+                            .github_mirror(
+                                github,
+                                profile,
+                                domain,
+                                &info,
+                                &file,
+                                &archive,
+                                &mut on_progress,
+                            )
+                            .await
+                        {
+                            Some(url) => url,
+                            None => return Err(error.into()),
+                        }
+                    }
+                    Err(error) => return Err(error.into()),
                 };
                 let package = Package {
                     id: mod_key(mod_id),
@@ -179,6 +209,84 @@ impl Installer<'_, Nexus> {
             })
             .collect();
         Ok(NexusInstall { mods, missing })
+    }
+
+    /// Échelle de sources : le fichier principal du mod est-il publié tel
+    /// quel sur un dépôt GitHub cité dans sa description ? On ne le croit
+    /// pas sur parole : le fichier candidat (même taille exacte) est
+    /// téléchargé, et Nexus doit reconnaître son empreinte comme ce fichier
+    /// précis de ce mod. Gardé en cache, il n'est pas téléchargé deux fois.
+    #[allow(clippy::too_many_arguments)]
+    async fn github_mirror(
+        &self,
+        github: &GitHub,
+        profile: &GameProfile,
+        domain: &str,
+        info: &ModInfo,
+        file: &ModFile,
+        archive: &Path,
+        on_progress: &mut impl FnMut(Progress),
+    ) -> Option<String> {
+        let size = file.size?;
+        // Les dépôts des frameworks sont cités comme dépendances, pas comme
+        // source du mod.
+        let frameworks: Vec<String> = profile
+            .frameworks
+            .iter()
+            .map(|f| f.github.to_ascii_lowercase())
+            .collect();
+        // Le profil du jeu d'abord, puis les dépôts cités par la description.
+        let listed = profile
+            .mirrors
+            .iter()
+            .filter(|m| m.nexus_id == info.mod_id)
+            .map(|m| m.github.clone());
+        let mut repos: Vec<String> = Vec::new();
+        for repo in listed.chain(repos_in(&info.description)) {
+            let lower = repo.to_ascii_lowercase();
+            if !frameworks.contains(&lower) && !repos.iter().any(|r| r.eq_ignore_ascii_case(&repo))
+            {
+                repos.push(repo);
+            }
+        }
+        let repos = repos.into_iter().take(MIRROR_CANDIDATES);
+        for repo in repos {
+            let Ok(release) = github.latest_release(&repo).await else {
+                continue;
+            };
+            for asset in release.assets.iter().filter(|a| a.size == size) {
+                let _ = std::fs::remove_file(archive);
+                let options = download::Options {
+                    max_bytes: size,
+                    ..download::Options::default()
+                };
+                let fetched = download::download(
+                    self.client,
+                    &asset.url,
+                    archive,
+                    &options,
+                    |received, total| {
+                        on_progress(Progress::Downloading {
+                            index: 0,
+                            total: 1,
+                            name: info.name.clone(),
+                            received,
+                            size: total,
+                        });
+                    },
+                )
+                .await;
+                if fetched.is_ok()
+                    && let Ok(md5) = download::md5_file(archive)
+                    && let Ok(matches) = self.source.md5_search(domain, &md5).await
+                    && matches.contains(&(info.mod_id, file.file_id))
+                {
+                    return Some(asset.url.clone());
+                }
+                let _ = std::fs::remove_file(archive);
+            }
+        }
+        None
     }
 
     async fn github_package(

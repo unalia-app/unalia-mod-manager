@@ -325,10 +325,7 @@ impl<S: ModSource> Installer<'_, S> {
 
         // Télécharger (ou reprendre l'archive déjà en cache). L'extension
         // ne compte pas : le format se lit dans le fichier.
-        let archive = self
-            .paths
-            .downloads
-            .join(format!("{}-{version}.zip", package.id));
+        let archive = self.archive_path(&package.id, &package.version);
         let sha256 = if archive.is_file() {
             download::sha256_file(&archive)?
         } else {
@@ -411,6 +408,13 @@ impl<S: ModSource> Installer<'_, S> {
         }
 
         Ok((store_dir, sha256))
+    }
+
+    /// Archive d'une version dans le cache des téléchargements.
+    fn archive_path(&self, id: &str, version: &str) -> PathBuf {
+        self.paths
+            .downloads
+            .join(format!("{id}-{}.zip", path_segment(version)))
     }
 
     /// Adaptateur du jeu : ses règles de placement si le catalogue les

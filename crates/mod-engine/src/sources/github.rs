@@ -10,6 +10,37 @@ use super::SourceError;
 pub const API_URL: &str = "https://api.github.com";
 const NAME: &str = "GitHub";
 
+/// Dépôts GitHub cités dans un texte (description d'un mod), sans doublon,
+/// dans l'ordre d'apparition : `owner/repo`.
+pub fn repos_in(text: &str) -> Vec<String> {
+    let mut repos: Vec<String> = Vec::new();
+    for (start, _) in text.match_indices("github.com/") {
+        let rest = &text[start + "github.com/".len()..];
+        let mut parts = rest.split('/');
+        let (Some(owner), Some(repo)) = (parts.next(), parts.next()) else {
+            continue;
+        };
+        let name = |s: &str| -> String {
+            s.chars()
+                .take_while(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_' | '.'))
+                .collect()
+        };
+        let (owner, repo) = (name(owner), name(repo));
+        let repo = repo
+            .trim_end_matches(".git")
+            .trim_end_matches('.')
+            .to_owned();
+        if owner.is_empty() || repo.is_empty() || owner.contains("..") || repo.contains("..") {
+            continue;
+        }
+        let full = format!("{owner}/{repo}");
+        if !repos.iter().any(|r| r.eq_ignore_ascii_case(&full)) {
+            repos.push(full);
+        }
+    }
+    repos
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Release {
     /// Version sans le `v` du tag, ex. `1.30.0`.
@@ -107,4 +138,21 @@ struct RawRelease {
     published_at: Option<String>,
     #[serde(default)]
     assets: Vec<Asset>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn finds_repositories_in_a_description() {
+        let text = "Source: [GitHub](https://github.com/jackhumbert/let_there_be_flight). \
+            Needs https://github.com/jac3km4/redscript/releases/latest and \
+            github.com/jackhumbert/let_there_be_flight.git again.";
+        assert_eq!(
+            repos_in(text),
+            ["jackhumbert/let_there_be_flight", "jac3km4/redscript"]
+        );
+        assert!(repos_in("github.com/ alone, github.com/x").is_empty());
+    }
 }

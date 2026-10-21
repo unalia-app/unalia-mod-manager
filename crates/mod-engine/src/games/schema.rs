@@ -184,6 +184,7 @@ fn profile(game: Game, communities: &HashMap<String, Community>) -> Option<GameP
         hero_url: community_meta.and_then(|m| m.hero.clone()).map(asset_url),
         nexus: None,
         frameworks: Vec::new(),
+        mirrors: Vec::new(),
         name: game.meta.display_name,
         community,
         id: game.label,

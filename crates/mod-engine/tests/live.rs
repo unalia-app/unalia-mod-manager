@@ -181,3 +181,63 @@ async fn real_framework_archives_land_in_the_right_place() {
         assert!(game.join(file).is_file(), "{file}");
     }
 }
+
+/// Échelle de sources, pour de vrai : Mod Settings (liste du profil) et
+/// Input Loader (dépôt cité par sa description) s'installent depuis GitHub
+/// avec un compte gratuit, sans lien du site. Demande `NEXUS_API_KEY`
+/// (l'empreinte est vérifiée auprès de Nexus).
+#[tokio::test]
+#[ignore]
+async fn verified_github_copies_spare_the_website() {
+    use mod_engine::installer::{Installer, NexusFile, Paths, Target};
+    use mod_engine::state::State;
+
+    let Ok(key) = std::env::var("NEXUS_API_KEY") else {
+        eprintln!("NEXUS_API_KEY not set: skipped");
+        return;
+    };
+    let catalog = catalog();
+    let cyberpunk = catalog.by_steam_app_id(1091500).unwrap().clone();
+    let client = mod_engine::http_client();
+    let nexus = Nexus::new(client.clone());
+    nexus.set_api_key(Some(key));
+    let github = GitHub::new(client.clone());
+    for mod_id in [4885, 4575] {
+        let tmp = tempfile::tempdir().unwrap();
+        let game = tmp.path().join("Cyberpunk 2077");
+        std::fs::create_dir_all(game.join("bin/x64")).unwrap();
+        let paths = Paths {
+            store: tmp.path().join("store"),
+            downloads: tmp.path().join("downloads"),
+        };
+        let mut state = State::open_in_memory().unwrap();
+        let installer = Installer {
+            source: &nexus,
+            catalog: None,
+            client: &client,
+            paths: &paths,
+        };
+        let target = Target {
+            game: "steam:1091500",
+            game_dir: &game,
+            community: COMMUNITY,
+        };
+        let done = installer
+            .install_nexus(
+                &mut state,
+                &target,
+                &cyberpunk,
+                &github,
+                mod_id,
+                NexusFile::Main,
+                |_| {},
+            )
+            .await
+            .unwrap_or_else(|e| panic!("{mod_id}: {e:?}"));
+        assert!(
+            done.mods
+                .iter()
+                .any(|m| m.id == format!("nexus-{mod_id}") && m.explicit)
+        );
+    }
+}

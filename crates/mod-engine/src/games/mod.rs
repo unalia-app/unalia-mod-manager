@@ -65,6 +65,20 @@ pub struct GameProfile {
     /// Frameworks que Modalia installe tout seul quand un mod en a besoin.
     #[serde(skip)]
     pub frameworks: Vec<Framework>,
+    /// Dépôts GitHub d'auteurs que la description de leur mod ne cite pas.
+    #[serde(skip)]
+    pub mirrors: Vec<Mirror>,
+}
+
+/// Le même mod publié par son auteur sur GitHub (profil du jeu). Seulement
+/// un candidat : l'empreinte du fichier est toujours vérifiée auprès de
+/// Nexus avant de s'en servir.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Mirror {
+    pub name: String,
+    pub nexus_id: u32,
+    pub github: String,
 }
 
 /// Le jeu chez Nexus Mods.

@@ -37,6 +37,8 @@ struct World {
     github: GitHub,
     client: reqwest::Client,
     state: State,
+    /// Description des prochains mods publiés (on y cite des dépôts GitHub).
+    description: String,
 }
 
 impl World {
@@ -70,6 +72,7 @@ impl World {
             client,
             server,
             game,
+            description: String::new(),
             _tmp: tmp,
         };
         world.publish_frameworks().await;
@@ -152,6 +155,7 @@ impl World {
         files: &[(&str, &[u8])],
     ) {
         let file_id = mod_id * 10;
+        let archive = zip_bytes(files);
         let requirements: Vec<_> = requirements
             .iter()
             .map(|(id, name)| {
@@ -169,6 +173,7 @@ impl World {
                 "thumbnailUrl": null, "pictureUrl": null, "downloads": 1,
                 "updatedAt": "2026-10-01T00:00:00Z", "createdAt": "2026-01-01T00:00:00Z",
                 "version": version, "adultContent": false, "status": "published",
+                "description": self.description,
                 "modCategory": { "name": "Gameplay" }, "gameId": 3333,
                 "modRequirements": { "nexusRequirements": { "nodes": requirements } }
             }] } }),
@@ -183,7 +188,7 @@ impl World {
                 { "fileId": file_id - 1, "name": name, "version": "0.9", "category": "OLD_VERSION",
                   "primary": 0, "sizeInBytes": "10", "date": 1_700_000_000 },
                 { "fileId": file_id, "name": name, "version": version, "category": "MAIN",
-                  "primary": 1, "sizeInBytes": "10", "date": 1_790_000_000 }
+                  "primary": 1, "sizeInBytes": archive.len().to_string(), "date": 1_790_000_000 }
             ] }),
         )
         .await;
@@ -219,7 +224,7 @@ impl World {
             .await;
         self.server
             .mock("GET", download.as_str())
-            .with_body(zip_bytes(files))
+            .with_body(archive)
             .create_async()
             .await;
     }
@@ -502,4 +507,79 @@ async fn updates_come_from_github_for_frameworks_and_nexus_for_mods() {
         .collect();
     // Les frameworks viennent d'être installés à leur dernière version.
     assert_eq!(updates, [("nexus-5000", "1.3.0")]);
+}
+
+/// Le même fichier publié par l'auteur sur GitHub, et ce que Nexus répond
+/// quand on lui demande à qui appartient son empreinte.
+async fn mirror_on_github(w: &mut World, bytes: Vec<u8>, owner_mod: u32, owner_file: u32) {
+    w.server
+        .mock("GET", "/repos/someone/cool-hud/releases/latest")
+        .with_body(
+            json!({
+                "tag_name": "v1.2.0",
+                "assets": [
+                    { "name": "notes.txt", "browser_download_url": format!("{}/gh/notes.txt", w.server.url()), "size": 3 },
+                    { "name": "CoolHud.zip", "browser_download_url": format!("{}/gh/CoolHud.zip", w.server.url()), "size": bytes.len() }
+                ]
+            })
+            .to_string(),
+        )
+        .create_async()
+        .await;
+    w.server
+        .mock("GET", "/gh/CoolHud.zip")
+        .with_body(bytes)
+        .create_async()
+        .await;
+    w.server
+        .mock(
+            "GET",
+            Matcher::Regex(r"^/v1/games/cyberpunk2077/mods/md5_search/[0-9a-f]{32}\.json$".into()),
+        )
+        .with_body(
+            json!([{ "mod": { "mod_id": owner_mod }, "file_details": { "file_id": owner_file } }])
+                .to_string(),
+        )
+        .create_async()
+        .await;
+}
+
+fn cool_hud_files() -> Vec<(&'static str, &'static [u8])> {
+    vec![("r6/scripts/CoolHud/hud.reds", b"hud")]
+}
+
+#[tokio::test]
+async fn a_verified_github_copy_spares_the_website() {
+    let mut w = World::new().await;
+    w.description = "Source code: [url=https://github.com/someone/cool-hud]GitHub[/url]. \
+        Built with https://github.com/jac3km4/redscript"
+        .into();
+    let files = cool_hud_files();
+    w.publish(COOL_HUD, "Cool HUD", "1.2.0", &[], &files).await;
+    mirror_on_github(&mut w, zip_bytes(&files), COOL_HUD, COOL_HUD * 10).await;
+
+    // Compte gratuit, sans lien du site : Nexus refuserait, GitHub sert.
+    let done = w.install(COOL_HUD, NexusFile::Main).await.unwrap();
+    assert!(w.game.join("r6/scripts/CoolHud/hud.reds").is_file());
+    let hud = done.mods.iter().find(|m| m.id == "nexus-5000").unwrap();
+    assert_eq!(hud.version, "1.2.0");
+}
+
+#[tokio::test]
+async fn a_github_file_that_nexus_attributes_elsewhere_is_not_used() {
+    let mut w = World::new().await;
+    w.description = "https://github.com/someone/cool-hud".into();
+    let files = cool_hud_files();
+    w.publish(COOL_HUD, "Cool HUD", "1.2.0", &[], &files).await;
+    // Même octets, mais Nexus les rattache à un autre mod (une copie
+    // republiée) : ce n'est pas la preuve qu'il s'agit de ce fichier.
+    mirror_on_github(&mut w, zip_bytes(&files), 31005, 1).await;
+    let before = snapshot(&w.game);
+
+    let err = w.install(COOL_HUD, NexusFile::Main).await.unwrap_err();
+    assert!(
+        matches!(err, InstallError::Source(SourceError::WebsiteOnly { .. })),
+        "{err:?}"
+    );
+    assert_eq!(snapshot(&w.game), before);
 }
