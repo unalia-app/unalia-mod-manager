@@ -837,7 +837,13 @@ pub fn nexus_setup(app: &AppHandle) {
             .ok()
             .flatten()
     });
-    let key = saved.or_else(dev_nexus_key);
+    // Une chaîne vide : l'utilisateur s'est déconnecté, la clé du `.env` de
+    // dev ne doit pas revenir.
+    let key = match saved {
+        Some(saved) if saved.is_empty() => None,
+        Some(saved) => Some(saved),
+        None => dev_nexus_key(),
+    };
     let connected = key.is_some();
     app.state::<Catalog>().nexus.set_api_key(key);
     if connected {
@@ -981,10 +987,12 @@ pub async fn nexus_disconnect(
     mods: State<'_, Mods>,
 ) -> Result<(), String> {
     catalog.nexus.set_api_key(None);
+    // Vide plutôt qu'absent : une déconnexion voulue tient, même en dev
+    // avec une clé dans le `.env`.
     mods.state
         .lock()
         .await
-        .set_setting(NEXUS_KEY, None)
+        .set_setting(NEXUS_KEY, Some(""))
         .map_err(|e| e.to_string())
 }
 
