@@ -1,6 +1,7 @@
 "use client";
 
-import type { ComponentProps } from "react";
+import { useRouter } from "next/navigation";
+import { type ComponentProps, useMemo } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import rehypeRaw from "rehype-raw";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
@@ -19,30 +20,52 @@ const schema = {
 	protocols: { ...defaultSchema.protocols, href: ["https"], src: ["https"] },
 };
 
-const components: Components = {
-	a: ({ href, children }) =>
-		href?.startsWith("https://") ? (
-			<a
-				href={href}
-				onClick={(event) => {
-					// Jamais de navigation dans la fenêtre de l'appli.
-					event.preventDefault();
-					void openExternal(href);
-				}}
-			>
-				{children}
-			</a>
-		) : (
-			// Ancres et liens relatifs : ils mèneraient dans l'appli elle-même.
-			<span>{children}</span>
-		),
-	img: ({ src, alt }: ComponentProps<"img">) =>
-		typeof src === "string" && src.startsWith("https://") ? (
-			<img src={src} alt={alt ?? ""} loading="lazy" decoding="async" referrerPolicy="no-referrer" />
-		) : null,
-};
+function img({ src, alt }: ComponentProps<"img">) {
+	return typeof src === "string" && src.startsWith("https://") ? (
+		<img src={src} alt={alt ?? ""} loading="lazy" decoding="async" referrerPolicy="no-referrer" />
+	) : null;
+}
 
-export function Markdown({ children }: { children: string }) {
+/**
+ * `internalLink` : page de l'appli pour un lien de la description (un autre
+ * mod du même jeu), sinon `null` et le lien s'ouvre dans le navigateur.
+ */
+export function Markdown({
+	children,
+	internalLink,
+}: {
+	children: string;
+	internalLink?: (href: string) => string | null;
+}) {
+	const router = useRouter();
+	const components: Components = useMemo(
+		() => ({
+			a: ({ href, children: label }) => {
+				if (!href?.startsWith("https://")) {
+					// Ancres et liens relatifs : ils mèneraient dans l'appli elle-même.
+					return <span>{label}</span>;
+				}
+				const inside = internalLink?.(href) ?? null;
+				return (
+					<a
+						href={href}
+						title={inside ? "Open in Unalia" : undefined}
+						onClick={(event) => {
+							// Jamais de navigation vers un site dans la fenêtre de l'appli.
+							event.preventDefault();
+							if (inside) router.push(inside);
+							else void openExternal(href);
+						}}
+					>
+						{label}
+					</a>
+				);
+			},
+			img,
+		}),
+		[internalLink, router],
+	);
+
 	return (
 		<div className="prose-mod">
 			<ReactMarkdown

@@ -295,6 +295,42 @@ impl Nexus {
         }
     }
 
+    /// Lien de don de l'auteur : celui qu'il met dans sa description
+    /// (Ko-fi, Patreon…), sinon son PayPal si Nexus le rend public. Jamais
+    /// bloquant : sans réponse, pas de bouton.
+    async fn donation_url(&self, domain: &str, mod_id: u32, description: &str) -> Option<String> {
+        if let Some(url) = donation_link_in(description) {
+            return Some(url);
+        }
+        let data: DonationData = self
+            .graphql(
+                "query($ids: [CompositeDomainWithIdInput!]!) {
+                    legacyModsByDomain(ids: $ids) { nodes { uploader { paypal donationsEnabled } } }
+                }",
+                json!({ "ids": [{ "gameDomain": domain, "modId": mod_id }] }),
+            )
+            .await
+            .ok()?;
+        let uploader = data
+            .legacy_mods_by_domain
+            .nodes
+            .into_iter()
+            .next()?
+            .uploader?;
+        let paypal = uploader.paypal.filter(|_| uploader.donations_enabled)?;
+        let email = paypal.trim();
+        let plain = email.contains('@')
+            && email
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || matches!(c, '@' | '.' | '-' | '_' | '+'));
+        plain.then(|| {
+            format!(
+                "https://www.paypal.com/donate/?business={}",
+                email.replace('+', "%2B").replace('@', "%40")
+            )
+        })
+    }
+
     async fn node(&self, domain: &str, mod_id: u32) -> Result<ModNode, SourceError> {
         let data: LegacyData = self
             .graphql(
@@ -483,7 +519,15 @@ impl ModSource for Nexus {
         let domain = domain_of(game).ok_or(SourceError::NotFound { source_name: NAME })?;
         let mod_id = parse_mod_key(id).ok_or(not_found)?;
         let node = self.node(domain, mod_id).await?;
-        let files = self.files(mod_id, node.game_id).await?;
+        let (files, donation_url) = tokio::join!(
+            self.files(mod_id, node.game_id),
+            self.donation_url(
+                domain,
+                mod_id,
+                node.description.as_deref().unwrap_or_default()
+            ),
+        );
+        let files = files?;
         let dependencies: Vec<Dependency> = node
             .requirements()
             .into_iter()
@@ -519,7 +563,7 @@ impl ModSource for Nexus {
             downloads: node.downloads,
             updated_at: node.updated_at.unwrap_or_default(),
             website_url: None,
-            donation_url: None,
+            donation_url,
             deprecated: node.status.as_deref().is_some_and(|s| s != "published"),
             versions,
         })
@@ -550,6 +594,38 @@ impl ModSource for Nexus {
             .unwrap_or_default();
         Ok(bbcode_to_markdown(&text))
     }
+}
+
+/// Sites de dons reconnus dans une description.
+const DONATION_HOSTS: [&str; 8] = [
+    "ko-fi.com/",
+    "patreon.com/",
+    "buymeacoffee.com/",
+    "paypal.me/",
+    "paypal.com/donate",
+    "paypal.com/paypalme/",
+    "github.com/sponsors/",
+    "liberapay.com/",
+];
+
+/// Premier lien de don HTTPS d'une description, ex.
+/// `https://ko-fi.com/author`.
+pub fn donation_link_in(text: &str) -> Option<String> {
+    text.match_indices("https://").find_map(|(start, _)| {
+        let url: String = text[start..]
+            .chars()
+            .take_while(|c| {
+                !c.is_whitespace() && !matches!(c, '"' | '\'' | '<' | '>' | ']' | '[' | ')' | '(')
+            })
+            .collect();
+        let rest = url
+            .trim_start_matches("https://")
+            .trim_start_matches("www.");
+        let host_ok = DONATION_HOSTS
+            .iter()
+            .any(|h| rest.to_ascii_lowercase().starts_with(h) && rest.len() > h.len());
+        host_ok.then(|| url.trim_end_matches(['.', ',', ';']).to_owned())
+    })
 }
 
 /// Secondes Unix → date ISO 8601 (UTC), sans dépendance de calendrier.
@@ -817,6 +893,30 @@ struct User {
 }
 
 #[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct DonationData {
+    legacy_mods_by_domain: DonationPage,
+}
+
+#[derive(Deserialize)]
+struct DonationPage {
+    nodes: Vec<DonationNode>,
+}
+
+#[derive(Deserialize)]
+struct DonationNode {
+    uploader: Option<Uploader>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct Uploader {
+    paypal: Option<String>,
+    #[serde(default)]
+    donations_enabled: bool,
+}
+
+#[derive(Deserialize)]
 struct Md5Match {
     r#mod: Md5Mod,
     file_details: Md5File,
@@ -880,6 +980,25 @@ mod tests {
         assert!(md.contains("- one\n- two"), "{md}");
         assert!(md.contains("![](https://i.io/a.png)"), "{md}");
         assert!(md.contains("[v1.2]"), "{md}");
+    }
+
+    #[test]
+    fn finds_donation_links() {
+        assert_eq!(
+            donation_link_in(
+                "Support me: [url=https://ko-fi.com/author]Ko-fi[/url] or https://github.com/a/b"
+            )
+            .as_deref(),
+            Some("https://ko-fi.com/author")
+        );
+        assert_eq!(
+            donation_link_in("https://www.patreon.com/someone.").as_deref(),
+            Some("https://www.patreon.com/someone")
+        );
+        assert_eq!(
+            donation_link_in("http://ko-fi.com/insecure https://ko-fi.com/"),
+            None
+        );
     }
 
     #[test]

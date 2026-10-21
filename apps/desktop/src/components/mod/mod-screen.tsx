@@ -208,7 +208,7 @@ function ModDetailsView({
 					)}
 					{description.status === "ready" &&
 						(description.value.trim() ? (
-							<Markdown>{description.value}</Markdown>
+							<Markdown internalLink={(href) => modLink(href, game)}>{description.value}</Markdown>
 						) : (
 							<p className="text-sm text-fg-subtle">The author didn't write a description.</p>
 						))}
@@ -355,6 +355,37 @@ function ExternalTextLink({ href, className, children }: { href: string; classNa
 			{children}
 		</button>
 	);
+}
+
+/**
+ * Lien vers un autre mod du même jeu, sur sa source : sa page dans
+ * Unalia. Le téléchargement suit les règles de la source (Nexus : son site).
+ */
+function modLink(href: string, game: SteamGame): string | null {
+	const profile = game.profile;
+	if (!profile) return null;
+	let url: URL;
+	try {
+		url = new URL(href);
+	} catch {
+		return null;
+	}
+	const host = url.hostname.replace(/^www\./, "");
+	const parts = url.pathname.split("/").filter(Boolean);
+	if (profile.nexus && host === "nexusmods.com") {
+		const [domain, kind, id] = parts;
+		if (domain === profile.nexus.domain && kind === "mods" && id && /^\d+$/.test(id)) {
+			return modHref(game.appId, `nexus-${id}`);
+		}
+	}
+	if (!profile.nexus && host === "thunderstore.io") {
+		// /c/<communauté>/p/<namespace>/<nom>/
+		const [c, community, p, namespace, name] = parts;
+		if (c === "c" && community === profile.community && p === "p" && namespace && name) {
+			return modHref(game.appId, `${namespace}-${name}`);
+		}
+	}
+	return null;
 }
 
 /** `https://github.com/MCXGK3/KnightInSilkSong` → `GitHub`. */
