@@ -6,11 +6,12 @@ import Link from "next/link";
 import { useState } from "react";
 
 import { InstallStateBadge } from "@/components/mod/install-button";
-import { type ModSummary, openNexusPage } from "@/lib/engine";
+import type { ModSummary } from "@/lib/engine";
 import { compactNumber, relativeDate } from "@/lib/format";
 import { usePendingOp } from "@/lib/game-status";
 import { modHref } from "@/lib/games-store";
 import { install, overallProgress, useActiveInstall, useInstalled, useModUpdate } from "@/lib/installs";
+import { openExternal } from "@/lib/open";
 
 /**
  * Carte de la grille Découvrir, dans l'esprit des cartes de jeu d'Unalia.
@@ -137,8 +138,8 @@ function QuickInstall({ appId, modId, name }: { appId: number; modId: string; na
 			type="button"
 			disabled={busy}
 			aria-label={busy ? `Installing ${name}` : `${label} ${name}`}
-			title={failed ? active.message : website ? "Click Slow download in the Nexus Mods window, Unalia does the rest" : undefined}
-			onClick={() => void (website ? openNexusPage(website) : install(appId, modId))}
+			title={failed ? active.message : website ? "Click Slow download on Nexus Mods, Unalia does the rest" : undefined}
+			onClick={() => void (website ? openExternal(website) : install(appId, modId))}
 			className={cn(
 				"absolute right-2 bottom-2 z-20 flex h-7 min-w-[4.5rem] cursor-pointer items-center justify-center gap-1.5 rounded-full px-2.5 font-tight text-[11px] font-semibold shadow-lg transition-[opacity,translate,background-color] duration-200 ease-out disabled:cursor-default",
 				// Au survol seulement : sur toute une grille, un bouton par carte

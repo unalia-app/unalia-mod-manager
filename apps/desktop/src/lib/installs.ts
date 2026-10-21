@@ -27,7 +27,7 @@ export type ActiveInstall =
 	| { status: "queued" }
 	/** `speed` : octets par seconde (moyenne lissée), pendant un téléchargement. */
 	| { status: "running"; progress: InstallProgress; speed?: number }
-	/** Compte Nexus gratuit : téléchargement à confirmer dans la fenêtre Nexus. */
+	/** Compte Nexus gratuit : téléchargement à confirmer sur la page ouverte. */
 	| { status: "website"; url: string }
 	| { status: "error"; message: string; details: string | null };
 
@@ -160,11 +160,11 @@ export function install(appId: number, modId: string): Promise<void> {
 		.then(
 			(outcome) =>
 				update((s) => {
-					// Compte Nexus gratuit : le moteur a ouvert la page de
-					// téléchargement dans la fenêtre Nexus ; le lien `nxm://`
-					// reviendra avec la progression.
+					// Compte Nexus gratuit : la page de téléchargement s'ouvre, le lien
+					// `nxm://` reviendra avec la progression.
 					if (outcome.status === "browser") {
 						s.active.set(k, { status: "website", url: outcome.url });
+						void openExternal(outcome.url);
 						return;
 					}
 					// Mis en attente : la file du jeu (game-status) prend le relais.

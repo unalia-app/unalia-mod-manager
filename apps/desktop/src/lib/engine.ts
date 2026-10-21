@@ -345,16 +345,6 @@ export function onNexusInstalled(handler: (event: NexusInstalled) => void): Prom
 	return listen<NexusInstalled>("nexus-installed", (e) => handler(e.payload));
 }
 
-/** Rouvre une page Nexus dans la fenêtre Nexus de Modalia. */
-export function openNexusPage(url: string): Promise<void> {
-	return invoke("open_nexus_page", { url });
-}
-
-/** Fenêtre Nexus sur la page des clés API : connexion au site, puis clé à coller. */
-export function openNexusSignIn(): Promise<void> {
-	return invoke("open_nexus_sign_in");
-}
-
 /** Page Nexus d'un mod (`nexus-<id>`). */
 export function nexusModUrl(domain: string, modId: string, tab?: "files"): string {
 	const id = modId.replace(/^nexus-/, "");
