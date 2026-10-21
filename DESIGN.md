@@ -4,6 +4,13 @@ Référence visuelle pour les humains et les agents IA. Le langage vient d'**Una
 
 Tokens : `packages/ui/src/styles.css`. Composants : `packages/ui/src/`.
 
+## Nom
+
+- **Unalia** est la marque mère. Cette appli s'appelle **Unalia Mod Manager** : titre de fenêtre, installeur, stores.
+- Logo : « UNALIA » en italique gras, puis « Mod manager » en petit (majuscules, `fg-subtle`). Même composition dans l'intro, sous le mot.
+- Dans les phrases de l'interface : « Unalia » seul (« Unalia installs it right after »).
+- « Modalia » reste le nom de code interne : dépôt, paquets, identifiant `app.modalia.desktop` (le changer déplacerait les données des utilisateurs).
+
 ## Principes
 
 1. **Sombre, une seule surface.** Fond `bg` (#0d0d0f) partout. La profondeur vient de transparences blanches et de flou, jamais de gris opaques empilés.

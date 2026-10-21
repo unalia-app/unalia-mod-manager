@@ -9,7 +9,7 @@ import { interTight, poppins } from "./fonts";
 import "./globals.css";
 
 export const metadata: Metadata = {
-	title: "Modalia",
+	title: "Unalia Mod Manager",
 };
 
 export default function RootLayout({ children }: { children: ReactNode }) {

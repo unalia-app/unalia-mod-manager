@@ -50,9 +50,9 @@ impl InstalledMod {
 
 #[derive(Debug, thiserror::Error)]
 pub enum StateError {
-    #[error("Modalia's database is unavailable")]
+    #[error("Unalia's database is unavailable")]
     Db(#[from] rusqlite::Error),
-    #[error("Modalia's database is damaged")]
+    #[error("Unalia's database is damaged")]
     Corrupt(#[from] serde_json::Error),
 }
 

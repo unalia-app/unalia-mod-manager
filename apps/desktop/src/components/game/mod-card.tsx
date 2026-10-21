@@ -137,7 +137,7 @@ function QuickInstall({ appId, modId, name }: { appId: number; modId: string; na
 			type="button"
 			disabled={busy}
 			aria-label={busy ? `Installing ${name}` : `${label} ${name}`}
-			title={failed ? active.message : website ? "Click Slow download in the Nexus Mods window, Modalia does the rest" : undefined}
+			title={failed ? active.message : website ? "Click Slow download in the Nexus Mods window, Unalia does the rest" : undefined}
 			onClick={() => void (website ? openNexusPage(website) : install(appId, modId))}
 			className={cn(
 				"absolute right-2 bottom-2 z-20 flex h-7 min-w-[4.5rem] cursor-pointer items-center justify-center gap-1.5 rounded-full px-2.5 font-tight text-[11px] font-semibold shadow-lg transition-[opacity,translate,background-color] duration-200 ease-out disabled:cursor-default",

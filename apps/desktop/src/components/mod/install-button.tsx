@@ -76,7 +76,7 @@ export function InstallButton({
 					Finish in the Nexus window
 				</Button>
 				<span className="text-[11px] leading-snug text-fg-subtle">
-					Click <span className="text-fg-muted">Slow download</span> in the Nexus Mods window. Modalia installs it right after ·{" "}
+					Click <span className="text-fg-muted">Slow download</span> in the Nexus Mods window. Unalia installs it right after ·{" "}
 					<button
 						type="button"
 						className="cursor-pointer text-fg-muted underline-offset-2 hover:underline"

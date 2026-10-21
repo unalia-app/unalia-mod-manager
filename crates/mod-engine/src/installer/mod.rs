@@ -96,7 +96,7 @@ pub enum InstallError {
     },
     #[error("{path} is already provided by {other}")]
     Conflict { path: String, other: String },
-    #[error("Modalia can't tell where the files of {0} go")]
+    #[error("Unalia can't tell where the files of {0} go")]
     NothingToInstall(String),
     #[error("{0} has no file to install")]
     NoFile(String),
@@ -104,7 +104,7 @@ pub enum InstallError {
     Source(#[from] SourceError),
     #[error(transparent)]
     State(#[from] StateError),
-    #[error("BepInEx is already installed in this game outside Modalia")]
+    #[error("BepInEx is already installed in this game outside Unalia")]
     LoaderPresent,
     #[error("other mods still need the loader: remove them first")]
     LoaderInUse,
@@ -112,7 +112,7 @@ pub enum InstallError {
     LoaderToggle,
     #[error("this mod isn't installed")]
     NotInstalled,
-    #[error("couldn't access Modalia's storage")]
+    #[error("couldn't access Unalia's storage")]
     Io(#[from] std::io::Error),
 }
 

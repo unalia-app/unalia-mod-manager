@@ -14,7 +14,7 @@ export function Connections() {
 		<>
 			<div className="space-y-1">
 				<h1 className="text-2xl font-semibold tracking-tight">Connections</h1>
-				<p className="text-sm text-fg-subtle">Link your mod site accounts to download and update mods from Modalia.</p>
+				<p className="text-sm text-fg-subtle">Link your mod site accounts to download and update mods from Unalia.</p>
 			</div>
 
 			<div className="space-y-4">
@@ -105,7 +105,7 @@ function NexusCard() {
 						</div>
 						<p className="mt-0.5 text-xs text-fg-subtle">
 							{account
-								? `${account.name} · ${account.premium ? "Premium: downloads start right in Modalia" : "Free account: you confirm each download on Nexus"}`
+								? `${account.name} · ${account.premium ? "Premium: downloads start right in Unalia" : "Free account: you confirm each download on Nexus"}`
 								: "The largest mod library, with Cyberpunk 2077"}
 						</p>
 					</div>
@@ -119,7 +119,7 @@ function NexusCard() {
 				{status === undefined ? null : linked ? (
 					confirmDisconnect ? (
 						<div className="flex flex-wrap items-center gap-2">
-							<span className="text-xs text-fg-muted">Modalia won't be able to download from Nexus anymore.</span>
+							<span className="text-xs text-fg-muted">Unalia won't be able to download from Nexus anymore.</span>
 							<Button size="sm" variant="outline" disabled={busy} onClick={() => void disconnect()}>
 								Disconnect
 							</Button>
@@ -179,7 +179,7 @@ function ApiKeyForm({ onCancel }: { onCancel: () => void }) {
 	return (
 		<form onSubmit={submit} className="max-w-xl">
 			<p className="text-xs leading-relaxed text-fg-subtle">
-				Sign in to Nexus Mods in the window that opened: Modalia remembers it for your downloads. Then copy the Personal
+				Sign in to Nexus Mods in the window that opened: Unalia remembers it for your downloads. Then copy the Personal
 				API Key at the bottom of that page and paste it here. It never leaves this computer.{" "}
 				<button
 					type="button"

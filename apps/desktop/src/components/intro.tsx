@@ -2,7 +2,7 @@
 
 import { type RefObject, useEffect, useLayoutEffect, useRef, useState } from "react";
 
-const WORD = "MODALIA";
+const WORD = "UNALIA";
 
 /** Moments clés, en ms depuis l'ouverture. */
 const T = {
@@ -21,7 +21,7 @@ export function introPlayed(): boolean {
 
 /**
  * Animation de lancement :
- * 1. les lettres de MODALIA apparaissent une à une : fondu, légère montée,
+ * 1. les lettres d'UNALIA apparaissent une à une : fondu, légère montée,
  *    du flou au net ;
  * 2. un reflet irisé les traverse, un halo s'ouvre, une ligne se trace ;
  * 3. le logo s'envole vers sa place dans l'en-tête pendant que l'accueil
@@ -118,6 +118,13 @@ export function Intro({
 				{/* Halo qui s'ouvre derrière le logo (centré par sa keyframe : pas
 				    de classe translate, elle s'ajouterait au transform) */}
 				<div className="intro-bloom absolute top-1/2 left-1/2 size-[70vmin] rounded-full bg-[radial-gradient(closest-side,rgb(255_255_255/0.09),transparent)]" />
+				{/* Le produit, en petit sous la marque */}
+				<p
+					className="absolute top-[calc(50%+4.4rem)] left-0 w-full text-center font-tight text-xs font-medium tracking-[0.35em] text-fg-subtle uppercase"
+					style={{ animation: "fade-up 500ms var(--ease-out) 520ms both" }}
+				>
+					Mod manager
+				</p>
 				{/* Ligne qui se trace sous le logo */}
 				<div className="absolute top-[calc(50%+3.4rem)] left-1/2 h-px w-56 -translate-x-1/2 overflow-hidden">
 					<div className="intro-line h-full w-full bg-gradient-to-r from-transparent via-white/60 to-transparent" />

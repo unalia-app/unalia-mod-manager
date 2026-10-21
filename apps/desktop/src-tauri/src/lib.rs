@@ -220,14 +220,14 @@ async fn add_manual_game(
         return Err("This folder doesn't exist anymore.".into());
     }
     let games = catalog.games(&app).await.ok_or(
-        "Modalia needs to be online once to recognize games.\nThe Thunderstore game list couldn't be downloaded.",
+        "Unalia needs to be online once to recognize games.\nThe Thunderstore game list couldn't be downloaded.",
     )?;
     let (profile, game_dir) = games.locate_game(&dir).ok_or(
-        "Modalia doesn't recognize this game.\nPick the folder that contains the game's .exe. Modalia knows the games listed on Thunderstore, and Cyberpunk 2077.",
+        "Unalia doesn't recognize this game.\nPick the folder that contains the game's .exe. Unalia knows the games listed on Thunderstore, and Cyberpunk 2077.",
     )?;
     if !profile.supported {
         return Err(format!(
-            "{} uses {}, which Modalia doesn't support yet.",
+            "{} uses {}, which Unalia doesn't support yet.",
             profile.name, profile.loader
         ));
     }
@@ -469,7 +469,7 @@ pub fn run() {
             mods::nexus_disconnect,
         ])
         .run(tauri::generate_context!())
-        .expect("Modalia failed to start");
+        .expect("Unalia Mod Manager failed to start");
 }
 
 #[cfg(test)]

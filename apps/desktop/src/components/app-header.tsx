@@ -44,9 +44,18 @@ export function AppHeader({
 				scrolled ? "border-line bg-bg/75 backdrop-blur-xl" : "border-transparent",
 			)}
 		>
-			<Link href="/" className="flex shrink-0 items-center gap-2 text-lg font-bold tracking-tight" aria-label="Home">
+			<Link href="/" className="flex shrink-0 items-center gap-2 text-lg font-bold tracking-tight" aria-label="Unalia Mod Manager, home">
 				<span ref={brandRef} className={cn("text-xl italic", brandHidden && "opacity-0")}>
-					MODALIA
+					UNALIA
+				</span>
+				{/* Unalia est la marque mère : ici, son gestionnaire de mods. */}
+				<span
+					className={cn(
+						"font-tight text-[11px] font-medium tracking-wide text-fg-subtle uppercase transition-[opacity,translate] duration-500 ease-out",
+						brandHidden ? "translate-x-1 opacity-0" : "opacity-100",
+					)}
+				>
+					Mod manager
 				</span>
 				<Badge
 					className={cn(

@@ -22,7 +22,7 @@ pub use reqwest::Client as HttpClient;
 pub fn http_client() -> HttpClient {
     reqwest::Client::builder()
         .user_agent(concat!(
-            "Modalia/",
+            "UnaliaModManager/",
             env!("CARGO_PKG_VERSION"),
             " (+https://gitlab.com/reverss/modalia)"
         ))

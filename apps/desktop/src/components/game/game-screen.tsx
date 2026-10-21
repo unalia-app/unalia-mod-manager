@@ -89,7 +89,7 @@ export function GameScreen() {
 								<p className="mt-1.5 text-sm text-fg-subtle">
 									{game.profile.nexus
 										? "Mods from Nexus Mods. Frameworks like RED4ext and redscript install on their own, from their authors."
-										: "Community mods from Thunderstore. Modalia installs the loader and dependencies for you."}
+										: "Community mods from Thunderstore. Unalia installs the loader and dependencies for you."}
 								</p>
 							</div>
 							<div className="shrink-0 animate-fade-up pb-1 [animation-delay:90ms]">
@@ -157,7 +157,7 @@ function NotModdable({ game }: { game: SteamGame }) {
 	return (
 		<div className="glass mt-16 max-w-xl">
 			<Notice icon={<Gamepad2 className="size-5 text-fg-muted" />} title={`${game.name} isn't supported yet`} action={<BackHome />}>
-				Modalia supports BepInEx, MelonLoader and Shimloader games, and Cyberpunk 2077, for now. More are coming soon.
+				Unalia supports BepInEx, MelonLoader and Shimloader games, and Cyberpunk 2077, for now. More are coming soon.
 			</Notice>
 		</div>
 	);

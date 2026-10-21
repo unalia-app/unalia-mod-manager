@@ -40,7 +40,7 @@ pub enum DeployError {
     Conflict(String),
     #[error("unsafe destination: {0}")]
     UnsafeTarget(String),
-    #[error("{0} is missing from Modalia's storage")]
+    #[error("{0} is missing from Unalia's storage")]
     MissingSource(String),
     #[error("couldn't write {path}")]
     Io {

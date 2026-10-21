@@ -114,7 +114,7 @@ fn migrate_from_roaming(roaming: &Path, local: &Path) {
         && (!old_store.exists() || std::fs::rename(&old_store, &new_store).is_ok())
         && std::fs::rename(&old_db, &new_db).is_ok();
     if !moved {
-        eprintln!("couldn't move Modalia's data out of the roaming profile");
+        eprintln!("couldn't move Unalia's data out of the roaming profile");
         return;
     }
     for suffix in ["-wal", "-shm"] {
@@ -644,7 +644,7 @@ pub async fn play_game(
     }
     let target = if game.manual {
         launch::executable_target(&game.dir, &game.exe_names)
-            .ok_or("Modalia couldn't find the game's executable in its folder.")?
+            .ok_or("Unalia couldn't find the game's executable in its folder.")?
     } else {
         launch::steam_target(app_id)
     };
@@ -922,7 +922,7 @@ pub async fn nexus_login(
     catalog: State<'_, Catalog>,
     mods: State<'_, Mods>,
 ) -> Result<Account, String> {
-    let application = NEXUS_SSO_APP.ok_or("Nexus Mods hasn't approved Modalia's login yet.")?;
+    let application = NEXUS_SSO_APP.ok_or("Nexus Mods hasn't approved Unalia's login yet.")?;
     let window = app.clone();
     let key = mod_engine::sources::nexus_sso::login(
         mod_engine::sources::nexus_sso::SSO_URL,
@@ -1045,7 +1045,7 @@ async fn handle_nxm(app: AppHandle, url: String) {
                 name: None,
                 missing: Vec::new(),
                 error: Some(format!(
-                    "This link is for a game Modalia can't find ({}).",
+                    "This link is for a game Unalia can't find ({}).",
                     link.domain
                 )),
             },
@@ -1122,7 +1122,7 @@ pub fn show_nexus_window(app: &AppHandle, url: &str) -> Result<(), String> {
     let handle = app.clone();
     let mut builder =
         tauri::WebviewWindowBuilder::new(app, NEXUS_WINDOW, tauri::WebviewUrl::External(target))
-            .title("Nexus Mods · Modalia")
+            .title("Nexus Mods · Unalia Mod Manager")
             .inner_size(1100.0, 820.0)
             .min_inner_size(720.0, 560.0)
             .center()

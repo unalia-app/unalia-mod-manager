@@ -152,7 +152,7 @@ export function GamePicker({
 							</Button>
 						}
 					>
-						Add a game by picking its folder, Modalia handles the rest.
+						Add a game by picking its folder, Unalia handles the rest.
 					</Notice>
 				)}
 
@@ -160,7 +160,7 @@ export function GamePicker({
 					<Notice icon={<Gamepad2 className="size-5 text-fg-muted" />} title={query ? "No games found" : "No games yet"}>
 						{query
 							? `No installed game matches “${query.trim()}”.`
-							: "Modalia didn't find any installed game. Add one by picking its folder."}
+							: "Unalia didn't find any installed game. Add one by picking its folder."}
 					</Notice>
 				)}
 

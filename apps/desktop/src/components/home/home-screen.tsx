@@ -40,7 +40,7 @@ export function HomeScreen() {
 					<span className="text-fg-muted">want to mod?</span>
 				</h1>
 				<p className="mt-4 animate-fade-up text-base text-fg-subtle [animation-delay:60ms]">
-					Pick your mods, Modalia handles the rest.
+					Pick your mods, Unalia handles the rest.
 				</p>
 
 				<div className="mt-9 animate-fade-up [animation-delay:120ms]">

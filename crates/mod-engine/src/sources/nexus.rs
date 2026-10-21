@@ -357,7 +357,7 @@ impl Nexus {
             .client
             .get(format!("{}{path}", self.api_url))
             .header("apikey", key)
-            .header("Application-Name", "Modalia")
+            .header("Application-Name", "Unalia Mod Manager")
             .header("Application-Version", env!("CARGO_PKG_VERSION"))
             .send()
             .await
