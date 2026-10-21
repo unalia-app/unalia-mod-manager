@@ -305,7 +305,10 @@ export function onPendingApplied(handler: (event: PendingApplied) => void): Prom
 
 // Nexus Mods (moteur : sources::nexus).
 
-export type NexusAccount = { name: string; premium: boolean };
+export type NexusAccount = { name: string; premium: boolean; avatarUrl: string | null };
+
+/** `sso` : connexion en un clic disponible (Modalia approuvé par Nexus). */
+export type NexusStatus = { account: NexusAccount | null; sso: boolean };
 
 /** Prérequis Nexus que Modalia n'installe pas seul. */
 export type NexusRequirement = { modId: number | null; name: string; url: string | null };
@@ -319,9 +322,14 @@ export type NexusInstalled = {
 	error: string | null;
 };
 
-export function nexusAccount(): Promise<NexusAccount | null> {
-	if (!isTauri()) return Promise.resolve(null);
-	return invoke("nexus_account");
+export function nexusStatus(): Promise<NexusStatus> {
+	if (!isTauri()) return Promise.resolve({ account: null, sso: false });
+	return invoke("nexus_status");
+}
+
+/** Connexion en un clic : la page d'autorisation de Nexus s'ouvre, la clé revient seule. */
+export function nexusLogin(): Promise<NexusAccount> {
+	return invoke("nexus_login");
 }
 
 export function nexusConnect(apiKey: string): Promise<NexusAccount> {

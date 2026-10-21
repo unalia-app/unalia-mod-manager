@@ -128,7 +128,7 @@ function ModDetailsView({
 	const hint = !nexus
 		? undefined
 		: account === null && !mod.direct
-			? "Connect your Nexus Mods account on the game page first"
+			? "Link your Nexus Mods account in Settings first"
 			: account && !account.premium && !mod.direct
 				? "Nexus asks free accounts to confirm each download on its website"
 				: undefined;

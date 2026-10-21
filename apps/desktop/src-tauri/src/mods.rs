@@ -885,32 +885,61 @@ fn register_nxm(app: &AppHandle) {
     let _ = app;
 }
 
-/// Compte Nexus connecté, ou `None`.
-#[tauri::command]
-pub async fn nexus_account(catalog: State<'_, Catalog>) -> Result<Option<Account>, String> {
-    if !catalog.nexus.connected() {
-        return Ok(None);
-    }
-    catalog
-        .nexus
-        .account()
-        .await
-        .map(Some)
-        .map_err(|e| e.to_string())
+/// Identifiant d'application que Nexus attribue aux gestionnaires de mods
+/// qu'il approuve, pour la connexion en un clic (SSO). En attente : tant
+/// qu'il manque, la connexion passe par la clé API personnelle.
+const NEXUS_SSO_APP: Option<&str> = None;
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct NexusStatus {
+    account: Option<Account>,
+    /// Connexion en un clic disponible (Modalia approuvé par Nexus).
+    sso: bool,
 }
 
-/// Vérifie la clé auprès de Nexus, puis l'enregistre sur cette machine.
 #[tauri::command]
-pub async fn nexus_connect(
+pub async fn nexus_status(catalog: State<'_, Catalog>) -> Result<NexusStatus, String> {
+    let account = if catalog.nexus.connected() {
+        Some(catalog.nexus.account().await.map_err(|e| e.to_string())?)
+    } else {
+        None
+    };
+    Ok(NexusStatus {
+        account,
+        sso: NEXUS_SSO_APP.is_some(),
+    })
+}
+
+/// Connexion en un clic : la page d'autorisation de Nexus s'ouvre dans le
+/// navigateur, la clé revient toute seule.
+#[tauri::command]
+pub async fn nexus_login(
     app: AppHandle,
     catalog: State<'_, Catalog>,
     mods: State<'_, Mods>,
-    api_key: String,
 ) -> Result<Account, String> {
-    let key = api_key.trim().to_owned();
-    if key.is_empty() || key.len() > 512 || key.chars().any(char::is_whitespace) {
-        return Err("This doesn't look like a Nexus Mods API key.".into());
-    }
+    let application = NEXUS_SSO_APP.ok_or("Nexus Mods hasn't approved Modalia's login yet.")?;
+    let opener = app.clone();
+    let key = mod_engine::sources::nexus_sso::login(
+        mod_engine::sources::nexus_sso::SSO_URL,
+        application,
+        move |url| {
+            let _ = opener.opener().open_url(url, None::<&str>);
+        },
+    )
+    .await
+    .map_err(|e| error_message(&e))?;
+    save_nexus_key(&app, &catalog, &mods, key).await
+}
+
+/// Garde une clé seulement si Nexus la reconnaît.
+async fn save_nexus_key(
+    app: &AppHandle,
+    catalog: &Catalog,
+    mods: &Mods,
+    key: String,
+) -> Result<Account, String> {
     let previous = catalog.nexus.connected();
     catalog.nexus.set_api_key(Some(key.clone()));
     let account = match catalog.nexus.account().await {
@@ -927,8 +956,23 @@ pub async fn nexus_connect(
         .await
         .set_setting(NEXUS_KEY, Some(&key))
         .map_err(|e| e.to_string())?;
-    register_nxm(&app);
+    register_nxm(app);
     Ok(account)
+}
+
+/// Vérifie la clé auprès de Nexus, puis l'enregistre sur cette machine.
+#[tauri::command]
+pub async fn nexus_connect(
+    app: AppHandle,
+    catalog: State<'_, Catalog>,
+    mods: State<'_, Mods>,
+    api_key: String,
+) -> Result<Account, String> {
+    let key = api_key.trim().to_owned();
+    if key.is_empty() || key.len() > 512 || key.chars().any(char::is_whitespace) {
+        return Err("This doesn't look like a Nexus Mods API key.".into());
+    }
+    save_nexus_key(&app, &catalog, &mods, key).await
 }
 
 #[tauri::command]

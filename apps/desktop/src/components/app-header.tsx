@@ -1,6 +1,7 @@
 "use client";
 
 import { Badge, cn } from "@modalia/ui";
+import { Settings } from "lucide-react";
 import Link from "next/link";
 import { type ReactNode, type RefObject, useEffect, useState } from "react";
 
@@ -57,11 +58,17 @@ export function AppHeader({
 				</Badge>
 			</Link>
 			{children}
-			{!mac && (
-				<div className="ml-auto">
-					<WindowControls />
-				</div>
-			)}
+			<div className="ml-auto flex items-center gap-2">
+				<Link
+					href="/settings/"
+					aria-label="Settings"
+					title="Settings"
+					className="flex size-8 items-center justify-center rounded-md text-fg-subtle transition-colors hover:bg-white/10 hover:text-fg"
+				>
+					<Settings className="size-4" />
+				</Link>
+				{!mac && <WindowControls />}
+			</div>
 		</header>
 	);
 }
