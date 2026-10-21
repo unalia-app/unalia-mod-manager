@@ -237,6 +237,31 @@ fn refuses_zip_bombs() {
 }
 
 #[test]
+fn extracts_7z_archives_and_refuses_rar() {
+    let tmp = tempfile::tempdir().unwrap();
+    let src = tmp.path().join("src");
+    fs::create_dir_all(src.join("archive/pc/mod")).unwrap();
+    fs::write(src.join("archive/pc/mod/cool.archive"), b"archive").unwrap();
+    fs::write(src.join("readme.txt"), b"hi").unwrap();
+    // Extension trompeuse : le format se lit dans le fichier.
+    let seven = tmp.path().join("cool.zip");
+    sevenz_rust2::compress_to_path(&src, &seven).unwrap();
+
+    let files = archive::extract(&seven, &tmp.path().join("out"), Limits::default()).unwrap();
+    assert_eq!(files, ["archive/pc/mod/cool.archive", "readme.txt"]);
+    assert_eq!(
+        fs::read(tmp.path().join("out/archive/pc/mod/cool.archive")).unwrap(),
+        b"archive"
+    );
+
+    let rar = tmp.path().join("mod.rar");
+    fs::write(&rar, b"Rar!\x1a\x07\x00rest").unwrap();
+    let err = archive::extract(&rar, &tmp.path().join("rar"), Limits::default()).unwrap_err();
+    assert!(matches!(err, ArchiveError::Unsupported("RAR")), "{err:?}");
+    assert!(!tmp.path().join("rar").exists());
+}
+
+#[test]
 fn refuses_corrupt_archives() {
     let tmp = tempfile::tempdir().unwrap();
     let path = tmp.path().join("bad.zip");

@@ -7,6 +7,7 @@
 //! Le schéma est mis en cache sur disque : l'appli démarre hors ligne avec la
 //! dernière version connue.
 
+mod builtin;
 mod schema;
 
 use std::collections::HashMap;
@@ -17,6 +18,7 @@ use std::time::{Duration, SystemTime};
 
 use serde::Serialize;
 
+use crate::loaders::redengine::Framework;
 use crate::loaders::rules::InstallRules;
 
 pub use schema::SchemaError;
@@ -55,9 +57,24 @@ pub struct GameProfile {
     pub cover_url: Option<String>,
     /// Bannière 1920×620.
     pub hero_url: Option<String>,
+    /// Jeu dont les mods viennent de Nexus Mods (profils `games/*.toml`).
+    pub nexus: Option<NexusGame>,
     /// Où vont les fichiers des mods de ce jeu.
     #[serde(skip)]
     pub install_rules: InstallRules,
+    /// Frameworks que Modalia installe tout seul quand un mod en a besoin.
+    #[serde(skip)]
+    pub frameworks: Vec<Framework>,
+}
+
+/// Le jeu chez Nexus Mods.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, serde::Deserialize)]
+#[serde(rename_all(serialize = "camelCase"))]
+pub struct NexusGame {
+    /// Ex. `cyberpunk2077`, dans les URL et les liens `nxm://`.
+    pub domain: String,
+    /// Identifiant numérique (API GraphQL), ex. 3333.
+    pub game_id: u32,
 }
 
 /// Paquet qui *est* un loader (ex. `silksong_modding-BepInExPack_Silksong`) :
@@ -80,7 +97,18 @@ pub struct GameCatalog {
 
 impl GameCatalog {
     pub fn from_schema_json(json: &str) -> Result<Self, SchemaError> {
-        let (games, loaders) = schema::parse(json)?;
+        let (mut games, loaders) = schema::parse(json)?;
+        // Profils écrits à la main : ils priment sur le schéma pour le même
+        // jeu Steam.
+        let builtin = builtin::profiles();
+        games.retain(|g| {
+            !builtin.iter().any(|b| {
+                b.steam_app_ids
+                    .iter()
+                    .any(|id| g.steam_app_ids.contains(id))
+            })
+        });
+        games.extend(builtin);
         let mut by_steam_app_id = HashMap::new();
         for (i, game) in games.iter().enumerate() {
             for &app_id in &game.steam_app_ids {
@@ -139,10 +167,19 @@ impl GameCatalog {
         if !by_data.is_empty() {
             return single(by_data);
         }
+        // Un exécutable dans un sous-dossier (`bin/x64/…`) se vérifie sur
+        // le disque.
+        let exe_found = |exe: &String| {
+            if exe.contains('/') {
+                dir.join(exe).is_file()
+            } else {
+                has(exe)
+            }
+        };
         single(
             self.games
                 .iter()
-                .filter(|g| g.exe_names.iter().any(|e| has(e)))
+                .filter(|g| g.exe_names.iter().any(exe_found))
                 .collect(),
         )
     }

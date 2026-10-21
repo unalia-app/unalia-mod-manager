@@ -28,6 +28,9 @@ pub struct SteamGame {
     /// Bibliothèque Steam qui contient le jeu.
     pub library: PathBuf,
     pub engine: Engine,
+    /// Dernière mise à jour du jeu par Steam (secondes Unix), si connue :
+    /// des mods installés avant peuvent ne plus fonctionner.
+    pub last_updated: Option<i64>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -190,6 +193,10 @@ fn read_app_manifest(path: &Path, library: &Path) -> Option<SteamGame> {
     Some(SteamGame {
         app_id,
         name,
+        last_updated: state
+            .str("LastUpdated")
+            .and_then(|t| t.parse().ok())
+            .filter(|&t| t > 0),
         engine: detect_engine(&install_dir),
         install_dir,
         library: library.to_path_buf(),

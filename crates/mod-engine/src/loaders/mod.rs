@@ -4,6 +4,7 @@
 //! nombreux, relu par le mainteneur (SPEC §6.3, §7 : revue renforcée).
 
 pub mod bepinex;
+pub mod redengine;
 pub mod rules;
 
 use std::path::Path;

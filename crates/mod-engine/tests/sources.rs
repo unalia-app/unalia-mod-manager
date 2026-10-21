@@ -215,7 +215,11 @@ async fn description_returns_the_raw_markdown() {
         .await;
 
     let markdown = ts
-        .description("Bigfootmech-Silksong_Skip_Intro", "0.1.0")
+        .description(
+            "hollow-knight-silksong",
+            "Bigfootmech-Silksong_Skip_Intro",
+            "0.1.0",
+        )
         .await
         .unwrap();
     assert!(markdown.contains("Skip the Team Cherry"));

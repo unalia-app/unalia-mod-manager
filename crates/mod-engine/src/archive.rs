@@ -1,4 +1,5 @@
-//! Extraction sûre des archives de mods (SPEC §7).
+//! Extraction sûre des archives de mods (SPEC §7). Formats : `.zip` et
+//! `.7z`, reconnus à leur signature et non à leur extension.
 //!
 //! Une archive téléchargée est une donnée hostile jusqu'à preuve du
 //! contraire. On refuse :
@@ -51,6 +52,10 @@ pub enum ArchiveError {
     SuspiciousRatio(String),
     #[error("the archive is damaged")]
     Corrupt(#[from] zip::result::ZipError),
+    #[error("the archive is damaged")]
+    SevenZip(#[from] sevenz_rust2::Error),
+    #[error("{0} archives aren't supported yet")]
+    Unsupported(&'static str),
     #[error("couldn't extract the archive")]
     Io(#[from] io::Error),
 }
@@ -91,7 +96,38 @@ pub fn extract_with_progress(
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Format {
+    Zip,
+    SevenZip,
+}
+
+/// Format d'après les premiers octets du fichier.
+fn format(archive: &Path) -> Result<Format, ArchiveError> {
+    let mut magic = [0u8; 6];
+    let read = File::open(archive)?.read(&mut magic)?;
+    match &magic[..read] {
+        [b'P', b'K', ..] => Ok(Format::Zip),
+        [b'7', b'z', 0xBC, 0xAF, 0x27, 0x1C] => Ok(Format::SevenZip),
+        [b'R', b'a', b'r', b'!', ..] => Err(ArchiveError::Unsupported("RAR")),
+        // Inconnu : on laisse le lecteur zip le refuser comme abîmé.
+        _ => Ok(Format::Zip),
+    }
+}
+
 fn extract_into(
+    archive: &Path,
+    dir: &Path,
+    limits: Limits,
+    on_progress: &mut impl FnMut(u64, u64),
+) -> Result<Vec<String>, ArchiveError> {
+    match format(archive)? {
+        Format::Zip => extract_zip(archive, dir, limits, on_progress),
+        Format::SevenZip => extract_7z(archive, dir, limits, on_progress),
+    }
+}
+
+fn extract_zip(
     archive: &Path,
     dir: &Path,
     limits: Limits,
@@ -149,6 +185,77 @@ fn extract_into(
     }
     files.sort();
     // Une archive peut contenir deux fois le même nom : le dernier gagne.
+    files.dedup();
+    Ok(files)
+}
+
+/// Attribut Windows des points d'analyse (liens symboliques, jonctions).
+const REPARSE_POINT: u32 = 0x400;
+
+/// Un `.7z` est souvent « solide » : les fichiers sont compressés d'un seul
+/// bloc, sans taille compressée par fichier. Le ratio se mesure donc sur
+/// l'archive entière.
+fn extract_7z(
+    archive: &Path,
+    dir: &Path,
+    limits: Limits,
+    on_progress: &mut impl FnMut(u64, u64),
+) -> Result<Vec<String>, ArchiveError> {
+    let compressed = fs::metadata(archive)?.len().max(1);
+    let mut reader = sevenz_rust2::ArchiveReader::open(archive, sevenz_rust2::Password::empty())?;
+    let entries = &reader.archive().files;
+    if entries.len() > limits.max_entries {
+        return Err(ArchiveError::TooManyEntries);
+    }
+    let announced: u64 = entries.iter().map(|e| e.size()).sum();
+
+    let mut files = Vec::new();
+    let mut total: u64 = 0;
+    // L'erreur de sécurité est gardée à part : le lecteur ne transporte que
+    // les siennes.
+    let mut refused: Option<ArchiveError> = None;
+    let result = reader.for_each_entries(|entry, data| {
+        let raw = entry.name().to_owned();
+        if entry.is_anti_item() {
+            return Ok(true);
+        }
+        if entry.has_windows_attributes && entry.windows_attributes() & REPARSE_POINT != 0 {
+            refused = Some(ArchiveError::Link(raw));
+            return Ok(false);
+        }
+        let Some(relative) = safe_relative_path(&raw) else {
+            refused = Some(ArchiveError::UnsafePath(raw));
+            return Ok(false);
+        };
+        let target = dir.join(&relative);
+        if entry.is_directory() {
+            fs::create_dir_all(&target)?;
+            return Ok(true);
+        }
+        if let Some(parent) = target.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        let remaining = limits.max_total_bytes.saturating_sub(total);
+        let mut out = File::create(&target)?;
+        let written = io::copy(&mut data.take(remaining.saturating_add(1)), &mut out)?;
+        if written > remaining {
+            refused = Some(ArchiveError::TooLarge);
+            return Ok(false);
+        }
+        total += written;
+        if total > 1024 * 1024 && total / compressed > limits.max_ratio {
+            refused = Some(ArchiveError::SuspiciousRatio(raw));
+            return Ok(false);
+        }
+        on_progress(total, announced.max(total));
+        files.push(to_slash(&relative));
+        Ok(true)
+    });
+    if let Some(error) = refused {
+        return Err(error);
+    }
+    result?;
+    files.sort();
     files.dedup();
     Ok(files)
 }

@@ -5,6 +5,10 @@
 //! ce qui a été posé pendant cette installation est retiré, les versions
 //! remplacées sont remises en place, et rien n'est enregistré.
 
+mod nexus;
+
+pub use nexus::{NexusFile, NexusInstall, available_updates_nexus};
+
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -20,7 +24,7 @@ use crate::loaders::bepinex::BepInEx;
 use crate::loaders::rules::RulesLoader;
 use crate::loaders::{Loader, PackageKind, Placement};
 use crate::resolver::{self, Installed, PlanStep, ResolveError};
-use crate::sources::ModSource;
+use crate::sources::{ModSource, SourceError};
 use crate::state::{InstalledMod, State, StateError};
 
 /// Dossiers de Modalia.
@@ -90,6 +94,14 @@ pub enum InstallError {
         #[source]
         source: DeployError,
     },
+    #[error("{path} is already provided by {other}")]
+    Conflict { path: String, other: String },
+    #[error("Modalia can't tell where the files of {0} go")]
+    NothingToInstall(String),
+    #[error("{0} has no file to install")]
+    NoFile(String),
+    #[error(transparent)]
+    Source(#[from] SourceError),
     #[error(transparent)]
     State(#[from] StateError),
     #[error("BepInEx is already installed in this game outside Modalia")]
@@ -102,6 +114,49 @@ pub enum InstallError {
     NotInstalled,
     #[error("couldn't access Modalia's storage")]
     Io(#[from] std::io::Error),
+}
+
+/// Un paquet prêt à télécharger, quelle que soit sa source.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Package {
+    pub id: String,
+    pub name: String,
+    pub author: String,
+    pub version: String,
+    pub icon_url: Option<String>,
+    pub download_url: String,
+    pub sha256: Option<String>,
+}
+
+impl Package {
+    fn of_step(step: &PlanStep) -> Self {
+        let version = &step.version.number;
+        Self {
+            id: step.id.clone(),
+            name: step.name.clone(),
+            author: step
+                .id
+                .split_once('-')
+                .map(|(a, _)| a.to_owned())
+                .unwrap_or_default(),
+            version: version.clone(),
+            icon_url: Some(format!(
+                "https://gcdn.thunderstore.io/live/repository/icons/{}-{version}.png",
+                step.id
+            )),
+            download_url: step.version.download_url.clone(),
+            sha256: step.version.sha256.clone(),
+        }
+    }
+}
+
+/// Paquet téléchargé et extrait, avec la destination de ses fichiers.
+struct Fetched {
+    package: Package,
+    store_dir: PathBuf,
+    sha256: String,
+    placements: Vec<Placement>,
+    loader_root: Option<String>,
 }
 
 pub struct Installer<'a, S> {
@@ -136,6 +191,7 @@ impl<S: ModSource> Installer<'_, S> {
                     index,
                     total,
                     previous.as_ref(),
+                    &existing,
                     &mut on_progress,
                 )
                 .await
@@ -209,6 +265,7 @@ impl<S: ModSource> Installer<'_, S> {
         Ok(plan)
     }
 
+    #[allow(clippy::too_many_arguments)]
     async fn install_step(
         &self,
         target: &Target<'_>,
@@ -216,62 +273,30 @@ impl<S: ModSource> Installer<'_, S> {
         index: usize,
         total: usize,
         previous: Option<&InstalledMod>,
+        existing: &[InstalledMod],
         on_progress: &mut impl FnMut(Progress),
     ) -> Result<InstalledMod, InstallError> {
-        let name = step.name.clone();
-        let version = &step.version.number;
+        let package = Package::of_step(step);
         let (store_dir, sha256) = self
-            .fetch_step(target, step, index, total, on_progress)
+            .fetch_package(target, &package, index, total, on_progress)
             .await?;
-
-        // Une mise à jour retire d'abord l'ancienne version du jeu.
-        if let Some(old) = previous {
-            deploy::undeploy(target.game_dir, &old.deployment, false);
-        }
         let loader_root = step.loader.then(|| self.loader_root(&step.id)).flatten();
         let placements = self.loader_for(target.community).place(
             &step.id,
             &package_kind(loader_root.as_deref()),
             &list_files(&store_dir)?,
         );
-        let deployment = match deploy::deploy(&store_dir, target.game_dir, &placements) {
-            Ok(d) => d,
-            Err(source) => {
-                if let Some(old) = previous {
-                    redeploy(target.game_dir, old);
-                }
-                return Err(InstallError::Deploy { name, source });
-            }
-        };
-
-        Ok(InstalledMod {
-            game: target.game.to_owned(),
-            id: step.id.clone(),
-            name,
-            author: step
-                .id
-                .split_once('-')
-                .map(|(a, _)| a.to_owned())
-                .unwrap_or_default(),
-            version: version.clone(),
-            icon_url: Some(format!(
-                "https://gcdn.thunderstore.io/live/repository/icons/{}-{version}.png",
-                step.id
-            )),
-            loader_root,
-            enabled: true,
-            explicit: false,
+        let fetched = Fetched {
+            package,
+            store_dir,
             sha256,
-            installed_at: now(),
-            store_dir: store_dir.to_string_lossy().into_owned(),
-            deployment,
             placements,
-        })
+            loader_root,
+        };
+        deploy_package(target, fetched, previous, existing)
     }
 
-    /// Télécharge et extrait un paquet dans le stockage, sans toucher au
-    /// jeu. Renvoie le dossier extrait et l'empreinte de l'archive. Déjà
-    /// fait pour cette version : instantané.
+    /// Pour un paquet déjà en cache, aucun accès réseau.
     async fn fetch_step(
         &self,
         target: &Target<'_>,
@@ -280,24 +305,40 @@ impl<S: ModSource> Installer<'_, S> {
         total: usize,
         on_progress: &mut impl FnMut(Progress),
     ) -> Result<(PathBuf, String), InstallError> {
-        let name = step.name.clone();
-        let version = &step.version.number;
+        self.fetch_package(target, &Package::of_step(step), index, total, on_progress)
+            .await
+    }
 
-        // Télécharger (ou reprendre l'archive déjà en cache).
+    /// Télécharge et extrait un paquet dans le stockage, sans toucher au
+    /// jeu. Renvoie le dossier extrait et l'empreinte de l'archive. Déjà
+    /// fait pour cette version : instantané.
+    async fn fetch_package(
+        &self,
+        target: &Target<'_>,
+        package: &Package,
+        index: usize,
+        total: usize,
+        on_progress: &mut impl FnMut(Progress),
+    ) -> Result<(PathBuf, String), InstallError> {
+        let name = package.name.clone();
+        let version = path_segment(&package.version);
+
+        // Télécharger (ou reprendre l'archive déjà en cache). L'extension
+        // ne compte pas : le format se lit dans le fichier.
         let archive = self
             .paths
             .downloads
-            .join(format!("{}-{version}.zip", step.id));
+            .join(format!("{}-{version}.zip", package.id));
         let sha256 = if archive.is_file() {
             download::sha256_file(&archive)?
         } else {
             let options = download::Options {
-                expected_sha256: step.version.sha256.clone(),
+                expected_sha256: package.sha256.clone(),
                 ..download::Options::default()
             };
             download::download(
                 self.client,
-                &step.version.download_url,
+                &package.download_url,
                 &archive,
                 &options,
                 |received, size| {
@@ -329,8 +370,8 @@ impl<S: ModSource> Installer<'_, S> {
             .paths
             .store
             .join(target.game.replace(':', "-"))
-            .join(&step.id)
-            .join(version);
+            .join(&package.id)
+            .join(&version);
         if !store_dir.is_dir() {
             if let Some(parent) = store_dir.parent() {
                 fs::create_dir_all(parent)?;
@@ -358,12 +399,15 @@ impl<S: ModSource> Installer<'_, S> {
                     size,
                 });
             }
-            job.await
-                .map_err(|e| InstallError::Io(std::io::Error::other(e)))?
-                .map_err(|source| InstallError::Archive {
-                    name: name.clone(),
-                    source,
-                })?;
+            let extracted = job
+                .await
+                .map_err(|e| InstallError::Io(std::io::Error::other(e)))?;
+            if let Err(source) = extracted {
+                // Archive illisible : on la retire du cache pour qu'un nouvel
+                // essai la télécharge à nouveau.
+                let _ = fs::remove_file(&archive);
+                return Err(InstallError::Archive { name, source });
+            }
         }
 
         Ok((store_dir, sha256))
@@ -390,6 +434,99 @@ impl<S: ModSource> Installer<'_, S> {
         self.catalog?
             .loader_package(id)
             .map(|l| l.root_folder.clone())
+    }
+}
+
+/// Pose un paquet extrait dans le jeu et renvoie son enregistrement. Une
+/// mise à jour retire d'abord l'ancienne version ; en cas d'échec, elle est
+/// remise.
+fn deploy_package(
+    target: &Target<'_>,
+    fetched: Fetched,
+    previous: Option<&InstalledMod>,
+    existing: &[InstalledMod],
+) -> Result<InstalledMod, InstallError> {
+    let Fetched {
+        package,
+        store_dir,
+        sha256,
+        placements,
+        loader_root,
+    } = fetched;
+    if let Some((path, other)) = owned_elsewhere(&placements, existing, &package.id) {
+        return Err(InstallError::Conflict { path, other });
+    }
+    if let Some(old) = previous {
+        deploy::undeploy(target.game_dir, &old.deployment, false);
+    }
+    let deployment = match deploy::deploy(&store_dir, target.game_dir, &placements) {
+        Ok(d) => d,
+        Err(source) => {
+            if let Some(old) = previous {
+                redeploy(target.game_dir, old);
+            }
+            return Err(InstallError::Deploy {
+                name: package.name,
+                source,
+            });
+        }
+    };
+    Ok(InstalledMod {
+        game: target.game.to_owned(),
+        id: package.id,
+        name: package.name,
+        author: package.author,
+        version: package.version,
+        icon_url: package.icon_url,
+        loader_root,
+        enabled: true,
+        explicit: false,
+        sha256,
+        installed_at: now(),
+        store_dir: store_dir.to_string_lossy().into_owned(),
+        deployment,
+        placements,
+    })
+}
+
+/// Un fichier que ce paquet veut poser appartient-il déjà à un autre mod ?
+/// Renvoie le chemin et le nom de ce mod, pour un message qui dit lequel.
+fn owned_elsewhere(
+    placements: &[Placement],
+    existing: &[InstalledMod],
+    id: &str,
+) -> Option<(String, String)> {
+    let wanted: std::collections::HashSet<String> = placements
+        .iter()
+        .map(|p| p.target.to_ascii_lowercase())
+        .collect();
+    existing.iter().filter(|m| m.id != id).find_map(|m| {
+        let path = m
+            .deployment
+            .files
+            .iter()
+            .find(|f| wanted.contains(&f.to_ascii_lowercase()))?;
+        Some((path.clone(), m.name.clone()))
+    })
+}
+
+/// Segment de chemin sûr tiré d'une version (`1.2/beta` → `1.2_beta`).
+fn path_segment(version: &str) -> String {
+    let cleaned: String = version
+        .chars()
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '_' | '+') {
+                c
+            } else {
+                '_'
+            }
+        })
+        .collect();
+    let cleaned = cleaned.trim_matches('.');
+    if cleaned.is_empty() {
+        "0".into()
+    } else {
+        cleaned.to_owned()
     }
 }
 

@@ -89,7 +89,38 @@ fn games_whose_mods_ship_as_archives_are_not_supported_yet() {
 fn games_without_an_installable_entry_are_skipped() {
     let catalog = catalog();
     assert!(catalog.by_id("107zxz-inscryption-multiplayer").is_none());
-    assert_eq!(catalog.games().len(), 7);
+    // 7 jeux du schéma, plus Cyberpunk 2077 (profil écrit à la main).
+    assert_eq!(catalog.games().len(), 8);
+}
+
+#[test]
+fn cyberpunk_comes_from_its_handwritten_profile() {
+    let catalog = catalog();
+    let cyberpunk = catalog.by_steam_app_id(1091500).unwrap();
+    assert_eq!(cyberpunk.id, "cyberpunk-2077");
+    assert_eq!(cyberpunk.loader, "redengine");
+    assert!(cyberpunk.supported);
+    assert_eq!(cyberpunk.community, "nexus:cyberpunk2077");
+    assert_eq!(cyberpunk.nexus.as_ref().unwrap().game_id, 3333);
+    let names: Vec<_> = cyberpunk
+        .frameworks
+        .iter()
+        .map(|f| f.name.as_str())
+        .collect();
+    assert!(
+        names.contains(&"RED4ext") && names.contains(&"redscript"),
+        "{names:?}"
+    );
+
+    // GOG, Epic : reconnu par son exécutable, rangé dans `bin/x64`.
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::create_dir_all(dir.path().join("bin/x64")).unwrap();
+    assert!(catalog.identify_folder(dir.path()).is_none());
+    std::fs::write(dir.path().join("bin/x64/Cyberpunk2077.exe"), b"exe").unwrap();
+    assert_eq!(
+        catalog.identify_folder(dir.path()).unwrap().id,
+        "cyberpunk-2077"
+    );
 }
 
 #[test]

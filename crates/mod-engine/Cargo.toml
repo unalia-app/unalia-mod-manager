@@ -17,11 +17,14 @@ thiserror.workspace = true
 tokio = { version = "1", features = ["rt", "sync", "time", "macros"] }
 zip = { version = "9", default-features = false, features = ["deflate"] }
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
+sevenz-rust2 = { version = "0.24.1", default-features = false, features = ["bzip2", "ppmd"] }
+toml = "1.1.8"
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.56"
 
 [dev-dependencies]
+sevenz-rust2 = { version = "0.24.1", default-features = false, features = ["compress", "util"] }
 mockito = "1.7"
 tempfile = "3"
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }

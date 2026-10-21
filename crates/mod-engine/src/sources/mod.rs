@@ -3,6 +3,8 @@
 //! Chaque source traduit son catalogue dans un format de mod neutre
 //! (SPEC §6.5), le seul que connaissent le reste du moteur et l'interface.
 
+pub mod github;
+pub mod nexus;
 pub mod thunderstore;
 
 use std::future::Future;
@@ -124,6 +126,12 @@ pub enum SourceError {
     },
     #[error("this mod no longer exists on {source_name}")]
     NotFound { source_name: &'static str },
+    #[error("connect your {source_name} account first")]
+    NotConnected { source_name: &'static str },
+    #[error("{source_name} refused your API key")]
+    Unauthorized { source_name: &'static str },
+    #[error("{source_name} only allows this download from its website")]
+    WebsiteOnly { source_name: &'static str },
     #[error("unexpected response from {source_name}: {detail}")]
     Unexpected {
         source_name: &'static str,
@@ -148,6 +156,7 @@ pub trait ModSource {
     /// tout affichage (SPEC §7, jamais de HTML brut).
     fn description(
         &self,
+        game: &str,
         id: &str,
         version: &str,
     ) -> impl Future<Output = Result<String, SourceError>> + Send;

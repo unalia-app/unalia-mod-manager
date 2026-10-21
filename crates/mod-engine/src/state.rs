@@ -84,6 +84,11 @@ CREATE TABLE IF NOT EXISTS pending_ops (
     ops  TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS settings (
+    key   TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
+
 CREATE TABLE IF NOT EXISTS manual_games (
     app_id     INTEGER PRIMARY KEY,
     profile_id TEXT NOT NULL,
@@ -249,6 +254,33 @@ impl State {
             "DELETE FROM manual_games WHERE app_id = ?1",
             params![app_id],
         )?;
+        Ok(())
+    }
+
+    /// Réglage de l'appli (ex. la clé API Nexus de l'utilisateur, qui ne
+    /// quitte jamais sa machine).
+    pub fn setting(&self, key: &str) -> Result<Option<String>, StateError> {
+        Ok(self
+            .conn
+            .query_row(
+                "SELECT value FROM settings WHERE key = ?1",
+                params![key],
+                |r| r.get(0),
+            )
+            .optional()?)
+    }
+
+    /// `None` retire le réglage.
+    pub fn set_setting(&mut self, key: &str, value: Option<&str>) -> Result<(), StateError> {
+        match value {
+            Some(value) => self.conn.execute(
+                "INSERT OR REPLACE INTO settings VALUES (?1, ?2)",
+                params![key, value],
+            )?,
+            None => self
+                .conn
+                .execute("DELETE FROM settings WHERE key = ?1", params![key])?,
+        };
         Ok(())
     }
 

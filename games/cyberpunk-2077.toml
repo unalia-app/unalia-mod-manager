@@ -1,0 +1,64 @@
+# Cyberpunk 2077 : mods sur Nexus Mods, placés par l'adaptateur REDengine.
+#
+# Les frameworks sont publiés par leurs auteurs à la fois sur Nexus et sur
+# GitHub : Modalia les installe depuis GitHub, sans clic sur Nexus, dès
+# qu'un mod en a besoin. Un framework est requis quand un fichier du mod
+# commence par un des `needed_by_prefix` ou finit par un des
+# `needed_by_ext`, ou quand Nexus le déclare comme prérequis.
+
+id = "cyberpunk-2077"
+name = "Cyberpunk 2077"
+steam_app_ids = [1091500]
+exe_names = ["bin/x64/Cyberpunk2077.exe"]
+loader = "redengine"
+
+[nexus]
+domain = "cyberpunk2077"
+game_id = 3333
+
+[[frameworks]]
+name = "RED4ext"
+nexus_id = 2380
+github = "wopss/RED4ext"
+asset = "red4ext-{version}.zip"
+marker = "red4ext/RED4ext.dll"
+needed_by_prefix = ["red4ext/plugins/"]
+
+[[frameworks]]
+name = "Cyber Engine Tweaks"
+nexus_id = 107
+github = "maximegmd/CyberEngineTweaks"
+asset = "cet_{version}.zip"
+marker = "bin/x64/plugins/cyber_engine_tweaks.asi"
+needed_by_prefix = ["bin/x64/plugins/cyber_engine_tweaks/mods/"]
+
+[[frameworks]]
+name = "redscript"
+nexus_id = 1511
+github = "jac3km4/redscript"
+asset = "redscript-v{version}-windows.zip"
+marker = "engine/tools/scc.exe"
+needed_by_ext = [".reds"]
+
+[[frameworks]]
+name = "ArchiveXL"
+nexus_id = 4198
+github = "psiberx/cp2077-archive-xl"
+asset = "ArchiveXL-{version}.zip"
+marker = "red4ext/plugins/ArchiveXL/ArchiveXL.dll"
+needed_by_ext = [".xl"]
+
+[[frameworks]]
+name = "TweakXL"
+nexus_id = 4197
+github = "psiberx/cp2077-tweak-xl"
+asset = "TweakXL-{version}.zip"
+marker = "red4ext/plugins/TweakXL/TweakXL.dll"
+needed_by_prefix = ["r6/tweaks/"]
+
+[[frameworks]]
+name = "Codeware"
+nexus_id = 7780
+github = "psiberx/cp2077-codeware"
+asset = "Codeware-{version}.zip"
+marker = "red4ext/plugins/Codeware/Codeware.dll"

@@ -180,7 +180,12 @@ impl ModSource for Thunderstore {
         Ok(found)
     }
 
-    async fn description(&self, id: &str, version: &str) -> Result<String, SourceError> {
+    async fn description(
+        &self,
+        _game: &str,
+        id: &str,
+        version: &str,
+    ) -> Result<String, SourceError> {
         let (namespace, name) = split_id(id)?;
         let url = format!(
             "{}/api/experimental/package/{namespace}/{name}/{}/readme/",
