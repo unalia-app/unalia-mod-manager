@@ -3,7 +3,7 @@ mod mods;
 
 use std::collections::HashMap;
 use std::fs;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -11,6 +11,7 @@ use mod_engine::artwork::{self, ArtworkKind};
 use mod_engine::detect::{self, Engine, SteamGame, detect_engine, shortcuts};
 use mod_engine::download;
 use mod_engine::games::{GameProfile, manual_app_id};
+use mod_engine::launch::{self, LaunchTarget};
 use mod_engine::state::ManualGame;
 use serde::Serialize;
 use tauri::http::{Request, Response, StatusCode, header};
@@ -323,6 +324,96 @@ async fn set_launch_via_steam(
     Ok(())
 }
 
+/// Ajoute un jeu ajouté à la main à Steam (jeu non-Steam), avec son nom et
+/// ses images, pour le lancer par Steam et avoir son overlay. Steam garde
+/// ses raccourcis en mémoire et les réécrit en quittant : s'il est ouvert,
+/// il est fermé proprement (`steam://exit`) puis rouvert.
+#[tauri::command]
+async fn add_to_steam(
+    app: AppHandle,
+    library: State<'_, Library>,
+    mods: State<'_, Mods>,
+    app_id: u32,
+) -> Result<(), String> {
+    use tauri_plugin_opener::OpenerExt;
+
+    let game = library
+        .game(app_id)
+        .ok_or("This game isn't in your library anymore.")?;
+    let root = library
+        .steam_root()
+        .ok_or("Steam isn't installed on this computer.")?;
+    let config = shortcuts::current_user_config(&root)
+        .ok_or("Unalia couldn't tell which Steam account to use.\nOpen Steam once and log in, then try again.")?;
+    let Some(LaunchTarget::Executable(exe)) = launch::executable_target(&game.dir, &game.exe_names)
+    else {
+        return Err("Unalia couldn't find the game's executable in its folder.".into());
+    };
+
+    // Steam ouvert : on le ferme et on attend qu'il soit vraiment parti.
+    let was_running = launch::steam_running(&mods.running_exes());
+    if was_running {
+        app.opener()
+            .open_url("steam://exit", None::<&str>)
+            .map_err(|e| format!("Couldn't ask Steam to close.\n{e}"))?;
+        let mut closed = false;
+        for _ in 0..60 {
+            tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+            if !launch::steam_running(&mods.running_exes()) {
+                closed = true;
+                break;
+            }
+        }
+        if !closed {
+            return Err("Steam didn't close. Close it yourself, then try again.".into());
+        }
+    }
+
+    let added = shortcuts::add_shortcut(
+        &config.join("shortcuts.vdf"),
+        &shortcuts::NewShortcut {
+            name: game.profile.name.clone(),
+            start_dir: exe
+                .parent()
+                .map(Path::to_path_buf)
+                .unwrap_or_else(|| game.dir.clone()),
+            exe,
+        },
+    )
+    .map_err(|e| format!("Couldn't add the game to Steam.\n{e}"))?;
+
+    // Ses images dans la bibliothèque de Steam.
+    for (kind, suffix) in [
+        (ArtworkKind::Cover, "p"),
+        (ArtworkKind::Hero, "_hero"),
+        (ArtworkKind::Logo, "_logo"),
+        (ArtworkKind::Header, ""),
+    ] {
+        if let Some(file) = artwork_file(&app, app_id, kind).await {
+            let extension = file.extension().and_then(|e| e.to_str()).unwrap_or("jpg");
+            let target = shortcuts::grid_image(&config, added.app_id, suffix, extension);
+            if let Some(dir) = target.parent() {
+                let _ = fs::create_dir_all(dir);
+            }
+            let _ = fs::copy(&file, target);
+        }
+    }
+
+    if was_running {
+        let _ = app.opener().open_url("steam://open/games", None::<&str>);
+    }
+
+    mods.state()
+        .lock()
+        .await
+        .set_setting(&launch_setting(app_id), Some("1"))
+        .map_err(|e| e.to_string())?;
+    if let Some(known) = library.games.lock().unwrap().get_mut(&app_id) {
+        known.steam_shortcut = Some(added.launch_url());
+    }
+    Ok(())
+}
+
 /// Hors de Steam, la date de la dernière mise à jour est celle de
 /// l'exécutable du jeu.
 fn exe_modified(dir: &std::path::Path, exe_names: &[String]) -> Option<i64> {
@@ -523,6 +614,7 @@ pub fn run() {
             list_games,
             add_manual_game,
             set_launch_via_steam,
+            add_to_steam,
             game_accent,
             catalog::search_mods,
             catalog::get_mod,

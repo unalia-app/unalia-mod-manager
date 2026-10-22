@@ -89,6 +89,11 @@ impl Mods {
         })
     }
 
+    /// Exécutables des processus en cours.
+    pub(crate) fn running_exes(&self) -> Vec<std::path::PathBuf> {
+        self.processes.lock().unwrap().running_exes()
+    }
+
     /// Le jeu tourne-t-il en ce moment ? Vérifié à la demande, sans
     /// attendre le prochain passage de la veille.
     fn is_running(&self, game: &KnownGame) -> bool {

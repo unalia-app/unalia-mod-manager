@@ -114,6 +114,15 @@ impl ProcessWatcher {
     }
 }
 
+/// Steam est-il ouvert ? (son exécutable parmi les processus).
+pub fn steam_running(running_exes: &[PathBuf]) -> bool {
+    running_exes.iter().any(|exe| {
+        exe.file_name().and_then(|n| n.to_str()).is_some_and(|n| {
+            ["steam.exe", "steam_osx", "steam"].contains(&n.to_ascii_lowercase().as_str())
+        })
+    })
+}
+
 /// Comment lancer un jeu.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LaunchTarget {

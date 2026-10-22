@@ -49,6 +49,14 @@ export async function listGames(): Promise<GameScan> {
 	return invoke<GameScan>("list_games");
 }
 
+/**
+ * Ajoute le jeu à Steam (jeu non-Steam, avec son nom et ses images). Steam
+ * est fermé puis rouvert s'il était ouvert.
+ */
+export function addToSteam(appId: number): Promise<void> {
+	return invoke("add_to_steam", { appId });
+}
+
 /** Coche ou décoche « Launch through Steam » (jeu ajouté à la main). */
 export function setLaunchViaSteam(appId: number, enabled: boolean): Promise<void> {
 	return invoke("set_launch_via_steam", { appId, enabled });

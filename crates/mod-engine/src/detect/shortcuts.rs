@@ -2,14 +2,15 @@
 //! `userdata/<compte>/config/shortcuts.vdf`.
 //!
 //! Lancer un tel jeu par Steam lui donne l'overlay de Steam (compteur FPS,
-//! captures, chat). Modalia ne fait que lire ce fichier : il ne crée ni ne
-//! modifie jamais de raccourci.
+//! captures, chat). Modalia lit ce fichier, et sait y ajouter un jeu à la
+//! demande (`add_shortcut`), Steam fermé, sans toucher aux autres.
 //!
 //! Le fichier est un VDF binaire : un octet de type, une clé terminée par un
 //! zéro, puis la valeur (`0x00` objet, `0x01` texte, `0x02` entier 32 bits,
 //! `0x08` fin d'objet).
 
 use std::fs;
+use std::io;
 use std::path::{Path, PathBuf};
 
 /// Raccourci d'un jeu hors Steam.
@@ -62,38 +63,35 @@ pub fn shortcut_for<'a>(shortcuts: &'a [Shortcut], game_dir: &Path) -> Option<&'
 /// Lit un `shortcuts.vdf`. Un fichier abîmé donne ce qui a pu être lu.
 pub fn parse(bytes: &[u8]) -> Vec<Shortcut> {
     let mut reader = Reader { bytes, at: 0 };
-    let mut shortcuts = Vec::new();
-    // Racine : un objet « shortcuts » dont chaque entrée est un raccourci.
-    if reader.byte() != Some(0x00) || reader.string().is_none() {
-        return shortcuts;
-    }
-    while let Some(kind) = reader.byte() {
-        if kind != 0x00 {
-            break;
-        }
-        if reader.string().is_none() {
-            break;
-        }
-        let Some(fields) = reader.object() else {
-            break;
-        };
-        if let Some(shortcut) = shortcut(&fields) {
-            shortcuts.push(shortcut);
-        }
-    }
-    shortcuts
+    let root = reader.object_partial();
+    root.iter()
+        .filter_map(|(_, node)| match node {
+            Node::Map(entries) => Some(entries),
+            _ => None,
+        })
+        .flatten()
+        .filter_map(|(_, node)| match node {
+            Node::Map(fields) => shortcut(fields),
+            _ => None,
+        })
+        .collect()
 }
 
-enum Value {
+/// Un nœud du VDF binaire, gardé tel quel : réécrire le fichier ne doit rien
+/// perdre des raccourcis existants (étiquettes, options de lancement…).
+#[derive(Debug, Clone, PartialEq, Eq)]
+enum Node {
+    Map(Vec<(String, Node)>),
     Text(String),
     Int(u32),
-    Other,
+    /// Autres types (flottant, 64 bits…) : octet de type et valeur brute.
+    Raw(u8, Vec<u8>),
 }
 
-fn shortcut(fields: &[(String, Value)]) -> Option<Shortcut> {
+fn shortcut(fields: &[(String, Node)]) -> Option<Shortcut> {
     let text = |key: &str| {
         fields.iter().find_map(|(k, v)| match v {
-            Value::Text(t) if k.eq_ignore_ascii_case(key) => Some(t.clone()),
+            Node::Text(t) if k.eq_ignore_ascii_case(key) => Some(t.clone()),
             _ => None,
         })
     };
@@ -104,16 +102,20 @@ fn shortcut(fields: &[(String, Value)]) -> Option<Shortcut> {
     let app_id = fields
         .iter()
         .find_map(|(k, v)| match v {
-            Value::Int(id) if k.eq_ignore_ascii_case("appid") => Some(*id),
+            Node::Int(id) if k.eq_ignore_ascii_case("appid") => Some(*id),
             _ => None,
         })
-        .unwrap_or_else(|| crc32(format!("{exe}{name}").as_bytes()) | 0x8000_0000);
+        .unwrap_or_else(|| legacy_app_id(&exe, &name));
     Some(Shortcut {
         app_id,
         name,
         exe: PathBuf::from(unquote(&exe)),
         start_dir: PathBuf::from(unquote(&text("startdir").unwrap_or_default())),
     })
+}
+
+fn legacy_app_id(exe: &str, name: &str) -> u32 {
+    crc32(format!("{exe}{name}").as_bytes()) | 0x8000_0000
 }
 
 fn unquote(path: &str) -> &str {
@@ -133,21 +135,33 @@ impl Reader<'_> {
     }
 
     fn string(&mut self) -> Option<String> {
-        let len = self.bytes[self.at..].iter().position(|&b| b == 0)?;
+        let len = self.bytes.get(self.at..)?.iter().position(|&b| b == 0)?;
         let text = String::from_utf8_lossy(&self.bytes[self.at..self.at + len]).into_owned();
         self.at += len + 1;
         Some(text)
     }
 
-    fn int(&mut self) -> Option<u32> {
-        let bytes = self.bytes.get(self.at..self.at + 4)?;
-        self.at += 4;
-        Some(u32::from_le_bytes(bytes.try_into().ok()?))
+    fn take(&mut self, n: usize) -> Option<Vec<u8>> {
+        let bytes = self.bytes.get(self.at..self.at + n)?.to_vec();
+        self.at += n;
+        Some(bytes)
     }
 
-    /// Champs d'un objet jusqu'à sa fin ; les objets imbriqués (tags) sont
-    /// lus pour être sautés.
-    fn object(&mut self) -> Option<Vec<(String, Value)>> {
+    fn node(&mut self, kind: u8) -> Option<Node> {
+        Some(match kind {
+            0x00 => Node::Map(self.object()?),
+            0x01 => Node::Text(self.string()?),
+            0x02 => Node::Int(u32::from_le_bytes(self.take(4)?.try_into().ok()?)),
+            // 0x03 flottant, 0x04 pointeur, 0x06 couleur : 4 octets.
+            0x03 | 0x04 | 0x06 => Node::Raw(kind, self.take(4)?),
+            // 0x07 entier 64 bits.
+            0x07 => Node::Raw(kind, self.take(8)?),
+            _ => return None,
+        })
+    }
+
+    /// Champs d'un objet jusqu'à sa fin.
+    fn object(&mut self) -> Option<Vec<(String, Node)>> {
         let mut fields = Vec::new();
         loop {
             let kind = self.byte()?;
@@ -155,29 +169,190 @@ impl Reader<'_> {
                 return Some(fields);
             }
             let key = self.string()?;
-            let value = match kind {
-                0x00 => {
-                    self.object()?;
-                    Value::Other
-                }
-                0x01 => Value::Text(self.string()?),
-                0x02 => Value::Int(self.int()?),
-                // 0x03 flottant, 0x04 pointeur, 0x06 couleur : 4 octets.
-                0x03 | 0x04 | 0x06 => {
-                    self.int()?;
-                    Value::Other
-                }
-                // 0x07 entier 64 bits.
-                0x07 => {
-                    self.int()?;
-                    self.int()?;
-                    Value::Other
-                }
-                _ => return None,
-            };
-            fields.push((key, value));
+            fields.push((key, self.node(kind)?));
         }
     }
+
+    /// Comme `object`, mais garde ce qui a pu être lu d'un fichier abîmé.
+    fn object_partial(&mut self) -> Vec<(String, Node)> {
+        let mut fields = Vec::new();
+        while let Some(kind) = self.byte() {
+            if kind == 0x08 {
+                break;
+            }
+            let Some(key) = self.string() else { break };
+            match kind {
+                0x00 => {
+                    let start = self.at;
+                    match self.object() {
+                        Some(inner) => fields.push((key, Node::Map(inner))),
+                        None => {
+                            // Objet tronqué : ses entrées complètes comptent.
+                            self.at = start;
+                            fields.push((key, Node::Map(self.object_partial())));
+                            break;
+                        }
+                    }
+                }
+                _ => match self.node(kind) {
+                    Some(node) => fields.push((key, node)),
+                    None => break,
+                },
+            }
+        }
+        fields
+    }
+}
+
+fn write_fields(out: &mut Vec<u8>, fields: &[(String, Node)]) {
+    for (key, node) in fields {
+        let kind = match node {
+            Node::Map(_) => 0x00,
+            Node::Text(_) => 0x01,
+            Node::Int(_) => 0x02,
+            Node::Raw(kind, _) => *kind,
+        };
+        out.push(kind);
+        out.extend(key.as_bytes());
+        out.push(0);
+        match node {
+            Node::Map(inner) => {
+                write_fields(out, inner);
+                out.push(0x08);
+            }
+            Node::Text(text) => {
+                out.extend(text.as_bytes());
+                out.push(0);
+            }
+            Node::Int(n) => out.extend(n.to_le_bytes()),
+            Node::Raw(_, bytes) => out.extend(bytes),
+        }
+    }
+}
+
+/// Raccourci à créer.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NewShortcut {
+    pub name: String,
+    pub exe: PathBuf,
+    pub start_dir: PathBuf,
+}
+
+/// Ajoute un jeu non-Steam au fichier `shortcuts.vdf` du compte (créé s'il
+/// n'existe pas), comme le fait « Ajouter un jeu non-Steam » de Steam.
+/// Steam doit être fermé : il garde ce fichier en mémoire et le réécrit en
+/// quittant. Les raccourcis existants sont gardés tels quels, et l'ancien
+/// fichier est sauvegardé à côté (`.unalia-backup`). Déjà présent pour cet
+/// exécutable : rien n'est écrit.
+pub fn add_shortcut(file: &Path, new: &NewShortcut) -> io::Result<Shortcut> {
+    let existing = fs::read(file).ok();
+    let mut root = existing
+        .as_deref()
+        .map(|bytes| Reader { bytes, at: 0 }.object_partial())
+        .unwrap_or_default();
+    if let Some(found) = parse(existing.as_deref().unwrap_or_default())
+        .into_iter()
+        .find(|s| normalize(&s.exe) == normalize(&new.exe))
+    {
+        return Ok(found);
+    }
+
+    let quoted = |p: &Path| format!("\"{}\"", p.display());
+    let exe = quoted(&new.exe);
+    let app_id = legacy_app_id(&exe, &new.name);
+    // Les champs que Steam écrit lui-même pour un jeu non-Steam.
+    let entry = Node::Map(vec![
+        ("appid".into(), Node::Int(app_id)),
+        ("AppName".into(), Node::Text(new.name.clone())),
+        ("Exe".into(), Node::Text(exe)),
+        ("StartDir".into(), Node::Text(quoted(&new.start_dir))),
+        ("icon".into(), Node::Text(new.exe.display().to_string())),
+        ("ShortcutPath".into(), Node::Text(String::new())),
+        ("LaunchOptions".into(), Node::Text(String::new())),
+        ("IsHidden".into(), Node::Int(0)),
+        ("AllowDesktopConfig".into(), Node::Int(1)),
+        ("AllowOverlay".into(), Node::Int(1)),
+        ("OpenVR".into(), Node::Int(0)),
+        ("Devkit".into(), Node::Int(0)),
+        ("DevkitGameID".into(), Node::Text(String::new())),
+        ("DevkitOverrideAppID".into(), Node::Int(0)),
+        ("LastPlayTime".into(), Node::Int(0)),
+        ("FlatpakAppID".into(), Node::Text(String::new())),
+        ("tags".into(), Node::Map(Vec::new())),
+    ]);
+    match root
+        .iter_mut()
+        .find(|(k, _)| k.eq_ignore_ascii_case("shortcuts"))
+    {
+        Some((_, Node::Map(entries))) => {
+            // Clés « 0 », « 1 »… : la suivante.
+            let next = entries
+                .iter()
+                .filter_map(|(k, _)| k.parse::<u32>().ok())
+                .max()
+                .map_or(0, |n| n + 1);
+            entries.push((next.to_string(), entry));
+        }
+        _ => root = vec![("shortcuts".into(), Node::Map(vec![("0".into(), entry)]))],
+    }
+
+    let mut out = Vec::new();
+    write_fields(&mut out, &root);
+    out.push(0x08);
+    if let Some(dir) = file.parent() {
+        fs::create_dir_all(dir)?;
+    }
+    if existing.is_some() {
+        fs::copy(file, file.with_extension("vdf.unalia-backup"))?;
+    }
+    let tmp = file.with_extension("vdf.tmp");
+    fs::write(&tmp, &out)?;
+    fs::rename(&tmp, file)?;
+    Ok(Shortcut {
+        app_id,
+        name: new.name.clone(),
+        exe: new.exe.clone(),
+        start_dir: new.start_dir.clone(),
+    })
+}
+
+/// Dossier `config` du dernier compte connecté à Steam (`loginusers.vdf`),
+/// sinon du seul compte de la machine.
+pub fn current_user_config(steam_root: &Path) -> Option<PathBuf> {
+    let userdata = steam_root.join("userdata");
+    let recent = fs::read_to_string(steam_root.join("config").join("loginusers.vdf"))
+        .ok()
+        .and_then(|text| super::vdf::parse(&text).ok())
+        .and_then(|doc| {
+            let users = doc.obj("users")?;
+            users.iter().find_map(|(steam_id, value)| match value {
+                super::vdf::Value::Obj(user) if user.str("MostRecent") == Some("1") => {
+                    steam_id.parse::<u64>().ok()
+                }
+                _ => None,
+            })
+        })
+        // SteamID 64 bits → identifiant de compte, le nom du dossier.
+        .and_then(|id| id.checked_sub(76_561_197_960_265_728))
+        .map(|account| userdata.join(account.to_string()).join("config"));
+    if let Some(config) = recent.filter(|c| c.parent().is_some_and(Path::is_dir)) {
+        return Some(config);
+    }
+    let mut accounts = fs::read_dir(&userdata)
+        .ok()?
+        .flatten()
+        .map(|e| e.path())
+        .filter(|p| p.is_dir() && p.file_name().is_some_and(|n| n != "0"));
+    let only = accounts.next()?;
+    accounts.next().is_none().then(|| only.join("config"))
+}
+
+/// Image de la bibliothèque Steam d'un raccourci : `kind` vaut `p`
+/// (jaquette), `_hero` (bannière), `_logo` ou `` (en-tête).
+pub fn grid_image(config: &Path, app_id: u32, kind: &str, extension: &str) -> PathBuf {
+    config
+        .join("grid")
+        .join(format!("{app_id}{kind}.{extension}"))
 }
 
 /// CRC-32 (polynôme de zlib), comme Steam pour les anciens raccourcis.
@@ -304,6 +479,91 @@ mod tests {
         assert!(shortcut_for(&shortcuts, Path::new("/games/Cyberpunk 2077")).is_some());
         assert!(shortcut_for(&shortcuts, Path::new("/games/Cyberpunk")).is_none());
         assert!(shortcut_for(&shortcuts, Path::new("/games/Other")).is_none());
+    }
+
+    #[test]
+    fn adding_a_shortcut_keeps_the_others_intact() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("config/shortcuts.vdf");
+        std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+        let before = vdf(&[&[
+            ("appid", Field::Int(7)),
+            ("AppName", Field::Text("Old game")),
+            ("Exe", Field::Text("\"C:\\Old\\old.exe\"")),
+            ("LastPlayTime", Field::Int(123)),
+            ("tags", Field::Tags),
+        ]]);
+        std::fs::write(&file, &before).unwrap();
+
+        let new = NewShortcut {
+            name: "Cyberpunk 2077".into(),
+            exe: PathBuf::from("D:/GOG/Cyberpunk 2077/bin/x64/Cyberpunk2077.exe"),
+            start_dir: PathBuf::from("D:/GOG/Cyberpunk 2077/bin/x64"),
+        };
+        let added = add_shortcut(&file, &new).unwrap();
+        assert!(added.app_id & 0x8000_0000 != 0);
+
+        let bytes = std::fs::read(&file).unwrap();
+        let all = parse(&bytes);
+        assert_eq!(all.len(), 2);
+        assert_eq!(all[0].name, "Old game");
+        assert_eq!(all[1].name, "Cyberpunk 2077");
+        assert_eq!(all[1].app_id, added.app_id);
+        // L'ancien raccourci est réécrit à l'identique, étiquettes comprises.
+        assert!(
+            bytes
+                .windows(before.len() - 2)
+                .any(|w| w == &before[..before.len() - 2])
+        );
+        assert_eq!(
+            std::fs::read(file.with_extension("vdf.unalia-backup")).unwrap(),
+            before
+        );
+
+        // Une seconde fois : rien de plus.
+        assert_eq!(add_shortcut(&file, &new).unwrap(), added);
+        assert_eq!(parse(&std::fs::read(&file).unwrap()).len(), 2);
+    }
+
+    #[test]
+    fn a_first_shortcut_creates_the_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("config/shortcuts.vdf");
+        let new = NewShortcut {
+            name: "Game".into(),
+            exe: PathBuf::from("/g/game.exe"),
+            start_dir: PathBuf::from("/g"),
+        };
+        add_shortcut(&file, &new).unwrap();
+        let all = parse(&std::fs::read(&file).unwrap());
+        assert_eq!(all.len(), 1);
+        assert_eq!(all[0].exe, PathBuf::from("/g/game.exe"));
+    }
+
+    #[test]
+    fn finds_the_most_recent_steam_account() {
+        let root = tempfile::tempdir().unwrap();
+        std::fs::create_dir_all(root.path().join("config")).unwrap();
+        for account in ["111", "222"] {
+            std::fs::create_dir_all(root.path().join("userdata").join(account)).unwrap();
+        }
+        assert_eq!(
+            current_user_config(root.path()),
+            None,
+            "deux comptes, aucun indice"
+        );
+        std::fs::write(
+            root.path().join("config/loginusers.vdf"),
+            format!(
+                "\"users\"\n{{\n\"{}\"\n{{\n\"AccountName\" \"me\"\n\"MostRecent\" \"1\"\n}}\n}}\n",
+                76_561_197_960_265_728u64 + 222
+            ),
+        )
+        .unwrap();
+        assert_eq!(
+            current_user_config(root.path()),
+            Some(root.path().join("userdata/222/config"))
+        );
     }
 
     #[test]

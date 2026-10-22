@@ -114,7 +114,7 @@ export function GameScreen() {
 										: "Community mods from Thunderstore. Unalia installs the loader and dependencies for you."}
 								</p>
 							</div>
-							<div ref={heroPlay} className="shrink-0 animate-fade-up pb-1 [animation-delay:90ms]">
+							<div ref={heroPlay} className="flex shrink-0 animate-fade-up flex-col items-end pb-1 [animation-delay:90ms]">
 								<PlayButton appId={game.appId} />
 								<SteamLaunch game={game} />
 							</div>
