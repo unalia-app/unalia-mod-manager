@@ -27,12 +27,15 @@ pub struct Catalog {
 }
 
 impl Catalog {
-    pub fn new() -> Self {
+    /// `cache_dir` : où garder les réponses de GitHub (limite horaire).
+    pub fn new(cache_dir: &std::path::Path) -> Self {
         let client = mod_engine::http_client();
         Self {
             thunderstore: Thunderstore::new(client.clone()),
             nexus: Nexus::new(client.clone()),
-            github: GitHub::new(client.clone()),
+            github: GitHub::new(client.clone())
+                .with_cache_file(cache_dir.join("github-releases.json"))
+                .with_token(crate::mods::dev_env("GITHUB_TOKEN")),
             client,
             games: Mutex::new(None),
         }

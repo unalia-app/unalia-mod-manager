@@ -437,8 +437,8 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .manage(Library::default())
-        .manage(Catalog::new())
         .setup(|app| {
+            app.manage(Catalog::new(&app.path().app_cache_dir()?));
             app.manage(mods::Mods::open(app.handle())?);
             mods::nexus_setup(app.handle());
             tauri::async_runtime::spawn(mods::watch(app.handle().clone()));

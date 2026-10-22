@@ -2,8 +2,15 @@
 //! (frameworks de Cyberpunk 2077). Gratuit, sans compte, sans bridage : on
 //! la préfère à Nexus quand elle existe (échelle de sources, SPEC §2.4).
 
+use std::collections::HashMap;
+use std::fs;
+use std::path::PathBuf;
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
+
+use reqwest::header::{ETAG, IF_NONE_MATCH};
 use reqwest::{Client, StatusCode};
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use super::SourceError;
 
@@ -41,7 +48,7 @@ pub fn repos_in(text: &str) -> Vec<String> {
     repos
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Release {
     /// Version sans le `v` du tag, ex. `1.30.0`.
     pub version: String,
@@ -49,7 +56,7 @@ pub struct Release {
     pub assets: Vec<Asset>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Asset {
     pub name: String,
     #[serde(rename = "browser_download_url")]
@@ -74,12 +81,32 @@ impl Release {
     }
 }
 
+/// Réponse gardée pour un dépôt : la release (ou `None` : pas de release),
+/// et son ETag pour redemander sans tout recevoir.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct Cached {
+    release: Option<Release>,
+    etag: Option<String>,
+    /// Secondes Unix de la dernière réponse.
+    fetched_at: u64,
+}
+
+/// Client des releases GitHub. Sans compte, GitHub n'accorde que 60
+/// requêtes par heure et par adresse IP : chaque réponse est gardée
+/// (`ttl`), redemandée avec son ETag (une réponse « inchangé » ne renvoie
+/// rien), et resservie si la limite est atteinte. Le cache peut vivre sur
+/// disque, pour survivre aux redémarrages.
 #[derive(Debug, Clone)]
 pub struct GitHub {
     client: Client,
     api_url: String,
     /// Fichiers en HTTPS seulement, hors des tests.
     require_https: bool,
+    ttl: Duration,
+    cache: Arc<Mutex<HashMap<String, Cached>>>,
+    cache_file: Option<PathBuf>,
+    /// Jeton personnel facultatif : 5 000 requêtes par heure au lieu de 60.
+    token: Option<String>,
 }
 
 impl GitHub {
@@ -92,7 +119,34 @@ impl GitHub {
             client,
             api_url: api_url.trim_end_matches('/').to_owned(),
             require_https: api_url.starts_with("https://"),
+            ttl: Duration::from_secs(10 * 60),
+            cache: Arc::default(),
+            cache_file: None,
+            token: None,
         }
+    }
+
+    pub fn with_token(mut self, token: Option<String>) -> Self {
+        self.token = token.filter(|t| !t.trim().is_empty());
+        self
+    }
+
+    /// Durée pendant laquelle une réponse est resservie sans redemander.
+    pub fn with_ttl(mut self, ttl: Duration) -> Self {
+        self.ttl = ttl;
+        self
+    }
+
+    /// Cache sur disque : relu tout de suite, réécrit à chaque réponse.
+    pub fn with_cache_file(mut self, file: PathBuf) -> Self {
+        if let Some(saved) = fs::read(&file)
+            .ok()
+            .and_then(|bytes| serde_json::from_slice::<HashMap<String, Cached>>(&bytes).ok())
+        {
+            *self.cache.lock().unwrap() = saved;
+        }
+        self.cache_file = Some(file);
+        self
     }
 
     /// Dernière release publiée (hors préversions) de `owner/repo`.
@@ -105,40 +159,134 @@ impl GitHub {
         if !valid {
             return Err(SourceError::NotFound { source_name: NAME });
         }
+        let key = repo.to_ascii_lowercase();
+        let cached = self.cache.lock().unwrap().get(&key).cloned();
+        if let Some(cached) = &cached
+            && now().saturating_sub(cached.fetched_at) < self.ttl.as_secs()
+        {
+            return found(cached.release.clone());
+        }
+
         let network = |error| SourceError::Network {
             source_name: NAME,
             error,
         };
-        let response = self
+        let mut request = self
             .client
             .get(format!("{}/repos/{repo}/releases/latest", self.api_url))
-            .header("Accept", "application/vnd.github+json")
-            .send()
-            .await
-            .map_err(network)?;
-        if response.status() == StatusCode::NOT_FOUND {
-            return Err(SourceError::NotFound { source_name: NAME });
+            .header("Accept", "application/vnd.github+json");
+        if let Some(etag) = cached.as_ref().and_then(|c| c.etag.as_deref()) {
+            request = request.header(IF_NONE_MATCH, etag);
         }
-        let body = response
-            .error_for_status()
-            .map_err(network)?
-            .text()
-            .await
-            .map_err(network)?;
-        let raw: RawRelease = serde_json::from_str(&body).map_err(|e| SourceError::Unexpected {
-            source_name: NAME,
-            detail: e.to_string(),
-        })?;
-        Ok(Release {
-            version: raw.tag_name.trim_start_matches('v').to_owned(),
-            published_at: raw.published_at.unwrap_or_default(),
-            assets: raw
-                .assets
-                .into_iter()
-                .filter(|a| !self.require_https || a.url.starts_with("https://"))
-                .collect(),
-        })
+        if let Some(token) = &self.token {
+            request = request.bearer_auth(token);
+        }
+        let response = match request.send().await {
+            Ok(response) => response,
+            // Hors ligne : la dernière réponse connue vaut mieux que rien.
+            Err(error) => {
+                return match cached {
+                    Some(cached) => found(cached.release),
+                    None => Err(network(error)),
+                };
+            }
+        };
+        let status = response.status();
+        if let Some(minutes) = rate_limited(&response) {
+            return match cached {
+                Some(cached) => found(cached.release),
+                None => Err(SourceError::RateLimited {
+                    source_name: NAME,
+                    minutes,
+                }),
+            };
+        }
+        let etag = response
+            .headers()
+            .get(ETAG)
+            .and_then(|v| v.to_str().ok())
+            .map(str::to_owned);
+        let release = if status == StatusCode::NOT_MODIFIED {
+            cached.and_then(|c| c.release)
+        } else if status == StatusCode::NOT_FOUND {
+            None
+        } else {
+            let body = response
+                .error_for_status()
+                .map_err(network)?
+                .text()
+                .await
+                .map_err(network)?;
+            let raw: RawRelease =
+                serde_json::from_str(&body).map_err(|e| SourceError::Unexpected {
+                    source_name: NAME,
+                    detail: e.to_string(),
+                })?;
+            Some(Release {
+                version: raw.tag_name.trim_start_matches('v').to_owned(),
+                published_at: raw.published_at.unwrap_or_default(),
+                assets: raw
+                    .assets
+                    .into_iter()
+                    .filter(|a| !self.require_https || a.url.starts_with("https://"))
+                    .collect(),
+            })
+        };
+        self.remember(
+            key,
+            Cached {
+                release: release.clone(),
+                etag,
+                fetched_at: now(),
+            },
+        );
+        found(release)
     }
+
+    fn remember(&self, key: String, entry: Cached) {
+        let mut cache = self.cache.lock().unwrap();
+        cache.insert(key, entry);
+        if let Some(file) = &self.cache_file
+            && let Ok(json) = serde_json::to_vec(&*cache)
+        {
+            let tmp = file.with_extension("tmp");
+            if fs::write(&tmp, json).is_ok() {
+                let _ = fs::rename(tmp, file);
+            }
+        }
+    }
+}
+
+fn found(release: Option<Release>) -> Result<Release, SourceError> {
+    release.ok_or(SourceError::NotFound { source_name: NAME })
+}
+
+/// Limite horaire atteinte : minutes avant qu'elle se lève.
+fn rate_limited(response: &reqwest::Response) -> Option<u64> {
+    let status = response.status();
+    let header = |name: &str| {
+        response
+            .headers()
+            .get(name)
+            .and_then(|v| v.to_str().ok())
+            .and_then(|v| v.parse::<u64>().ok())
+    };
+    let exhausted = header("x-ratelimit-remaining") == Some(0);
+    if !(status == StatusCode::TOO_MANY_REQUESTS || (status == StatusCode::FORBIDDEN && exhausted))
+    {
+        return None;
+    }
+    let wait = header("retry-after")
+        .or_else(|| header("x-ratelimit-reset").map(|reset| reset.saturating_sub(now())))
+        .unwrap_or(3600);
+    Some(wait.div_ceil(60).max(1))
+}
+
+fn now() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or_default()
 }
 
 #[derive(Deserialize)]

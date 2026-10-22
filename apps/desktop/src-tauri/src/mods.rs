@@ -1031,7 +1031,7 @@ pub fn nexus_setup(app: &AppHandle) {
     let key = match saved {
         Some(saved) if saved.is_empty() => None,
         Some(saved) => Some(saved),
-        None => dev_nexus_key(),
+        None => dev_env("NEXUS_API_KEY"),
     };
     let connected = key.is_some();
     app.state::<Catalog>().nexus.set_api_key(key);
@@ -1053,17 +1053,19 @@ pub fn nexus_setup(app: &AppHandle) {
     }
 }
 
-/// Clé de développement, jamais lue dans un build de release.
-fn dev_nexus_key() -> Option<String> {
+/// Valeur de développement (variable d'environnement, sinon `.env` à la
+/// racine du dépôt), jamais lue dans un build de release.
+pub fn dev_env(name: &str) -> Option<String> {
     if !cfg!(debug_assertions) {
         return None;
     }
-    if let Ok(key) = std::env::var("NEXUS_API_KEY") {
-        return Some(key);
+    if let Ok(value) = std::env::var(name) {
+        return Some(value);
     }
     let env = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../.env");
+    let prefix = format!("{name}=");
     std::fs::read_to_string(env).ok()?.lines().find_map(|line| {
-        let value = line.trim().strip_prefix("NEXUS_API_KEY=")?;
+        let value = line.trim().strip_prefix(&prefix)?;
         let value = value.trim().trim_matches(['"', '\'']);
         (!value.is_empty()).then(|| value.to_owned())
     })

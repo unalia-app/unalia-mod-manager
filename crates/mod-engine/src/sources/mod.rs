@@ -135,6 +135,11 @@ pub enum SourceError {
     NotConnected { source_name: &'static str },
     #[error("{source_name} refused your API key")]
     Unauthorized { source_name: &'static str },
+    #[error("{source_name} limits requests per hour: try again in {minutes} min")]
+    RateLimited {
+        source_name: &'static str,
+        minutes: u64,
+    },
     #[error("{source_name} only allows this download from its website")]
     WebsiteOnly { source_name: &'static str },
     #[error("unexpected response from {source_name}: {detail}")]
