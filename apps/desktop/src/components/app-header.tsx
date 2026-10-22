@@ -1,11 +1,12 @@
 "use client";
 
 import { Badge, cn } from "@modalia/ui";
-import { Settings } from "lucide-react";
+import { MessageSquarePlus, Settings } from "lucide-react";
 import Link from "next/link";
 import { type ReactNode, type RefObject, useEffect, useState } from "react";
 
 import { WindowControls } from "@/components/window-controls";
+import { openFeedback } from "@/lib/feedback";
 import { usePlatform } from "@/lib/platform";
 
 /**
@@ -68,6 +69,15 @@ export function AppHeader({
 			</Link>
 			{children}
 			<div className="ml-auto flex items-center gap-2">
+				<button
+					type="button"
+					onClick={openFeedback}
+					aria-label="Help & Feedback"
+					title="Help & Feedback"
+					className="flex size-8 cursor-pointer items-center justify-center rounded-md text-fg-subtle transition-colors hover:bg-white/10 hover:text-fg"
+				>
+					<MessageSquarePlus className="size-4" />
+				</button>
 				<Link
 					href="/settings/"
 					aria-label="Settings"

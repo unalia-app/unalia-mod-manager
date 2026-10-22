@@ -3,6 +3,8 @@ import type { ReactNode } from "react";
 
 import { DevShortcuts } from "@/components/dev-shortcuts";
 import { DisplayScale } from "@/components/display-scale";
+import { BetaBubble } from "@/components/feedback/beta-bubble";
+import { FeedbackDialog } from "@/components/feedback/feedback-dialog";
 import { OverlayScrollbar } from "@/components/overlay-scrollbar";
 import { Toaster } from "@/components/toaster";
 
@@ -22,6 +24,8 @@ export default function RootLayout({ children }: { children: ReactNode }) {
 				<OverlayScrollbar />
 				<DevShortcuts />
 				<DisplayScale />
+				<BetaBubble />
+				<FeedbackDialog />
 			</body>
 		</html>
 	);
