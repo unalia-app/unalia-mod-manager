@@ -9,6 +9,7 @@ import { type CSSProperties, type ReactNode, useEffect, useState } from "react";
 import { Ambience } from "@/components/ambience";
 import { AppHeader } from "@/components/app-header";
 import { GameSwitcher } from "@/components/game/game-switcher";
+import { PlayButton } from "@/components/game/play-button";
 import { Markdown } from "@/components/markdown";
 import { InstallButton } from "@/components/mod/install-button";
 import { Notice } from "@/components/notice";
@@ -70,7 +71,9 @@ export function ModScreen() {
 			style={accent ? ({ "--accent": accent } as CSSProperties) : undefined}
 		>
 			<Ambience appId={game?.appId ?? null} />
-			<AppHeader>{game && <GameSwitcher current={game} />}</AppHeader>
+			<AppHeader actions={game?.moddable && <PlayButton appId={game.appId} compact />}>
+				{game && <GameSwitcher current={game} />}
+			</AppHeader>
 
 			<div className="relative z-10 mx-auto w-full max-w-6xl px-8 pb-20 2xl:max-w-7xl">
 				<Link

@@ -1,9 +1,9 @@
 "use client";
 
-import { Badge, Button, Segmented, Skeleton } from "@modalia/ui";
+import { Badge, Button, Segmented, Skeleton, cn } from "@modalia/ui";
 import { ArrowLeft, Gamepad2 } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { type CSSProperties, type ReactNode, useEffect, useState } from "react";
+import { type CSSProperties, type ReactNode, type RefObject, useEffect, useRef, useState } from "react";
 
 import { Ambience } from "@/components/ambience";
 import { AppHeader } from "@/components/app-header";
@@ -32,6 +32,10 @@ export function GameScreen() {
 	const [tab, setTab] = useState<Tab>("discover");
 	const accent = useAccent(game?.appId ?? null);
 	const installedCount = useInstalled(appId)?.length ?? 0;
+	// « Play » de l'en-tête : seulement quand celui de la bannière est sorti
+	// de l'écran, jamais les deux à la fois.
+	const heroPlay = useRef<HTMLDivElement>(null);
+	const heroPlayVisible = useVisible(heroPlay, game);
 	const tabs: { value: Tab; label: ReactNode }[] = [
 		{ value: "discover", label: "Discover" },
 		{
@@ -68,7 +72,24 @@ export function GameScreen() {
 		>
 			<Ambience appId={game?.appId ?? null} />
 
-			<AppHeader>{game && <GameSwitcher current={game} />}</AppHeader>
+			<AppHeader
+				actions={
+					game?.moddable && (
+						<div
+							inert={heroPlayVisible}
+							aria-hidden={heroPlayVisible}
+							className={cn(
+								"transition-[opacity,translate] duration-300 ease-out",
+								heroPlayVisible ? "pointer-events-none -translate-y-1 opacity-0" : "opacity-100",
+							)}
+						>
+							<PlayButton appId={game.appId} compact />
+						</div>
+					)
+				}
+			>
+				{game && <GameSwitcher current={game} />}
+			</AppHeader>
 
 			<div className="relative z-10 mx-auto w-full max-w-6xl px-8 pb-20 2xl:max-w-7xl min-[1900px]:max-w-[96rem]">
 				{game === undefined && <HeroSkeleton />}
@@ -92,7 +113,7 @@ export function GameScreen() {
 										: "Community mods from Thunderstore. Unalia installs the loader and dependencies for you."}
 								</p>
 							</div>
-							<div className="shrink-0 animate-fade-up pb-1 [animation-delay:90ms]">
+							<div ref={heroPlay} className="shrink-0 animate-fade-up pb-1 [animation-delay:90ms]">
 								<PlayButton appId={game.appId} />
 							</div>
 						</section>
@@ -119,6 +140,24 @@ export function GameScreen() {
 			</div>
 		</main>
 	);
+}
+
+/** L'élément est-il à l'écran ? (vrai tant qu'on ne sait pas). */
+function useVisible(ref: RefObject<HTMLElement | null>, trigger: unknown): boolean {
+	const [visible, setVisible] = useState(true);
+	// `trigger` relance l'observation quand l'élément apparaît (jeu chargé).
+	useEffect(() => {
+		const node = ref.current;
+		if (!node) return;
+		// La marge du haut compte l'en-tête collé (h-14) : sous lui, le bouton
+		// n'est plus visible.
+		const observer = new IntersectionObserver(([entry]) => setVisible(entry?.isIntersecting ?? true), {
+			rootMargin: "-56px 0px 0px 0px",
+		});
+		observer.observe(node);
+		return () => observer.disconnect();
+	}, [ref, trigger]);
+	return visible;
 }
 
 function HeroSkeleton() {

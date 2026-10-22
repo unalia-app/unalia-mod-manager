@@ -23,6 +23,7 @@ import { usePlatform } from "@/lib/platform";
 export function AppHeader({
 	brandRef,
 	brandHidden = false,
+	actions,
 	children,
 }: {
 	/** Logo, destination de l'envol de l'intro. */
@@ -30,6 +31,8 @@ export function AppHeader({
 	/** Caché tant que l'intro n'a pas posé le logo. */
 	brandHidden?: boolean;
 	children?: ReactNode;
+	/** Actions de l'écran, à droite (ex. « Play »), toujours visibles. */
+	actions?: ReactNode;
 }) {
 	const scrolled = useScrolled();
 	const platform = usePlatform();
@@ -69,6 +72,7 @@ export function AppHeader({
 			</Link>
 			{children}
 			<div className="ml-auto flex items-center gap-2">
+				{actions}
 				<button
 					type="button"
 					onClick={openFeedback}
