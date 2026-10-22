@@ -826,7 +826,10 @@ pub async fn play_game(
     if mods.is_running(&game) {
         return Ok(());
     }
-    let target = if game.manual {
+    let target = if let Some(url) = &game.steam_shortcut {
+        // Jeu hors Steam ajouté à Steam : par Steam, pour son overlay.
+        LaunchTarget::Steam(url.clone())
+    } else if game.manual {
         launch::executable_target(&game.dir, &game.exe_names)
             .ok_or("Unalia couldn't find the game's executable in its folder.")?
     } else {

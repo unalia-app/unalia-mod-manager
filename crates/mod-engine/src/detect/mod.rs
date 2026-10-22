@@ -8,6 +8,7 @@
 //! Seule l'absence du dossier `steamapps` à la racine est une erreur.
 
 mod engine;
+pub mod shortcuts;
 pub mod vdf;
 
 use std::collections::HashSet;

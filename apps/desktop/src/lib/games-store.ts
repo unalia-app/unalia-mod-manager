@@ -15,6 +15,13 @@ export function loadGames({ fresh = false } = {}): Promise<GameScan> {
 	return scan;
 }
 
+/** Met à jour un jeu du scan en mémoire (ex. un réglage changé). */
+export async function patchGame(appId: number, patch: Partial<SteamGame>) {
+	const { games } = await loadGames();
+	const game = games.find((g) => g.appId === appId);
+	if (game) Object.assign(game, patch);
+}
+
 export async function findGame(appId: number): Promise<SteamGame | null> {
 	const { games } = await loadGames();
 	return games.find((g) => g.appId === appId) ?? null;

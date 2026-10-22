@@ -32,6 +32,10 @@ export type SteamGame = {
 	moddable: boolean;
 	/** `manual` : ajouté à la main depuis son dossier. */
 	source: "steam" | "manual";
+	/** Jeu ajouté à la main que l'utilisateur a aussi ajouté à Steam (jeu non-Steam). */
+	steamShortcut: boolean;
+	/** Play passe par Steam, pour son overlay (compteur FPS…). */
+	launchViaSteam: boolean;
 };
 
 export type GameScan = {
@@ -43,6 +47,11 @@ export async function listGames(): Promise<GameScan> {
 	// Hors de Tauri (ex. `next dev` dans un navigateur), aucun moteur n'est joignable.
 	if (!isTauri()) return { steamFound: false, games: [] };
 	return invoke<GameScan>("list_games");
+}
+
+/** Coche ou décoche « Launch through Steam » (jeu ajouté à la main). */
+export function setLaunchViaSteam(appId: number, enabled: boolean): Promise<void> {
+	return invoke("set_launch_via_steam", { appId, enabled });
 }
 
 /**

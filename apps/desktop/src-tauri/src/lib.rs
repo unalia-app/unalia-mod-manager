@@ -8,7 +8,7 @@ use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use mod_engine::artwork::{self, ArtworkKind};
-use mod_engine::detect::{self, Engine, SteamGame, detect_engine};
+use mod_engine::detect::{self, Engine, SteamGame, detect_engine, shortcuts};
 use mod_engine::download;
 use mod_engine::games::{GameProfile, manual_app_id};
 use mod_engine::state::ManualGame;
@@ -48,6 +48,9 @@ struct KnownGame {
     exe_names: Vec<String>,
     /// Profil du jeu : source des mods (Nexus), frameworks.
     profile: GameProfile,
+    /// Jeu hors Steam ajouté à Steam : adresse qui le lance par Steam (et
+    /// son overlay).
+    steam_shortcut: Option<String>,
 }
 
 #[derive(Clone, Default)]
@@ -86,6 +89,11 @@ struct GameEntry {
     profile: Option<GameProfile>,
     /// Modalia sait-il modder ce jeu ?
     moddable: bool,
+    /// Jeu ajouté à la main que l'utilisateur a aussi ajouté à Steam.
+    steam_shortcut: bool,
+    /// Play passe par Steam (overlay, compteur FPS) : réglage du jeu, oui
+    /// par défaut quand le raccourci existe.
+    launch_via_steam: bool,
 }
 
 #[tauri::command]
@@ -128,12 +136,34 @@ async fn list_games(
                 source: "steam",
                 profile,
                 moddable,
+                steam_shortcut: false,
+                launch_via_steam: false,
             }
         })
         .collect();
 
-    // Jeux ajoutés à la main, sauf ceux que Steam connaît déjà.
-    let manual = mods.state().lock().await.manual_games().unwrap_or_default();
+    // Jeux ajoutés à la main, sauf ceux que Steam connaît déjà. S'ils ont
+    // été ajoutés à Steam comme jeux non-Steam, Play peut passer par Steam.
+    let shortcuts = library
+        .steam_root()
+        .map(|root| shortcuts::steam_shortcuts(&root))
+        .unwrap_or_default();
+    let (manual, launch_settings) = {
+        let state = mods.state().lock().await;
+        let manual = state.manual_games().unwrap_or_default();
+        let settings: HashMap<u32, bool> = manual
+            .iter()
+            .map(|g| {
+                let off = state
+                    .setting(&launch_setting(g.app_id))
+                    .ok()
+                    .flatten()
+                    .is_some_and(|v| v == "0");
+                (g.app_id, !off)
+            })
+            .collect();
+        (manual, settings)
+    };
     for ManualGame {
         app_id,
         profile_id,
@@ -152,6 +182,7 @@ async fn list_games(
         if entries.iter().any(|e| e.game.app_id == app_id) || !dir.is_dir() {
             continue;
         }
+        let has_shortcut = shortcuts::shortcut_for(&shortcuts, &dir).is_some();
         entries.push(GameEntry {
             game: SteamGame {
                 app_id,
@@ -163,6 +194,8 @@ async fn list_games(
             },
             source: "manual",
             moddable: profile.supported,
+            steam_shortcut: has_shortcut,
+            launch_via_steam: has_shortcut && launch_settings.get(&app_id).copied().unwrap_or(true),
             profile: Some(profile),
         });
     }
@@ -181,6 +214,11 @@ async fn list_games(
                     manual: e.source == "manual",
                     exe_names: profile.exe_names.clone(),
                     profile: profile.clone(),
+                    steam_shortcut: e
+                        .launch_via_steam
+                        .then(|| shortcuts::shortcut_for(&shortcuts, &e.game.install_dir))
+                        .flatten()
+                        .map(|s| s.launch_url()),
                 },
             ))
         })
@@ -247,6 +285,42 @@ async fn add_manual_game(
         })
         .map_err(|e| e.to_string())?;
     Ok(app_id)
+}
+
+/// Réglage « Play passe par Steam » d'un jeu ajouté à la main.
+fn launch_setting(app_id: u32) -> String {
+    format!("launch_via_steam:{app_id}")
+}
+
+/// Coche ou décoche « Launch through Steam » pour un jeu ajouté à la main.
+#[tauri::command]
+async fn set_launch_via_steam(
+    library: State<'_, Library>,
+    mods: State<'_, Mods>,
+    app_id: u32,
+    enabled: bool,
+) -> Result<(), String> {
+    mods.state()
+        .lock()
+        .await
+        .set_setting(
+            &launch_setting(app_id),
+            Some(if enabled { "1" } else { "0" }),
+        )
+        .map_err(|e| e.to_string())?;
+    // Pris en compte tout de suite, sans attendre un nouveau scan.
+    let root = library.steam_root();
+    if let Some(game) = library.games.lock().unwrap().get_mut(&app_id) {
+        game.steam_shortcut = if enabled {
+            root.and_then(|root| {
+                let all = shortcuts::steam_shortcuts(&root);
+                shortcuts::shortcut_for(&all, &game.dir).map(|s| s.launch_url())
+            })
+        } else {
+            None
+        };
+    }
+    Ok(())
 }
 
 /// Hors de Steam, la date de la dernière mise à jour est celle de
@@ -448,6 +522,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             list_games,
             add_manual_game,
+            set_launch_via_steam,
             game_accent,
             catalog::search_mods,
             catalog::get_mod,

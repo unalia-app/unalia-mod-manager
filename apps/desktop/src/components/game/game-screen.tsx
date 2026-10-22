@@ -15,6 +15,7 @@ import { MyMods } from "@/components/game/my-mods";
 import { NexusConnect } from "@/components/game/nexus-connect";
 import { PendingBanner } from "@/components/game/pending-banner";
 import { PlayButton } from "@/components/game/play-button";
+import { SteamLaunch } from "@/components/game/steam-launch";
 import { Notice } from "@/components/notice";
 import { useAccent } from "@/hooks/use-accent";
 import { type SteamGame, gameSubtitle } from "@/lib/engine";
@@ -115,6 +116,7 @@ export function GameScreen() {
 							</div>
 							<div ref={heroPlay} className="shrink-0 animate-fade-up pb-1 [animation-delay:90ms]">
 								<PlayButton appId={game.appId} />
+								<SteamLaunch game={game} />
 							</div>
 						</section>
 
