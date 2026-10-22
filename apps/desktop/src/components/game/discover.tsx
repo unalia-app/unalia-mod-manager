@@ -11,6 +11,7 @@ import { compactNumber } from "@/lib/format";
 
 const SORTS: { value: ModSort; label: string }[] = [
 	{ value: "popular", label: "Popular" },
+	{ value: "downloads", label: "Downloads" },
 	{ value: "newest", label: "Newest" },
 	{ value: "updated", label: "Updated" },
 ];

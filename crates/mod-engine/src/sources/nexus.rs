@@ -485,6 +485,7 @@ impl ModSource for Nexus {
         let sort = match (query.sort, text.is_empty()) {
             (Sort::Popular, false) => json!({ "relevance": { "direction": "DESC" } }),
             (Sort::Popular, true) => json!({ "endorsements": { "direction": "DESC" } }),
+            (Sort::Downloads, _) => json!({ "downloads": { "direction": "DESC" } }),
             (Sort::Newest, _) => json!({ "createdAt": { "direction": "DESC" } }),
             (Sort::Updated, _) => json!({ "updatedAt": { "direction": "DESC" } }),
         };

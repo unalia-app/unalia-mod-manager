@@ -28,7 +28,8 @@ async fn search_maps_the_listing_to_neutral_summaries() {
     let mock = server
         .mock("GET", "/api/cyberstorm/listing/hollow-knight-silksong/")
         .match_query(Matcher::AllOf(vec![
-            Matcher::UrlEncoded("ordering".into(), "most-downloaded".into()),
+            // « Popular » par défaut : les mieux notés.
+            Matcher::UrlEncoded("ordering".into(), "top-rated".into()),
             Matcher::UrlEncoded("page".into(), "1".into()),
         ]))
         .with_body(fixture("listing-silksong.json"))

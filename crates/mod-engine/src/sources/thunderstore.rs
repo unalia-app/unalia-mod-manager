@@ -138,7 +138,8 @@ impl ModSource for Thunderstore {
         let community = segment(community)?;
         let url = format!("{}/api/cyberstorm/listing/{community}/", self.base_url);
         let ordering = match query.sort {
-            Sort::Popular => "most-downloaded",
+            Sort::Popular => "top-rated",
+            Sort::Downloads => "most-downloaded",
             Sort::Newest => "newest",
             Sort::Updated => "last-updated",
         };

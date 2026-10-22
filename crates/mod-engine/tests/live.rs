@@ -24,7 +24,7 @@ fn catalog() -> GameCatalog {
 #[ignore]
 async fn nexus_queries_match_the_real_schema() {
     let nexus = Nexus::new(mod_engine::http_client());
-    for sort in [Sort::Popular, Sort::Newest, Sort::Updated] {
+    for sort in [Sort::Popular, Sort::Downloads, Sort::Newest, Sort::Updated] {
         let page = nexus
             .search(
                 COMMUNITY,

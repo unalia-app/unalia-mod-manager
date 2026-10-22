@@ -91,8 +91,12 @@ pub struct Dependency {
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum Sort {
+    /// Les mieux notés par la communauté (Thunderstore : votes, Nexus :
+    /// endorsements).
     #[default]
     Popular,
+    /// Les plus téléchargés.
+    Downloads,
     Newest,
     Updated,
 }

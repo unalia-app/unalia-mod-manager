@@ -115,7 +115,7 @@ export function gameAccent(appId: number): Promise<string | null> {
 
 // Mods (brique sources du moteur, format neutre SPEC §6.5).
 
-export type ModSort = "popular" | "newest" | "updated";
+export type ModSort = "popular" | "downloads" | "newest" | "updated";
 
 export type ModSummary = {
 	id: string;
