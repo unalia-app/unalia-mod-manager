@@ -72,7 +72,7 @@ export function ModScreen() {
 			<Ambience appId={game?.appId ?? null} />
 			<AppHeader>{game && <GameSwitcher current={game} />}</AppHeader>
 
-			<div className="relative z-10 mx-auto w-full max-w-6xl px-8 pb-20">
+			<div className="relative z-10 mx-auto w-full max-w-6xl px-8 pb-20 2xl:max-w-7xl">
 				<Link
 					href={gameHref(appId)}
 					className="mt-6 inline-flex items-center gap-1.5 text-xs font-medium text-fg-subtle transition-colors hover:text-fg"

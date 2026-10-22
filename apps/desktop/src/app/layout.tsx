@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import type { ReactNode } from "react";
 
 import { DevShortcuts } from "@/components/dev-shortcuts";
+import { DisplayScale } from "@/components/display-scale";
 import { OverlayScrollbar } from "@/components/overlay-scrollbar";
 import { Toaster } from "@/components/toaster";
 
@@ -20,6 +21,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
 				<Toaster />
 				<OverlayScrollbar />
 				<DevShortcuts />
+				<DisplayScale />
 			</body>
 		</html>
 	);

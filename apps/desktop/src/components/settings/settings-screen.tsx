@@ -1,17 +1,25 @@
 "use client";
 
 import { cn } from "@modalia/ui";
-import { ChevronLeft, Link2 } from "lucide-react";
+import { ChevronLeft, Link2, Monitor } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { useState } from "react";
 
 import { AppHeader } from "@/components/app-header";
 import { Connections } from "@/components/settings/connections";
+import { Display } from "@/components/settings/display";
 
-const sections = [{ id: "connections", label: "Connections", icon: <Link2 className="size-3.5" /> }];
+const sections = [
+	{ id: "connections", label: "Connections", icon: <Link2 className="size-3.5" /> },
+	{ id: "display", label: "Display", icon: <Monitor className="size-3.5" /> },
+] as const;
 
-/** Réglages (repris de la page Settings d'Unalia) : comptes liés pour l'instant. */
+type Section = (typeof sections)[number]["id"];
+
+/** Réglages (repris de la page Settings d'Unalia) : comptes liés, affichage. */
 export function SettingsScreen() {
 	const router = useRouter();
+	const [section, setSection] = useState<Section>("connections");
 
 	return (
 		<main className="relative min-h-dvh overflow-x-clip">
@@ -27,23 +35,25 @@ export function SettingsScreen() {
 						Back
 					</button>
 					<nav className="mt-6 space-y-1">
-						{sections.map((s, i) => (
-							<span
+						{sections.map((s) => (
+							<button
+								type="button"
 								key={s.id}
+								onClick={() => setSection(s.id)}
 								className={cn(
-									"flex items-center gap-2 rounded-md px-3 py-2.5 text-xs",
-									i === 0 ? "bg-surface-strong text-fg" : "text-fg-subtle",
+									"flex w-full cursor-pointer items-center gap-2 rounded-md px-3 py-2.5 text-xs transition-colors",
+									section === s.id ? "bg-surface-strong text-fg" : "text-fg-subtle hover:bg-white/5 hover:text-fg",
 								)}
 							>
 								{s.icon}
 								{s.label}
-							</span>
+							</button>
 						))}
 					</nav>
 				</aside>
 
-				<section className="flex min-w-0 flex-1 animate-fade-up flex-col gap-6">
-					<Connections />
+				<section key={section} className="flex min-w-0 flex-1 animate-fade-up flex-col gap-6">
+					{section === "connections" ? <Connections /> : <Display />}
 				</section>
 			</div>
 		</main>
