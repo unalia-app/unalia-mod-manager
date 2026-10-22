@@ -70,14 +70,30 @@ impl Release {
     /// (CET 1.38 : `cet_1_38_0.zip` après `cet_1.37.1.zip`) : points, tirets
     /// bas et tirets sont acceptés.
     pub fn asset(&self, pattern: &str) -> Option<&Asset> {
-        ['.', '_', '-']
+        self.asset_and_version(pattern).map(|(asset, _)| asset)
+    }
+
+    /// Le fichier et la version qu'il porte. Avec un `*` dans le modèle
+    /// (`UE4SS_v*.zip`), la partie variable du nom est la version : une
+    /// release « experimental-latest » n'a pas de numéro dans son tag.
+    pub fn asset_and_version(&self, pattern: &str) -> Option<(&Asset, String)> {
+        if let Some((prefix, suffix)) = pattern.split_once('*') {
+            return self.assets.iter().find_map(|a| {
+                let name = a.name.as_str();
+                let middle = name.strip_prefix(prefix)?.strip_suffix(suffix)?;
+                (!middle.is_empty() && !middle.contains('/'))
+                    .then(|| (a, middle.trim_start_matches('v').to_owned()))
+            });
+        }
+        let asset = ['.', '_', '-']
             .iter()
             .map(|sep| pattern.replace("{version}", &self.version.replace('.', &sep.to_string())))
             .find_map(|name| {
                 self.assets
                     .iter()
                     .find(|a| a.name.eq_ignore_ascii_case(&name))
-            })
+            })?;
+        Some((asset, self.version.clone()))
     }
 }
 
@@ -151,15 +167,27 @@ impl GitHub {
 
     /// Dernière release publiée (hors préversions) de `owner/repo`.
     pub async fn latest_release(&self, repo: &str) -> Result<Release, SourceError> {
+        self.release(repo, None).await
+    }
+
+    /// Release `tag` de `owner/repo`, sinon la dernière stable.
+    pub async fn release(&self, repo: &str, tag: Option<&str>) -> Result<Release, SourceError> {
+        let safe = |s: &str| {
+            !s.is_empty()
+                && !s.contains("..")
+                && s.chars()
+                    .all(|c| c.is_ascii_alphanumeric() || matches!(c, '/' | '-' | '_' | '.'))
+        };
         let valid = repo.split('/').count() == 2
-            && repo
-                .chars()
-                .all(|c| c.is_ascii_alphanumeric() || matches!(c, '/' | '-' | '_' | '.'))
-            && !repo.contains("..");
+            && safe(repo)
+            && tag.is_none_or(|t| safe(t) && !t.contains('/'));
         if !valid {
             return Err(SourceError::NotFound { source_name: NAME });
         }
-        let key = repo.to_ascii_lowercase();
+        let key = match tag {
+            Some(tag) => format!("{}@{tag}", repo.to_ascii_lowercase()),
+            None => repo.to_ascii_lowercase(),
+        };
         let cached = self.cache.lock().unwrap().get(&key).cloned();
         if let Some(cached) = &cached
             && now().saturating_sub(cached.fetched_at) < self.ttl.as_secs()
@@ -173,7 +201,10 @@ impl GitHub {
         };
         let mut request = self
             .client
-            .get(format!("{}/repos/{repo}/releases/latest", self.api_url))
+            .get(match tag {
+                Some(tag) => format!("{}/repos/{repo}/releases/tags/{tag}", self.api_url),
+                None => format!("{}/repos/{repo}/releases/latest", self.api_url),
+            })
             .header("Accept", "application/vnd.github+json");
         if let Some(etag) = cached.as_ref().and_then(|c| c.etag.as_deref()) {
             request = request.header(IF_NONE_MATCH, etag);
@@ -326,6 +357,30 @@ mod tests {
             "red4ext-1.38.0.zip"
         );
         assert!(release(&["other.zip"]).asset("cet_{version}.zip").is_none());
+    }
+
+    #[test]
+    fn wildcard_assets_carry_their_version() {
+        let release = Release {
+            version: "experimental-latest".into(),
+            published_at: String::new(),
+            assets: [
+                "zDEV-UE4SS_v3.0.1-1181-g83330635.zip",
+                "UE4SS_v3.0.1-1181-g83330635.zip",
+                "zMapGenBP.zip",
+            ]
+            .iter()
+            .map(|n| Asset {
+                name: n.to_string(),
+                url: format!("https://example.com/{n}"),
+                size: 1,
+            })
+            .collect(),
+        };
+        let (asset, version) = release.asset_and_version("UE4SS_v*.zip").unwrap();
+        assert_eq!(asset.name, "UE4SS_v3.0.1-1181-g83330635.zip");
+        assert_eq!(version, "3.0.1-1181-g83330635");
+        assert!(release.asset_and_version("Other_*.zip").is_none());
     }
 
     #[test]

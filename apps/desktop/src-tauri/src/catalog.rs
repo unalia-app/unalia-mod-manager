@@ -196,7 +196,7 @@ async fn nexus_mod(
         .into_iter()
         .filter_map(|r| {
             let required = r.mod_id?;
-            let framework = frameworks.iter().any(|f| f.nexus_id == required);
+            let framework = frameworks.iter().any(|f| f.nexus_id == Some(required));
             Some(DependencyInfo {
                 id: mod_key(required),
                 name: r.name,
@@ -210,7 +210,7 @@ async fn nexus_mod(
     Ok(ModDetails {
         r#mod: found,
         dependencies,
-        direct: frameworks.iter().any(|f| f.nexus_id == mod_id),
+        direct: frameworks.iter().any(|f| f.nexus_id == Some(mod_id)),
     })
 }
 

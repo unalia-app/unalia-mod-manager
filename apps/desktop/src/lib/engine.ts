@@ -70,6 +70,7 @@ const LOADER_LABEL: Record<string, string> = {
 	shimloader: "Shimloader",
 	godotml: "GodotML",
 	redengine: "REDengine",
+	unreal: "Paks & UE4SS",
 	bepisloader: "BepisLoader",
 	umm: "Unity Mod Manager",
 	northstar: "Northstar",

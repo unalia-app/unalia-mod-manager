@@ -89,8 +89,9 @@ fn games_whose_mods_ship_as_archives_are_not_supported_yet() {
 fn games_without_an_installable_entry_are_skipped() {
     let catalog = catalog();
     assert!(catalog.by_id("107zxz-inscryption-multiplayer").is_none());
-    // 7 jeux du schéma, plus Cyberpunk 2077 (profil écrit à la main).
-    assert_eq!(catalog.games().len(), 8);
+    // 7 jeux du schéma, plus Cyberpunk 2077 et Phantom Blade Zero (profils
+    // écrits à la main).
+    assert_eq!(catalog.games().len(), 9);
 }
 
 #[test]
@@ -424,4 +425,20 @@ fn detects_a_real_running_process() {
         Path::new("/nonexistent/modalia-game"),
         &running
     ));
+}
+
+#[test]
+fn phantom_blade_zero_is_ready_for_launch() {
+    let catalog = catalog();
+    let game = catalog.by_steam_app_id(4115450).unwrap();
+    assert_eq!(game.id, "phantom-blade-zero");
+    assert_eq!(game.loader, "unreal");
+    assert!(game.supported);
+    assert_eq!(game.community, "nexus:phantombladezero");
+    let ue4ss = &game.frameworks[0];
+    assert_eq!(ue4ss.key(), "github-ue4ss-re-re-ue4ss");
+    assert_eq!(
+        ue4ss.resolve(Some("PBZ")).marker,
+        "PBZ/Binaries/Win64/ue4ss/UE4SS.dll"
+    );
 }

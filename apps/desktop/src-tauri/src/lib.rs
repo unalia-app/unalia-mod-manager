@@ -223,7 +223,7 @@ async fn add_manual_game(
         "Unalia needs to be online once to recognize games.\nThe Thunderstore game list couldn't be downloaded.",
     )?;
     let (profile, game_dir) = games.locate_game(&dir).ok_or(
-        "Unalia doesn't recognize this game.\nPick the folder that contains the game's .exe. Unalia knows the games listed on Thunderstore, and Cyberpunk 2077.",
+        "Unalia doesn't recognize this game.\nPick the folder that contains the game's .exe. Unalia knows the games listed on Thunderstore, Cyberpunk 2077 and Phantom Blade Zero.",
     )?;
     if !profile.supported {
         return Err(format!(

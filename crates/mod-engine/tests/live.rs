@@ -110,12 +110,16 @@ async fn nexus_account_and_free_download_rules() {
 #[ignore]
 async fn every_framework_has_a_github_release_asset() {
     let catalog = catalog();
-    let cyberpunk = catalog.by_steam_app_id(1091500).unwrap();
     let github = GitHub::new(mod_engine::http_client());
-    for framework in &cyberpunk.frameworks {
-        let release = github.latest_release(&framework.github).await.unwrap();
+    // Tous les profils écrits à la main (Cyberpunk, Phantom Blade Zero…).
+    let frameworks = catalog.games().iter().flat_map(|g| g.frameworks.iter());
+    for framework in frameworks {
+        let release = github
+            .release(&framework.github, framework.release.as_deref())
+            .await
+            .unwrap();
         assert!(
-            release.asset(&framework.asset).is_some(),
+            release.asset_and_version(&framework.asset).is_some(),
             "{}: no {} in {:?}",
             framework.name,
             framework.asset,

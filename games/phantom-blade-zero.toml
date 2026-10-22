@@ -1,0 +1,32 @@
+# Phantom Blade Zero (S-GAME, Unreal Engine 5), sortie le 29 octobre 2026.
+#
+# Profil préparé avant la sortie, avec ce qui est déjà sûr : l'identifiant
+# Steam, la page Nexus (déjà ouverte) et les conventions d'Unreal 5 (voir
+# `crates/mod-engine/src/loaders/unreal.rs`). Le dossier du projet Unreal
+# est trouvé sur le disque.
+#
+# À compléter à la sortie : `exe_names` (jeu ajouté à la main, Epic), et la
+# page Nexus d'UE4SS pour ce jeu si elle est créée.
+
+id = "phantom-blade-zero"
+name = "Phantom Blade Zero"
+steam_app_ids = [4115450]
+loader = "unreal"
+
+[nexus]
+domain = "phantombladezero"
+game_id = 10614
+
+# UE4SS : mods en Lua et mods Blueprint (LogicMods). La version stable
+# (3.0.1, 2024) ne gère pas les Unreal 5 récents : on prend la build
+# expérimentale, publiée en continu.
+[[frameworks]]
+name = "UE4SS"
+github = "UE4SS-RE/RE-UE4SS"
+release = "experimental-latest"
+asset = "UE4SS_v*.zip"
+marker = "{project}/Binaries/Win64/ue4ss/UE4SS.dll"
+needed_by_prefix = [
+    "{project}/Binaries/Win64/ue4ss/Mods/",
+    "{project}/Content/Paks/LogicMods/",
+]

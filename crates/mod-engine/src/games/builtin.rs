@@ -7,10 +7,13 @@ use serde::Deserialize;
 use super::{GameProfile, Mirror, NexusGame};
 use crate::loaders::rules::InstallRules;
 
-const PROFILES: [&str; 1] = [include_str!("../../../../games/cyberpunk-2077.toml")];
+const PROFILES: [&str; 2] = [
+    include_str!("../../../../games/cyberpunk-2077.toml"),
+    include_str!("../../../../games/phantom-blade-zero.toml"),
+];
 
 /// Loaders des profils écrits à la main, que Modalia sait installer.
-pub const BUILTIN_LOADERS: [&str; 1] = ["redengine"];
+pub const BUILTIN_LOADERS: [&str; 2] = ["redengine", "unreal"];
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]

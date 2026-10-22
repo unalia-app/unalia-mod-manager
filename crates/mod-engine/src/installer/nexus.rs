@@ -23,7 +23,9 @@ use super::{
 };
 use crate::download;
 use crate::games::GameProfile;
-use crate::loaders::redengine::{Framework, RedEngine, needed_frameworks};
+use crate::loaders::framework::{Framework, needed_frameworks};
+use crate::loaders::redengine::RedEngine;
+use crate::loaders::unreal::{Unreal, find_project};
 use crate::loaders::{Loader, PackageKind};
 use crate::sources::SourceError;
 use crate::sources::github::{GitHub, repos_in};
@@ -69,10 +71,17 @@ impl Installer<'_, Nexus> {
             .ok_or(InstallError::NotInstalled)?
             .domain;
         let existing = state.list(target.game)?;
+        let adapter = Adapter::for_game(profile, target.game_dir)?;
+        // Chemins des frameworks pour ce jeu (`{project}` des jeux Unreal).
+        let frameworks: Vec<Framework> = profile
+            .frameworks
+            .iter()
+            .map(|f| f.resolve(adapter.project()))
+            .collect();
 
         // Le mod demandé. Un framework sans fichier précis vient de GitHub :
         // pas de clic sur Nexus, même pour un compte gratuit.
-        let framework = profile.frameworks.iter().find(|f| f.nexus_id == mod_id);
+        let framework = frameworks.iter().find(|f| f.nexus_id == Some(mod_id));
         // Si GitHub ne le fournit pas (release sans le fichier attendu), il
         // passe par Nexus comme n'importe quel mod.
         let from_github = match (framework, file) {
@@ -149,30 +158,38 @@ impl Installer<'_, Nexus> {
 
         // Télécharger le mod, puis les frameworks qui manquent (et ceux
         // dont ces frameworks ont besoin à leur tour).
-        let mut fetched = vec![self.fetch(target, main, 0, 1, &mut on_progress).await?];
-        let mut planned: HashSet<u32> = HashSet::from([mod_id]);
+        let main_id = main.id.clone();
+        let mut fetched = vec![
+            self.fetch(target, &adapter, main, 0, 1, &mut on_progress)
+                .await?,
+        ];
+        let mut planned: HashSet<String> = HashSet::from([main_id]);
         let mut queue: Vec<&Framework> = Vec::new();
-        let declared = profile
-            .frameworks
-            .iter()
-            .filter(|f| requirements.iter().any(|r| r.mod_id == Some(f.nexus_id)));
+        let declared = frameworks.iter().filter(|f| {
+            f.nexus_id
+                .is_some_and(|id| requirements.iter().any(|r| r.mod_id == Some(id)))
+        });
         queue.extend(declared);
-        queue.extend(needed_frameworks(
-            &profile.frameworks,
-            &fetched[0].placements,
-        ));
+        queue.extend(needed_frameworks(&frameworks, &fetched[0].placements));
         while let Some(framework) = queue.pop() {
             let present = framework.installed_in(target.game_dir)
-                || existing.iter().any(|m| m.id == mod_key(framework.nexus_id));
-            if present || !planned.insert(framework.nexus_id) {
+                || existing.iter().any(|m| m.id == framework.key());
+            if present || !planned.insert(framework.key()) {
                 continue;
             }
             let package = self.github_package(github, framework).await?;
             let index = fetched.len();
             let item = self
-                .fetch(target, package, index, index + 1, &mut on_progress)
+                .fetch(
+                    target,
+                    &adapter,
+                    package,
+                    index,
+                    index + 1,
+                    &mut on_progress,
+                )
                 .await?;
-            queue.extend(needed_frameworks(&profile.frameworks, &item.placements));
+            queue.extend(needed_frameworks(&frameworks, &item.placements));
             fetched.push(item);
         }
 
@@ -216,7 +233,7 @@ impl Installer<'_, Nexus> {
             .into_iter()
             .filter(|r| match r.mod_id {
                 Some(id) => {
-                    !profile.frameworks.iter().any(|f| f.nexus_id == id)
+                    !frameworks.iter().any(|f| f.nexus_id == Some(id))
                         && !mods.iter().any(|m| m.id == mod_key(id))
                 }
                 None => r.url.is_some(),
@@ -310,23 +327,25 @@ impl Installer<'_, Nexus> {
         github: &GitHub,
         framework: &Framework,
     ) -> Result<Package, InstallError> {
-        let release = github.latest_release(&framework.github).await?;
-        let asset = release
-            .asset(&framework.asset)
-            .ok_or_else(|| InstallError::NoReleaseFile {
+        let release = github
+            .release(&framework.github, framework.release.as_deref())
+            .await?;
+        let (asset, version) = release.asset_and_version(&framework.asset).ok_or_else(|| {
+            InstallError::NoReleaseFile {
                 name: framework.name.clone(),
                 version: release.version.clone(),
-            })?;
+            }
+        })?;
         Ok(Package {
             connections: None,
-            id: mod_key(framework.nexus_id),
+            id: framework.key(),
             name: framework.name.clone(),
             author: framework
                 .github
                 .split_once('/')
                 .map(|(owner, _)| owner.to_owned())
                 .unwrap_or_default(),
-            version: release.version.clone(),
+            version,
             icon_url: None,
             download_url: asset.url.clone(),
             sha256: None,
@@ -336,6 +355,7 @@ impl Installer<'_, Nexus> {
     async fn fetch(
         &self,
         target: &Target<'_>,
+        adapter: &Adapter,
         package: Package,
         index: usize,
         total: usize,
@@ -345,7 +365,9 @@ impl Installer<'_, Nexus> {
             .fetch_package(target, &package, index, total, on_progress)
             .await?;
         let placements =
-            RedEngine.place(&package.name, &PackageKind::Mod, &list_files(&store_dir)?);
+            adapter
+                .loader()
+                .place(&package.name, &PackageKind::Mod, &list_files(&store_dir)?);
         if placements.is_empty() {
             return Err(InstallError::NothingToInstall(package.name));
         }
@@ -356,6 +378,38 @@ impl Installer<'_, Nexus> {
             placements,
             loader_root: None,
         })
+    }
+}
+
+/// Adaptateur d'un jeu Nexus, d'après son profil.
+enum Adapter {
+    RedEngine(RedEngine),
+    Unreal(Unreal),
+}
+
+impl Adapter {
+    fn for_game(profile: &GameProfile, game_dir: &Path) -> Result<Self, InstallError> {
+        match profile.loader.as_str() {
+            "unreal" => {
+                let project = find_project(game_dir).ok_or(InstallError::NoGameFiles)?;
+                Ok(Self::Unreal(Unreal { project }))
+            }
+            _ => Ok(Self::RedEngine(RedEngine)),
+        }
+    }
+
+    fn loader(&self) -> &dyn Loader {
+        match self {
+            Self::RedEngine(loader) => loader,
+            Self::Unreal(loader) => loader,
+        }
+    }
+
+    fn project(&self) -> Option<&str> {
+        match self {
+            Self::Unreal(loader) => Some(&loader.project),
+            Self::RedEngine(_) => None,
+        }
     }
 }
 
@@ -371,28 +425,31 @@ pub async fn available_updates_nexus(
     use crate::resolver::compare_versions;
     use crate::sources::nexus::parse_mod_key;
 
+    // Une version de build (`3.0.1-1181-g83330635`) qui change sans que le
+    // numéro bouge compte aussi comme une mise à jour.
     let newer = |m: &InstalledMod, latest: &str| {
-        (compare_versions(latest, &m.version) == std::cmp::Ordering::Greater).then(|| {
-            super::Update {
-                mod_id: m.id.clone(),
-                current: m.version.clone(),
-                latest: latest.to_owned(),
-            }
+        let order = compare_versions(latest, &m.version);
+        let changed = order == std::cmp::Ordering::Greater
+            || (order == std::cmp::Ordering::Equal && latest != m.version);
+        changed.then(|| super::Update {
+            mod_id: m.id.clone(),
+            current: m.version.clone(),
+            latest: latest.to_owned(),
         })
     };
     let mut updates = Vec::new();
     let mut from_nexus = Vec::new();
     for m in installed {
-        let Some(id) = parse_mod_key(&m.id) else {
-            continue;
-        };
-        match profile.frameworks.iter().find(|f| f.nexus_id == id) {
-            Some(framework) => {
-                if let Ok(release) = github.latest_release(&framework.github).await {
-                    updates.extend(newer(m, &release.version));
-                }
+        if let Some(framework) = profile.frameworks.iter().find(|f| f.key() == m.id) {
+            if let Ok(release) = github
+                .release(&framework.github, framework.release.as_deref())
+                .await
+                && let Some((_, version)) = release.asset_and_version(&framework.asset)
+            {
+                updates.extend(newer(m, &version));
             }
-            None => from_nexus.push(id),
+        } else if let Some(id) = parse_mod_key(&m.id) {
+            from_nexus.push(id);
         }
     }
     if let Some(domain) = profile.nexus.as_ref().map(|n| &n.domain)
