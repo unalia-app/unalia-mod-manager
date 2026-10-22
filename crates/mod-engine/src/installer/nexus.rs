@@ -73,11 +73,15 @@ impl Installer<'_, Nexus> {
         // Le mod demandé. Un framework sans fichier précis vient de GitHub :
         // pas de clic sur Nexus, même pour un compte gratuit.
         let framework = profile.frameworks.iter().find(|f| f.nexus_id == mod_id);
-        let (main, requirements) = match (framework, file) {
-            (Some(framework), NexusFile::Main) => {
-                (self.github_package(github, framework).await?, Vec::new())
-            }
-            _ => {
+        // Si GitHub ne le fournit pas (release sans le fichier attendu), il
+        // passe par Nexus comme n'importe quel mod.
+        let from_github = match (framework, file) {
+            (Some(framework), NexusFile::Main) => self.github_package(github, framework).await.ok(),
+            _ => None,
+        };
+        let (main, requirements) = match from_github {
+            Some(package) => (package, Vec::new()),
+            None => {
                 let info = self.source.mod_info(domain, mod_id).await?;
                 let link = match file {
                     NexusFile::Link(link) => Some(link),
@@ -309,7 +313,10 @@ impl Installer<'_, Nexus> {
         let release = github.latest_release(&framework.github).await?;
         let asset = release
             .asset(&framework.asset)
-            .ok_or_else(|| InstallError::NoFile(framework.name.clone()))?;
+            .ok_or_else(|| InstallError::NoReleaseFile {
+                name: framework.name.clone(),
+                version: release.version.clone(),
+            })?;
         Ok(Package {
             connections: None,
             id: mod_key(framework.nexus_id),

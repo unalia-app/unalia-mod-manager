@@ -58,10 +58,19 @@ pub struct Asset {
 }
 
 impl Release {
-    /// Fichier de la release d'après son modèle, `{version}` remplacé.
+    /// Fichier de la release d'après son modèle, `{version}` remplacé. Les
+    /// auteurs changent parfois la façon d'écrire la version dans le nom
+    /// (CET 1.38 : `cet_1_38_0.zip` après `cet_1.37.1.zip`) : points, tirets
+    /// bas et tirets sont acceptés.
     pub fn asset(&self, pattern: &str) -> Option<&Asset> {
-        let name = pattern.replace("{version}", &self.version);
-        self.assets.iter().find(|a| a.name == name)
+        ['.', '_', '-']
+            .iter()
+            .map(|sep| pattern.replace("{version}", &self.version.replace('.', &sep.to_string())))
+            .find_map(|name| {
+                self.assets
+                    .iter()
+                    .find(|a| a.name.eq_ignore_ascii_case(&name))
+            })
     }
 }
 
@@ -143,6 +152,33 @@ struct RawRelease {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn asset_names_tolerate_version_separators() {
+        let release = |names: &[&str]| Release {
+            version: "1.38.0".into(),
+            published_at: String::new(),
+            assets: names
+                .iter()
+                .map(|n| Asset {
+                    name: n.to_string(),
+                    url: format!("https://example.com/{n}"),
+                    size: 1,
+                })
+                .collect(),
+        };
+        let cet = release(&["cet_1_38_0.zip"]);
+        assert_eq!(
+            cet.asset("cet_{version}.zip").unwrap().name,
+            "cet_1_38_0.zip"
+        );
+        let red4ext = release(&["red4ext-symbols-1.38.0.zip", "red4ext-1.38.0.zip"]);
+        assert_eq!(
+            red4ext.asset("red4ext-{version}.zip").unwrap().name,
+            "red4ext-1.38.0.zip"
+        );
+        assert!(release(&["other.zip"]).asset("cet_{version}.zip").is_none());
+    }
 
     #[test]
     fn finds_repositories_in_a_description() {

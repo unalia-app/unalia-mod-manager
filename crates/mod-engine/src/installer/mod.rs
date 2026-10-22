@@ -100,6 +100,8 @@ pub enum InstallError {
     NothingToInstall(String),
     #[error("{0} has no file to install")]
     NoFile(String),
+    #[error("{name} {version} on GitHub doesn't have the file Unalia expects")]
+    NoReleaseFile { name: String, version: String },
     #[error(transparent)]
     Source(#[from] SourceError),
     #[error(transparent)]
