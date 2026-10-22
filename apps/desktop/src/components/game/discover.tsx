@@ -145,7 +145,10 @@ export function Discover({ community, appId }: { community: string; appId: numbe
 							{results.items.map((mod, i) => (
 								<ModCard key={mod.id} mod={mod} index={i} appId={appId} animated={i < firstPageSize} />
 							))}
-							{loadingMore && Array.from({ length: 4 }, (_, i) => <ModCardSkeleton key={`more-${i}`} />)}
+							{/* Toujours là tant qu'il reste des pages : les nouvelles cartes
+							    s'insèrent avant elles, rien n'apparaît ni ne disparaît. */}
+							{results.hasMore &&
+								Array.from({ length: 4 }, (_, i) => <ModCardSkeleton key={`more-${i}`} />)}
 						</div>
 						{results.hasMore && <div ref={sentinel} className="h-px" />}
 						{error && (

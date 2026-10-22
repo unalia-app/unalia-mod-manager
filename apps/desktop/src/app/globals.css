@@ -3,6 +3,15 @@
 
 @source "../../../../packages/ui/src";
 
+/* Pas d'ancrage du défilement (Chromium, donc la WebView de Windows) :
+   quand une page de mods arrive, le navigateur s'accrochait au repère de
+   chargement sous la grille et faisait bondir la page. Les cartes ont une
+   hauteur fixe : rien à compenser. macOS (WebKit) se comporte déjà ainsi. */
+html,
+body {
+	overflow-anchor: none;
+}
+
 /* Animation de lancement (components/intro.tsx). */
 
 @keyframes intro-letter {
