@@ -17,6 +17,9 @@ name = "Cyberpunk 2077"
 steam_app_ids = [1091500]
 exe_names = ["bin/x64/Cyberpunk2077.exe"]
 loader = "redengine"
+# Le launcher de CD Projekt s'ouvre avant le jeu : fermé sans jouer, le
+# lancement est abandonné.
+launchers = ["REDprelauncher.exe", "REDlauncher.exe"]
 
 [nexus]
 domain = "cyberpunk2077"

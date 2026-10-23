@@ -114,6 +114,23 @@ impl ProcessWatcher {
     }
 }
 
+/// L'exécutable est-il un des launchers du jeu (comparaison sur le nom) ?
+pub fn is_launcher(exe: &Path, launchers: &[String]) -> bool {
+    exe.file_name()
+        .and_then(|n| n.to_str())
+        .is_some_and(|name| launchers.iter().any(|l| l.eq_ignore_ascii_case(name)))
+}
+
+/// Le jeu tourne-t-il, son launcher mis à part ?
+pub fn game_running(game_dir: &Path, running_exes: &[PathBuf], launchers: &[String]) -> bool {
+    let game: Vec<PathBuf> = running_exes
+        .iter()
+        .filter(|exe| !is_launcher(exe, launchers))
+        .cloned()
+        .collect();
+    is_running(game_dir, &game)
+}
+
 /// Steam est-il ouvert ? (son exécutable parmi les processus).
 pub fn steam_running(running_exes: &[PathBuf]) -> bool {
     running_exes.iter().any(|exe| {
@@ -161,6 +178,24 @@ pub fn executable_target(game_dir: &Path, exe_names: &[String]) -> Option<Launch
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_launcher_alone_is_not_the_game() {
+        let dir = Path::new("/games/Cyberpunk 2077");
+        let launchers = vec!["REDprelauncher.exe".to_owned()];
+        let launcher = vec![PathBuf::from("/games/Cyberpunk 2077/REDprelauncher.exe")];
+        assert!(is_running(dir, &launcher));
+        assert!(!game_running(dir, &launcher, &launchers));
+        let both = vec![
+            PathBuf::from("/games/Cyberpunk 2077/REDprelauncher.exe"),
+            PathBuf::from("/games/Cyberpunk 2077/bin/x64/Cyberpunk2077.exe"),
+        ];
+        assert!(game_running(dir, &both, &launchers));
+        assert!(is_launcher(
+            Path::new("C:/x/redlauncher.EXE"),
+            &["REDlauncher.exe".into()]
+        ));
+    }
 
     fn install(id: &str) -> PendingOp {
         PendingOp::Install { mod_id: id.into() }

@@ -328,6 +328,11 @@ export function playGame(appId: number): Promise<void> {
 	return invoke("play_game", { appId });
 }
 
+/** Arrête d'attendre un jeu en démarrage (lancement abandonné dans son launcher). */
+export function cancelStarting(appId: number): Promise<void> {
+	return invoke("cancel_starting", { appId });
+}
+
 export function cancelPending(appId: number, modId: string): Promise<void> {
 	return invoke("cancel_pending", { appId, modId });
 }

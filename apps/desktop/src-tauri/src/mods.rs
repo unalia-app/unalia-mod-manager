@@ -45,7 +45,7 @@ pub struct Mods {
     /// Jeux vus en cours d'exécution au dernier passage de la veille.
     running: SyncMutex<HashSet<u32>>,
     /// Jeux lancés depuis Modalia, pas encore visibles dans les processus.
-    starting: SyncMutex<HashMap<u32, Instant>>,
+    starting: SyncMutex<HashMap<u32, Starting>>,
     /// Téléchargements et extractions : un à la fois, pour que le
     /// préchargement et une installation n'écrivent pas la même archive.
     fetching: Mutex<()>,
@@ -98,7 +98,7 @@ impl Mods {
     /// attendre le prochain passage de la veille.
     fn is_running(&self, game: &KnownGame) -> bool {
         let exes = self.processes.lock().unwrap().running_exes();
-        launch::is_running(&game.dir, &exes)
+        launch::game_running(&game.dir, &exes, &game.profile.launchers)
     }
 
     /// Début d'une installation : son drapeau d'annulation.
@@ -123,7 +123,36 @@ impl Mods {
             .lock()
             .unwrap()
             .get(&app_id)
-            .is_some_and(|at| at.elapsed() < STARTING_FOR)
+            .is_some_and(|s| s.launcher_open || s.at.elapsed() < STARTING_FOR)
+    }
+}
+
+/// Lancement en cours : depuis quand, et si le launcher du jeu est ouvert.
+#[derive(Clone, Copy)]
+struct Starting {
+    at: Instant,
+    /// Launcher vu ouvert pendant ce lancement.
+    saw_launcher: bool,
+    /// Launcher ouvert au dernier passage de la veille : on attend sans
+    /// limite que l'utilisateur lance le jeu.
+    launcher_open: bool,
+}
+
+impl Starting {
+    fn new() -> Self {
+        Self {
+            at: Instant::now(),
+            saw_launcher: false,
+            launcher_open: false,
+        }
+    }
+
+    /// Le lancement est-il fini (jeu apparu) ou abandonné (launcher fermé
+    /// sans jouer, ou rien après le délai) ?
+    fn over(&self, game_running: bool) -> bool {
+        game_running
+            || (self.saw_launcher && !self.launcher_open)
+            || (!self.launcher_open && self.at.elapsed() >= STARTING_FOR)
     }
 }
 
@@ -853,7 +882,23 @@ pub async fn play_game(
                 .map_err(|e| format!("Couldn't start the game.\n{e}"))?
         }
     }
-    mods.starting.lock().unwrap().insert(app_id, Instant::now());
+    mods.starting
+        .lock()
+        .unwrap()
+        .insert(app_id, Starting::new());
+    emit_status(&app, app_id).await;
+    Ok(())
+}
+
+/// Arrête d'attendre un jeu en démarrage (lancement abandonné dans son
+/// launcher, ou jeu qui ne s'ouvre pas).
+#[tauri::command]
+pub async fn cancel_starting(
+    app: AppHandle,
+    mods: State<'_, Mods>,
+    app_id: u32,
+) -> Result<(), String> {
+    mods.starting.lock().unwrap().remove(&app_id);
     emit_status(&app, app_id).await;
     Ok(())
 }
@@ -878,17 +923,22 @@ pub async fn watch(app: AppHandle) {
         let exes = mods.processes.lock().unwrap().running_exes();
 
         for (app_id, game) in games {
-            let now = launch::is_running(&game.dir, &exes);
+            let launchers = &game.profile.launchers;
+            let now = launch::game_running(&game.dir, &exes, launchers);
+            let launcher_open = exes.iter().any(|exe| launch::is_launcher(exe, launchers));
             let before = mods.running.lock().unwrap().contains(&app_id);
-            let starting_expired = mods
-                .starting
-                .lock()
-                .unwrap()
-                .get(&app_id)
-                .is_some_and(|at| now || at.elapsed() >= STARTING_FOR);
-            if starting_expired {
-                mods.starting.lock().unwrap().remove(&app_id);
-            }
+            let starting_expired = {
+                let mut starting = mods.starting.lock().unwrap();
+                let over = starting.get_mut(&app_id).is_some_and(|s| {
+                    s.launcher_open = launcher_open;
+                    s.saw_launcher |= launcher_open;
+                    s.over(now)
+                });
+                if over {
+                    starting.remove(&app_id);
+                }
+                over
+            };
             // Jeu fermé avec une file en attente, même sans transition vue
             // (Modalia fermé pendant la partie, puis relancé) : on applique.
             if !now && !before && has_pending(&app, app_id).await {

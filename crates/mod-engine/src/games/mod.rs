@@ -68,6 +68,10 @@ pub struct GameProfile {
     /// Dépôts GitHub d'auteurs que la description de leur mod ne cite pas.
     #[serde(skip)]
     pub mirrors: Vec<Mirror>,
+    /// Launchers qui s'ouvrent avant le jeu (noms d'exécutables) : ouverts,
+    /// le jeu « démarre » ; ils ne comptent pas comme le jeu lui-même.
+    #[serde(skip)]
+    pub launchers: Vec<String>,
 }
 
 /// Le même mod publié par son auteur sur GitHub (profil du jeu). Seulement

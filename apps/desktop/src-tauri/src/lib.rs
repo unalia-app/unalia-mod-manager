@@ -631,6 +631,7 @@ pub fn run() {
             mods::check_updates,
             mods::game_status,
             mods::play_game,
+            mods::cancel_starting,
             mods::nexus_status,
             mods::nexus_login,
             mods::nexus_connect,

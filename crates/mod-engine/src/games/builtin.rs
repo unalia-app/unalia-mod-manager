@@ -30,6 +30,8 @@ struct RawProfile {
     frameworks: Vec<crate::loaders::redengine::Framework>,
     #[serde(default)]
     mirrors: Vec<Mirror>,
+    #[serde(default)]
+    launchers: Vec<String>,
 }
 
 pub fn profiles() -> Vec<GameProfile> {
@@ -57,6 +59,7 @@ pub fn profiles() -> Vec<GameProfile> {
                 install_rules: InstallRules::default(),
                 frameworks: raw.frameworks,
                 mirrors: raw.mirrors,
+                launchers: raw.launchers,
             }
         })
         .collect()

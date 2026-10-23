@@ -1,8 +1,9 @@
 "use client";
 
 import { Button, Spinner, cn } from "@modalia/ui";
-import { Play } from "lucide-react";
+import { Play, X } from "lucide-react";
 
+import { cancelStarting } from "@/lib/engine";
 import { play, useGameStatus } from "@/lib/game-status";
 
 /**
@@ -29,12 +30,25 @@ export function PlayButton({ appId, compact = false }: { appId: number; compact?
 			</div>
 		);
 	}
+	// En démarrage (ou launcher ouvert) : au survol, de quoi arrêter
+	// d'attendre si le lancement a été abandonné.
 	if (status?.starting) {
 		return (
-			<Button size={size} variant="outline" disabled className="disabled:opacity-100">
-				<span className="flex items-center gap-2">
+			<Button
+				size={size}
+				variant="outline"
+				onClick={() => void cancelStarting(appId)}
+				aria-label="Stop waiting for the game"
+				title="Stop waiting for the game"
+				className="group/starting"
+			>
+				<span className="flex items-center gap-2 group-hover/starting:hidden">
 					<Spinner className="size-3.5" />
 					Starting…
+				</span>
+				<span className="hidden items-center gap-2 group-hover/starting:flex">
+					<X className="size-3.5" />
+					Stop waiting
 				</span>
 			</Button>
 		);
