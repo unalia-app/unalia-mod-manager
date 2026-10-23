@@ -44,7 +44,9 @@ export function AppHeader({
 			className={cn(
 				"sticky top-0 z-20 flex h-14 items-center gap-5 border-b transition-[background-color,border-color] duration-300",
 				// macOS : les feux tricolores occupent la gauche.
-				mac ? "pr-6 pl-22" : "px-6",
+				// Windows : l'icône de fermeture (14 px au centre d'un bouton de
+				// 44 px) à 24 px du bord, comme le logo à gauche.
+				mac ? "pr-6 pl-22" : "pr-[9px] pl-6",
 				scrolled ? "border-line bg-bg/75 backdrop-blur-xl" : "border-transparent",
 			)}
 		>
