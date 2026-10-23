@@ -316,35 +316,82 @@ pub fn add_shortcut(file: &Path, new: &NewShortcut) -> io::Result<Shortcut> {
     })
 }
 
-/// Dossier `config` du dernier compte connecté à Steam (`loginusers.vdf`),
-/// sinon du seul compte de la machine.
+/// Dossier `config` du compte Steam à utiliser, de la source la plus sûre à
+/// la moins sûre :
+/// 1. sous Windows, le compte connecté que Steam ouvert écrit dans le
+///    registre (`ActiveProcess\ActiveUser`) ;
+/// 2. `loginusers.vdf` : le compte marqué le plus récent, sinon celui de la
+///    dernière connexion ;
+/// 3. le compte dont Steam a modifié les réglages le plus récemment.
 pub fn current_user_config(steam_root: &Path) -> Option<PathBuf> {
     let userdata = steam_root.join("userdata");
-    let recent = fs::read_to_string(steam_root.join("config").join("loginusers.vdf"))
-        .ok()
-        .and_then(|text| super::vdf::parse(&text).ok())
-        .and_then(|doc| {
-            let users = doc.obj("users")?;
-            users.iter().find_map(|(steam_id, value)| match value {
-                super::vdf::Value::Obj(user) if user.str("MostRecent") == Some("1") => {
-                    steam_id.parse::<u64>().ok()
-                }
-                _ => None,
-            })
-        })
-        // SteamID 64 bits → identifiant de compte, le nom du dossier.
-        .and_then(|id| id.checked_sub(76_561_197_960_265_728))
-        .map(|account| userdata.join(account.to_string()).join("config"));
-    if let Some(config) = recent.filter(|c| c.parent().is_some_and(Path::is_dir)) {
-        return Some(config);
+    let config = |account: u64| userdata.join(account.to_string()).join("config");
+    let exists = |account: &u64| *account != 0 && userdata.join(account.to_string()).is_dir();
+
+    if let Some(account) = active_user().filter(exists) {
+        return Some(config(account));
     }
-    let mut accounts = fs::read_dir(&userdata)
+    if let Some(account) = login_users(steam_root).filter(exists) {
+        return Some(config(account));
+    }
+    fs::read_dir(&userdata)
         .ok()?
         .flatten()
-        .map(|e| e.path())
-        .filter(|p| p.is_dir() && p.file_name().is_some_and(|n| n != "0"));
-    let only = accounts.next()?;
-    accounts.next().is_none().then(|| only.join("config"))
+        .filter_map(|e| {
+            let account: u64 = e.file_name().to_str()?.parse().ok()?;
+            let touched = fs::metadata(e.path().join("config").join("localconfig.vdf"))
+                .and_then(|m| m.modified())
+                .ok()?;
+            exists(&account).then_some((touched, account))
+        })
+        .max()
+        .map(|(_, account)| config(account))
+}
+
+/// Compte connecté à Steam en ce moment (Windows seulement).
+#[cfg(windows)]
+fn active_user() -> Option<u64> {
+    use winreg::RegKey;
+    use winreg::enums::HKEY_CURRENT_USER;
+    let key = RegKey::predef(HKEY_CURRENT_USER)
+        .open_subkey(r"Software\Valve\Steam\ActiveProcess")
+        .ok()?;
+    let id: u32 = key.get_value("ActiveUser").ok()?;
+    (id != 0).then_some(u64::from(id))
+}
+
+#[cfg(not(windows))]
+fn active_user() -> Option<u64> {
+    None
+}
+
+/// Compte le plus récent de `loginusers.vdf`, en identifiant de compte (le
+/// nom du dossier de `userdata`).
+fn login_users(steam_root: &Path) -> Option<u64> {
+    const STEAM_ID_BASE: u64 = 76_561_197_960_265_728;
+    let text = fs::read_to_string(steam_root.join("config").join("loginusers.vdf")).ok()?;
+    let doc = super::vdf::parse(&text).ok()?;
+    let users: Vec<(u64, bool, u64)> = doc
+        .obj("users")?
+        .iter()
+        .filter_map(|(steam_id, value)| {
+            let super::vdf::Value::Obj(user) = value else {
+                return None;
+            };
+            let account = steam_id.parse::<u64>().ok()?.checked_sub(STEAM_ID_BASE)?;
+            let recent = user.str("MostRecent") == Some("1");
+            let at = user
+                .str("Timestamp")
+                .and_then(|t| t.parse().ok())
+                .unwrap_or(0);
+            Some((account, recent, at))
+        })
+        .collect();
+    users
+        .iter()
+        .find(|(_, recent, _)| *recent)
+        .or_else(|| users.iter().max_by_key(|(_, _, at)| *at))
+        .map(|(account, _, _)| *account)
 }
 
 /// Image de la bibliothèque Steam d'un raccourci : `kind` vaut `p`
@@ -541,23 +588,53 @@ mod tests {
     }
 
     #[test]
-    fn finds_the_most_recent_steam_account() {
+    fn finds_the_steam_account_to_use() {
         let root = tempfile::tempdir().unwrap();
+        let base = 76_561_197_960_265_728u64;
         std::fs::create_dir_all(root.path().join("config")).unwrap();
-        for account in ["111", "222"] {
-            std::fs::create_dir_all(root.path().join("userdata").join(account)).unwrap();
+        for account in ["0", "111", "222"] {
+            std::fs::create_dir_all(root.path().join("userdata").join(account).join("config"))
+                .unwrap();
         }
+        // Rien d'autre : le compte dont les réglages ont bougé en dernier.
+        std::fs::write(
+            root.path().join("userdata/111/config/localconfig.vdf"),
+            "old",
+        )
+        .unwrap();
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        std::fs::write(
+            root.path().join("userdata/222/config/localconfig.vdf"),
+            "new",
+        )
+        .unwrap();
         assert_eq!(
             current_user_config(root.path()),
-            None,
-            "deux comptes, aucun indice"
+            Some(root.path().join("userdata/222/config"))
         );
-        std::fs::write(
-            root.path().join("config/loginusers.vdf"),
+
+        // Sans « MostRecent » : la dernière connexion.
+        let users = |a: &str, b: &str| {
             format!(
-                "\"users\"\n{{\n\"{}\"\n{{\n\"AccountName\" \"me\"\n\"MostRecent\" \"1\"\n}}\n}}\n",
-                76_561_197_960_265_728u64 + 222
-            ),
+                "\"users\"\n{{\n\"{}\"\n{{\n{a}\n}}\n\"{}\"\n{{\n{b}\n}}\n}}\n",
+                base + 111,
+                base + 222
+            )
+        };
+        let login = root.path().join("config/loginusers.vdf");
+        std::fs::write(
+            &login,
+            users("\"Timestamp\" \"900\"", "\"Timestamp\" \"100\""),
+        )
+        .unwrap();
+        assert_eq!(
+            current_user_config(root.path()),
+            Some(root.path().join("userdata/111/config"))
+        );
+        // « mostrecent » en minuscules, comme l'écrivent certaines versions.
+        std::fs::write(
+            &login,
+            users("\"Timestamp\" \"900\"", "\"mostrecent\" \"1\""),
         )
         .unwrap();
         assert_eq!(
