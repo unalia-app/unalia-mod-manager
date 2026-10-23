@@ -25,7 +25,7 @@ export function WindowControls() {
 	const window = getCurrentWindow();
 
 	return (
-		<div className="-mr-3 flex items-center gap-0.5">
+		<div className="flex items-center gap-0.5">
 			<ControlButton label="Minimize" onClick={() => void window.minimize()}>
 				<path d="M2.5 6h7" />
 			</ControlButton>

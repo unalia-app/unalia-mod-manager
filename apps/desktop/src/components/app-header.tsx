@@ -44,7 +44,7 @@ export function AppHeader({
 			className={cn(
 				"sticky top-0 z-20 flex h-14 items-center gap-5 border-b transition-[background-color,border-color] duration-300",
 				// macOS : les feux tricolores occupent la gauche.
-				mac ? "pr-6 pl-22" : "pr-3 pl-6",
+				mac ? "pr-6 pl-22" : "px-6",
 				scrolled ? "border-line bg-bg/75 backdrop-blur-xl" : "border-transparent",
 			)}
 		>
