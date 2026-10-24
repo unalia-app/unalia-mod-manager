@@ -10,6 +10,7 @@ import { AppHeader } from "@/components/app-header";
 import { GameCover } from "@/components/game-cover";
 import { Discover } from "@/components/game/discover";
 import { GameUpdatedBanner } from "@/components/game/game-updated-banner";
+import { GameVersion } from "@/components/game/game-version";
 import { GameSwitcher } from "@/components/game/game-switcher";
 import { MyMods } from "@/components/game/my-mods";
 import { NexusConnect } from "@/components/game/nexus-connect";
@@ -117,6 +118,7 @@ export function GameScreen() {
 							<div ref={heroPlay} className="flex shrink-0 animate-fade-up flex-col items-end pb-1 [animation-delay:90ms]">
 								<PlayButton appId={game.appId} />
 								<SteamLaunch game={game} />
+								<GameVersion game={game} />
 							</div>
 						</section>
 

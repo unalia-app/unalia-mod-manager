@@ -198,6 +198,7 @@ impl World {
                 &github,
                 mod_id,
                 NexusFile::Link(&link),
+                None,
                 |_| {},
             )
             .await
@@ -314,7 +315,7 @@ async fn a_new_ue4ss_build_is_an_update() {
         .await;
     let github = GitHub::with_url(w.client.clone(), &newer.url());
     let installed = w.state.list(GAME).unwrap();
-    let updates = available_updates_nexus(&w.nexus, &github, &w.profile, &installed).await;
+    let updates = available_updates_nexus(&w.nexus, &github, &w.profile, &installed, None).await;
     let ue4ss = updates
         .iter()
         .find(|u| u.mod_id == "github-ue4ss-re-re-ue4ss")

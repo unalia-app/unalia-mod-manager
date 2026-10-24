@@ -186,6 +186,7 @@ fn profile(game: Game, communities: &HashMap<String, Community>) -> Option<GameP
         frameworks: Vec::new(),
         mirrors: Vec::new(),
         launchers: Vec::new(),
+        versions: Vec::new(),
         name: game.meta.display_name,
         community,
         id: game.label,

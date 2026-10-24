@@ -8,6 +8,9 @@
 //!    sans aucun clic : ils passent avant le mod, comme des dépendances.
 //!
 //! Tout le lot est transactionnel, comme une installation Thunderstore.
+//!
+//! Un jeu resté sur une ancienne version (`before`, date de sortie de la
+//! suivante) reçoit les fichiers et les releases publiés avant cette date.
 
 use std::collections::HashSet;
 use std::path::Path;
@@ -62,6 +65,7 @@ impl Installer<'_, Nexus> {
         github: &GitHub,
         mod_id: u32,
         file: NexusFile<'_>,
+        before: Option<&str>,
         mut on_progress: impl FnMut(Progress),
     ) -> Result<NexusInstall, InstallError> {
         on_progress(Progress::Resolving);
@@ -85,7 +89,9 @@ impl Installer<'_, Nexus> {
         // Si GitHub ne le fournit pas (release sans le fichier attendu), il
         // passe par Nexus comme n'importe quel mod.
         let from_github = match (framework, file) {
-            (Some(framework), NexusFile::Main) => self.github_package(github, framework).await.ok(),
+            (Some(framework), NexusFile::Main) => {
+                self.github_package(github, framework, before).await.ok()
+            }
             _ => None,
         };
         let (main, requirements) = match from_github {
@@ -98,15 +104,11 @@ impl Installer<'_, Nexus> {
                 };
                 let file = match link {
                     Some(link) => info.files.iter().find(|f| f.file_id == link.file_id),
-                    None => info.main_file(),
+                    None => info.file_for(before),
                 }
                 .cloned()
                 .ok_or_else(|| InstallError::NoFile(info.name.clone()))?;
-                let version = if file.version.is_empty() {
-                    info.version.clone()
-                } else {
-                    file.version.clone()
-                };
+                let version = file_version(&info, &file, before);
                 // Compte gratuit (lien du site) : une seule connexion, comme
                 // Vortex. Plusieurs connexions contourneraient le bridage.
                 let mut connections = link.map(|_| 1);
@@ -128,6 +130,7 @@ impl Installer<'_, Nexus> {
                                 &info,
                                 &file,
                                 &archive,
+                                before,
                                 &mut on_progress,
                             )
                             .await
@@ -177,7 +180,7 @@ impl Installer<'_, Nexus> {
             if present || !planned.insert(framework.key()) {
                 continue;
             }
-            let package = self.github_package(github, framework).await?;
+            let package = self.github_package(github, framework, before).await?;
             let index = fetched.len();
             let item = self
                 .fetch(
@@ -256,6 +259,7 @@ impl Installer<'_, Nexus> {
         info: &ModInfo,
         file: &ModFile,
         archive: &Path,
+        before: Option<&str>,
         on_progress: &mut impl FnMut(Progress),
     ) -> Option<String> {
         let size = file.size?;
@@ -282,7 +286,11 @@ impl Installer<'_, Nexus> {
         }
         let repos = repos.into_iter().take(MIRROR_CANDIDATES);
         for repo in repos {
-            let Ok(release) = github.latest_release(&repo).await else {
+            let release = match before {
+                Some(before) => github.release_before(&repo, before).await,
+                None => github.latest_release(&repo).await,
+            };
+            let Ok(release) = release else {
                 continue;
             };
             for asset in release.assets.iter().filter(|a| a.size == size) {
@@ -326,10 +334,9 @@ impl Installer<'_, Nexus> {
         &self,
         github: &GitHub,
         framework: &Framework,
+        before: Option<&str>,
     ) -> Result<Package, InstallError> {
-        let release = github
-            .release(&framework.github, framework.release.as_deref())
-            .await?;
+        let release = framework_release(github, framework, before).await?;
         let (asset, version) = release.asset_and_version(&framework.asset).ok_or_else(|| {
             InstallError::NoReleaseFile {
                 name: framework.name.clone(),
@@ -381,6 +388,31 @@ impl Installer<'_, Nexus> {
     }
 }
 
+/// Release d'un framework : celle de son tag s'il en a un, sinon la
+/// dernière stable (d'avant `before` pour une ancienne version du jeu).
+async fn framework_release(
+    github: &GitHub,
+    framework: &Framework,
+    before: Option<&str>,
+) -> Result<crate::sources::github::Release, SourceError> {
+    match (framework.release.as_deref(), before) {
+        (None, Some(before)) => github.release_before(&framework.github, before).await,
+        (tag, _) => github.release(&framework.github, tag).await,
+    }
+}
+
+/// Version d'un fichier Nexus. Sans numéro, celle du mod, sauf pour un
+/// ancien fichier : sa date, qui ne se confond pas avec la version actuelle.
+fn file_version(info: &ModInfo, file: &ModFile, before: Option<&str>) -> String {
+    if !file.version.is_empty() {
+        file.version.clone()
+    } else if before.is_some() && info.main_file() != Some(file) {
+        crate::sources::nexus::iso_date(file.uploaded_at)[..10].to_owned()
+    } else {
+        info.version.clone()
+    }
+}
+
 /// Adaptateur d'un jeu Nexus, d'après son profil.
 enum Adapter {
     RedEngine(RedEngine),
@@ -416,21 +448,26 @@ impl Adapter {
 /// Mises à jour des mods d'un jeu Nexus : les frameworks d'après leur
 /// dernière release GitHub (là où Modalia les prend), les autres d'après
 /// Nexus, en une requête. Une source injoignable n'empêche pas l'autre.
+/// Pour une ancienne version du jeu (`before`), seulement ce qui est sorti
+/// avant la suivante : mod par mod, d'après ses fichiers.
 pub async fn available_updates_nexus(
     nexus: &Nexus,
     github: &GitHub,
     profile: &GameProfile,
     installed: &[InstalledMod],
+    before: Option<&str>,
 ) -> Vec<super::Update> {
     use crate::resolver::compare_versions;
     use crate::sources::nexus::parse_mod_key;
 
     // Une version de build (`3.0.1-1181-g83330635`) qui change sans que le
     // numéro bouge compte aussi comme une mise à jour.
+    // Pour une ancienne version du jeu, un mod installé pour une plus
+    // récente est proposé aussi : la « mise à jour » revient en arrière.
     let newer = |m: &InstalledMod, latest: &str| {
         let order = compare_versions(latest, &m.version);
         let changed = order == std::cmp::Ordering::Greater
-            || (order == std::cmp::Ordering::Equal && latest != m.version);
+            || ((order == std::cmp::Ordering::Equal || before.is_some()) && latest != m.version);
         changed.then(|| super::Update {
             mod_id: m.id.clone(),
             current: m.version.clone(),
@@ -441,9 +478,7 @@ pub async fn available_updates_nexus(
     let mut from_nexus = Vec::new();
     for m in installed {
         if let Some(framework) = profile.frameworks.iter().find(|f| f.key() == m.id) {
-            if let Ok(release) = github
-                .release(&framework.github, framework.release.as_deref())
-                .await
+            if let Ok(release) = framework_release(github, framework, before).await
                 && let Some((_, version)) = release.asset_and_version(&framework.asset)
             {
                 updates.extend(newer(m, &version));
@@ -452,9 +487,21 @@ pub async fn available_updates_nexus(
             from_nexus.push(id);
         }
     }
-    if let Some(domain) = profile.nexus.as_ref().map(|n| &n.domain)
-        && let Ok(latest) = nexus.latest_versions(domain, &from_nexus).await
-    {
+    let Some(domain) = profile.nexus.as_ref().map(|n| &n.domain) else {
+        return updates;
+    };
+    if let Some(before) = before {
+        for m in installed {
+            let Some(id) = parse_mod_key(&m.id).filter(|id| from_nexus.contains(id)) else {
+                continue;
+            };
+            if let Ok(info) = nexus.mod_info(domain, id).await
+                && let Some(file) = info.file_for(Some(before))
+            {
+                updates.extend(newer(m, &file_version(&info, file, Some(before))));
+            }
+        }
+    } else if let Ok(latest) = nexus.latest_versions(domain, &from_nexus).await {
         for m in installed {
             if let Some(version) = parse_mod_key(&m.id).and_then(|id| latest.get(&id)) {
                 updates.extend(newer(m, version));

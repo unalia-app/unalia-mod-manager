@@ -21,6 +21,17 @@ loader = "redengine"
 # lancement est abandonné.
 launchers = ["REDprelauncher.exe", "REDlauncher.exe"]
 
+# Grandes versions du jeu. Resté sur une ancienne (retour en arrière par
+# Steam ou GOG), on reçoit les fichiers des mods et les releases des
+# frameworks publiés avant la suivante : la 2.5 a cassé beaucoup de mods.
+[[versions]]
+name = "2.31"
+released = "2025-09-11"
+
+[[versions]]
+name = "2.5"
+released = "2026-10-22"
+
 [nexus]
 domain = "cyberpunk2077"
 game_id = 3333

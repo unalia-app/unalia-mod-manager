@@ -17,6 +17,8 @@ export type GameProfile = {
 	heroUrl: string | null;
 	/** Jeu dont les mods viennent de Nexus Mods. */
 	nexus: { domain: string; gameId: number } | null;
+	/** Grandes versions du jeu, de la plus ancienne à la plus récente (date ISO de sortie). */
+	versions: { name: string; released: string }[];
 };
 
 export type SteamGame = {
@@ -36,6 +38,8 @@ export type SteamGame = {
 	steamShortcut: boolean;
 	/** Play passe par Steam, pour son overlay (compteur FPS…). */
 	launchViaSteam: boolean;
+	/** Ancienne version du jeu sur laquelle l'utilisateur est resté ; `null` : la plus récente. */
+	gameVersion: string | null;
 };
 
 export type GameScan = {
@@ -60,6 +64,15 @@ export function addToSteam(appId: number): Promise<void> {
 /** Coche ou décoche « Launch through Steam » (jeu ajouté à la main). */
 export function setLaunchViaSteam(appId: number, enabled: boolean): Promise<void> {
 	return invoke("set_launch_via_steam", { appId, enabled });
+}
+
+/**
+ * Version du jeu installée, après un retour en arrière (`null` : la plus
+ * récente). Les installations et mises à jour prennent alors les fichiers
+ * publiés pour elle.
+ */
+export function setGameVersion(appId: number, version: string | null): Promise<void> {
+	return invoke("set_game_version", { appId, version });
 }
 
 /**

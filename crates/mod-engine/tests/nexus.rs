@@ -39,6 +39,8 @@ struct World {
     state: State,
     /// Description des prochains mods publiés (on y cite des dépôts GitHub).
     description: String,
+    /// Jeu resté sur une ancienne version : mods publiés avant cette date.
+    before: Option<String>,
 }
 
 impl World {
@@ -73,6 +75,7 @@ impl World {
             server,
             game,
             description: String::new(),
+            before: None,
             _tmp: tmp,
         };
         world.publish_frameworks().await;
@@ -263,6 +266,7 @@ impl World {
                 &self.github,
                 mod_id,
                 file,
+                self.before.as_deref(),
                 |_| {},
             )
             .await
@@ -501,7 +505,7 @@ async fn updates_come_from_github_for_frameworks_and_nexus_for_mods() {
     .await;
 
     let installed = w.state.list(GAME).unwrap();
-    let updates = available_updates_nexus(&w.nexus, &w.github, &w.profile, &installed).await;
+    let updates = available_updates_nexus(&w.nexus, &w.github, &w.profile, &installed, None).await;
     let updates: Vec<_> = updates
         .iter()
         .map(|u| (u.mod_id.as_str(), u.latest.as_str()))
@@ -583,4 +587,147 @@ async fn a_github_file_that_nexus_attributes_elsewhere_is_not_used() {
         "{err:?}"
     );
     assert_eq!(snapshot(&w.game), before);
+}
+
+#[tokio::test]
+async fn a_game_kept_on_an_older_version_gets_the_files_of_its_time() {
+    let mut w = World::new().await;
+    w.before = w.profile.mods_before("2.31").map(str::to_owned);
+    assert_eq!(w.before.as_deref(), Some("2026-10-22"));
+    assert_eq!(w.profile.mods_before("2.5"), None);
+
+    // RED4ext : une release pour la 2.5, une préversion, et celle d'avant.
+    let old_red4ext = format!("{}/assets/red4ext-1.29.1.zip", w.server.url());
+    w.server
+        .mock("GET", "/repos/wopss/RED4ext/releases")
+        .match_query(Matcher::Any)
+        .with_body(
+            json!([
+                { "tag_name": "v1.31.0", "published_at": "2026-10-23T09:00:00Z",
+                  "draft": false, "prerelease": false, "assets": [
+                    { "name": "red4ext-1.31.0.zip", "browser_download_url": "https://example.invalid/new", "size": 1 }
+                ] },
+                { "tag_name": "v1.31.0-rc1", "published_at": "2026-10-21T09:00:00Z",
+                  "draft": false, "prerelease": true, "assets": [] },
+                { "tag_name": "v1.29.1", "published_at": "2025-09-12T09:00:00Z",
+                  "draft": false, "prerelease": false, "assets": [
+                    { "name": "red4ext-1.29.1.zip", "browser_download_url": old_red4ext, "size": 1 }
+                ] }
+            ])
+            .to_string(),
+        )
+        .create_async()
+        .await;
+    w.server
+        .mock("GET", "/assets/red4ext-1.29.1.zip")
+        .with_body(zip_bytes(&[("red4ext/RED4ext.dll", b"old r4e")]))
+        .create_async()
+        .await;
+
+    // Le mod : son fichier pour la 2.5 (le principal) et celui d'avant.
+    let mod_id = 6000;
+    w.graphql(
+        vec![
+            Matcher::Regex("modRequirements".into()),
+            mod_id_matcher(mod_id),
+        ],
+        json!({ "legacyModsByDomain": { "nodes": [{
+            "modId": mod_id, "name": "Cool Plugin", "summary": "", "author": "Someone",
+            "thumbnailUrl": null, "pictureUrl": null, "downloads": 1,
+            "updatedAt": "2026-10-23T00:00:00Z", "createdAt": "2026-01-01T00:00:00Z",
+            "version": "2.0", "adultContent": false, "status": "published",
+            "description": "", "modCategory": { "name": "Gameplay" }, "gameId": 3333,
+            "modRequirements": { "nexusRequirements": { "nodes": [] } }
+        }] } }),
+    )
+    .await;
+    let archive = zip_bytes(&[("red4ext/plugins/Cool/Cool.dll", b"for 2.31")]);
+    w.graphql(
+        vec![
+            Matcher::Regex("modFiles".into()),
+            Matcher::Regex(format!(r#""mod":"{mod_id}""#)),
+        ],
+        json!({ "modFiles": [
+            { "fileId": 60002, "name": "Cool Plugin", "version": "2.0", "category": "MAIN",
+              "primary": 1, "sizeInBytes": "10", "date": 1_792_752_726 },
+            { "fileId": 60001, "name": "Cool Plugin", "version": "1.4", "category": "OLD_VERSION",
+              "primary": 0, "sizeInBytes": archive.len().to_string(), "date": 1_780_000_000 }
+        ] }),
+    )
+    .await;
+    // Seul l'ancien fichier peut être téléchargé : demander l'autre échoue.
+    w.server
+        .mock(
+            "GET",
+            "/v1/games/cyberpunk2077/mods/6000/files/60001/download_link.json",
+        )
+        .match_query(Matcher::Any)
+        .with_body(
+            json!([{ "name": "Nexus CDN", "short_name": "CDN",
+                     "URI": format!("{}/cdn/6000-old.zip", w.server.url()) }])
+            .to_string(),
+        )
+        .create_async()
+        .await;
+    w.server
+        .mock("GET", "/cdn/6000-old.zip")
+        .with_body(archive)
+        .create_async()
+        .await;
+
+    let done = w.install(mod_id, NexusFile::Main).await.unwrap();
+
+    assert_eq!(
+        fs::read(w.game.join("red4ext/plugins/Cool/Cool.dll")).unwrap(),
+        b"for 2.31"
+    );
+    assert_eq!(
+        fs::read(w.game.join("red4ext/RED4ext.dll")).unwrap(),
+        b"old r4e"
+    );
+    let versions: BTreeMap<_, _> = done
+        .mods
+        .iter()
+        .map(|m| (m.id.as_str(), m.version.as_str()))
+        .collect();
+    assert_eq!(
+        versions,
+        BTreeMap::from([("nexus-2380", "1.29.1"), ("nexus-6000", "1.4")])
+    );
+
+    // Rien de plus récent d'avant la 2.5 : pas de mise à jour proposée.
+    let installed = w.state.list(GAME).unwrap();
+    let updates = available_updates_nexus(
+        &w.nexus,
+        &w.github,
+        &w.profile,
+        &installed,
+        w.before.as_deref(),
+    )
+    .await;
+    assert!(updates.is_empty(), "{updates:?}");
+
+    // Installé pour la 2.5 avant le retour en arrière : la version d'avant
+    // est proposée.
+    let mut newer = installed
+        .iter()
+        .find(|m| m.id == "nexus-6000")
+        .unwrap()
+        .clone();
+    newer.version = "2.0".into();
+    w.state.save_all(&[newer]).unwrap();
+    let installed = w.state.list(GAME).unwrap();
+    let updates = available_updates_nexus(
+        &w.nexus,
+        &w.github,
+        &w.profile,
+        &installed,
+        w.before.as_deref(),
+    )
+    .await;
+    let back: Vec<_> = updates
+        .iter()
+        .map(|u| (u.mod_id.as_str(), u.current.as_str(), u.latest.as_str()))
+        .collect();
+    assert_eq!(back, [("nexus-6000", "2.0", "1.4")]);
 }

@@ -72,6 +72,28 @@ pub struct GameProfile {
     /// le jeu « démarre » ; ils ne comptent pas comme le jeu lui-même.
     #[serde(skip)]
     pub launchers: Vec<String>,
+    /// Grandes versions du jeu, de la plus ancienne à la plus récente :
+    /// l'utilisateur resté sur une ancienne version reçoit les mods publiés
+    /// avant la suivante.
+    pub versions: Vec<GameVersion>,
+}
+
+/// Version du jeu et sa date de sortie (ISO, `2026-10-22`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct GameVersion {
+    pub name: String,
+    pub released: String,
+}
+
+impl GameProfile {
+    /// Pour un jeu resté en version `name` : date avant laquelle ses mods
+    /// doivent avoir été publiés (sortie de la version suivante). `None` :
+    /// version inconnue ou la plus récente, rien à filtrer.
+    pub fn mods_before(&self, name: &str) -> Option<&str> {
+        let at = self.versions.iter().position(|v| v.name == name)?;
+        self.versions.get(at + 1).map(|v| v.released.as_str())
+    }
 }
 
 /// Le même mod publié par son auteur sur GitHub (profil du jeu). Seulement

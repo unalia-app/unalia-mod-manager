@@ -172,22 +172,55 @@ impl GitHub {
 
     /// Release `tag` de `owner/repo`, sinon la dernière stable.
     pub async fn release(&self, repo: &str, tag: Option<&str>) -> Result<Release, SourceError> {
-        let safe = |s: &str| {
-            !s.is_empty()
-                && !s.contains("..")
-                && s.chars()
-                    .all(|c| c.is_ascii_alphanumeric() || matches!(c, '/' | '-' | '_' | '.'))
-        };
-        let valid = repo.split('/').count() == 2
-            && safe(repo)
-            && tag.is_none_or(|t| safe(t) && !t.contains('/'));
+        let valid = valid_repo(repo) && tag.is_none_or(|t| safe(t) && !t.contains('/'));
         if !valid {
             return Err(SourceError::NotFound { source_name: NAME });
         }
-        let key = match tag {
-            Some(tag) => format!("{}@{tag}", repo.to_ascii_lowercase()),
-            None => repo.to_ascii_lowercase(),
+        let (key, url) = match tag {
+            Some(tag) => (
+                format!("{}@{tag}", repo.to_ascii_lowercase()),
+                format!("{}/repos/{repo}/releases/tags/{tag}", self.api_url),
+            ),
+            None => (
+                repo.to_ascii_lowercase(),
+                format!("{}/repos/{repo}/releases/latest", self.api_url),
+            ),
         };
+        self.cached(key, url, |body| {
+            let raw: RawRelease = serde_json::from_str(body)?;
+            Ok(Some(raw))
+        })
+        .await
+    }
+
+    /// Dernière release stable de `owner/repo` publiée avant `before`
+    /// (date ISO, `2026-10-22`) : pour une version plus ancienne du jeu,
+    /// qu'une release récente ne gère plus.
+    pub async fn release_before(&self, repo: &str, before: &str) -> Result<Release, SourceError> {
+        if !valid_repo(repo) {
+            return Err(SourceError::NotFound { source_name: NAME });
+        }
+        let key = format!("{}<{before}", repo.to_ascii_lowercase());
+        let url = format!("{}/repos/{repo}/releases?per_page=50", self.api_url);
+        self.cached(key, url, |body| {
+            let all: Vec<RawRelease> = serde_json::from_str(body)?;
+            Ok(all
+                .into_iter()
+                .filter(|r| !r.draft && !r.prerelease)
+                .filter(|r| r.published_at.as_deref().is_some_and(|at| at < before))
+                .max_by(|a, b| a.published_at.cmp(&b.published_at)))
+        })
+        .await
+    }
+
+    /// Requête GitHub derrière le cache : `parse` tire la release de la
+    /// réponse (ou `None` : pas de release qui convienne).
+    async fn cached(
+        &self,
+        key: String,
+        url: String,
+        parse: impl FnOnce(&str) -> Result<Option<RawRelease>, serde_json::Error>,
+    ) -> Result<Release, SourceError> {
         let cached = self.cache.lock().unwrap().get(&key).cloned();
         if let Some(cached) = &cached
             && now().saturating_sub(cached.fetched_at) < self.ttl.as_secs()
@@ -201,10 +234,7 @@ impl GitHub {
         };
         let mut request = self
             .client
-            .get(match tag {
-                Some(tag) => format!("{}/repos/{repo}/releases/tags/{tag}", self.api_url),
-                None => format!("{}/repos/{repo}/releases/latest", self.api_url),
-            })
+            .get(url)
             .header("Accept", "application/vnd.github+json");
         if let Some(etag) = cached.as_ref().and_then(|c| c.etag.as_deref()) {
             request = request.header(IF_NONE_MATCH, etag);
@@ -248,20 +278,20 @@ impl GitHub {
                 .text()
                 .await
                 .map_err(network)?;
-            let raw: RawRelease =
-                serde_json::from_str(&body).map_err(|e| SourceError::Unexpected {
+            parse(&body)
+                .map_err(|e| SourceError::Unexpected {
                     source_name: NAME,
                     detail: e.to_string(),
-                })?;
-            Some(Release {
-                version: raw.tag_name.trim_start_matches('v').to_owned(),
-                published_at: raw.published_at.unwrap_or_default(),
-                assets: raw
-                    .assets
-                    .into_iter()
-                    .filter(|a| !self.require_https || a.url.starts_with("https://"))
-                    .collect(),
-            })
+                })?
+                .map(|raw| Release {
+                    version: raw.tag_name.trim_start_matches('v').to_owned(),
+                    published_at: raw.published_at.unwrap_or_default(),
+                    assets: raw
+                        .assets
+                        .into_iter()
+                        .filter(|a| !self.require_https || a.url.starts_with("https://"))
+                        .collect(),
+                })
         };
         self.remember(
             key,
@@ -286,6 +316,17 @@ impl GitHub {
             }
         }
     }
+}
+
+fn safe(s: &str) -> bool {
+    !s.is_empty()
+        && !s.contains("..")
+        && s.chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '/' | '-' | '_' | '.'))
+}
+
+fn valid_repo(repo: &str) -> bool {
+    repo.split('/').count() == 2 && safe(repo)
 }
 
 fn found(release: Option<Release>) -> Result<Release, SourceError> {
@@ -326,6 +367,10 @@ struct RawRelease {
     published_at: Option<String>,
     #[serde(default)]
     assets: Vec<Asset>,
+    #[serde(default)]
+    draft: bool,
+    #[serde(default)]
+    prerelease: bool,
 }
 
 #[cfg(test)]

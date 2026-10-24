@@ -353,6 +353,7 @@ pub async fn check_updates(
             &catalog.github,
             &game.profile,
             &installed,
+            game.mods_before(),
         )
         .await);
     }
@@ -729,6 +730,7 @@ async fn run_nexus_install(
                 &catalog.github,
                 nexus_id,
                 file,
+                game.mods_before(),
                 progress_emitter(app, app_id, mod_id),
             )
             .await
@@ -745,7 +747,8 @@ async fn run_nexus_install(
     }
 }
 
-/// Page de téléchargement du fichier principal sur Nexus : son bouton
+/// Page de téléchargement du fichier à installer sur Nexus (le principal,
+/// ou celui d'avant pour une ancienne version du jeu) : son bouton
 /// « Slow download » ouvre le lien `nxm://` qui revient à Modalia.
 async fn website_download_url(catalog: &Catalog, game: &KnownGame, mod_id: u32) -> String {
     let domain = game
@@ -755,7 +758,7 @@ async fn website_download_url(catalog: &Catalog, game: &KnownGame, mod_id: u32) 
         .map_or("", |n| n.domain.as_str());
     let page = format!("https://www.nexusmods.com/{domain}/mods/{mod_id}");
     match catalog.nexus.mod_info(domain, mod_id).await {
-        Ok(info) => match info.main_file() {
+        Ok(info) => match info.file_for(game.mods_before()) {
             Some(file) => format!("{page}?tab=files&file_id={}&nmm=1", file.file_id),
             None => format!("{page}?tab=files"),
         },

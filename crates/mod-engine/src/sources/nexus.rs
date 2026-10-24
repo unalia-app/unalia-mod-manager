@@ -142,6 +142,38 @@ impl ModInfo {
             .find(|f| f.primary)
             .or_else(|| main.max_by_key(|f| f.uploaded_at))
     }
+
+    /// Fichier à installer pour un jeu resté sur une version sortie avant
+    /// `before` (date ISO) : le fichier principal tel qu'il était alors.
+    /// Remplacé, il passe en `OLD_VERSION` ou `ARCHIVED`, d'habitude sous
+    /// le même nom. `None` : le mod n'existait pas encore.
+    pub fn main_file_before(&self, before: &str) -> Option<&ModFile> {
+        let older: Vec<&ModFile> = self
+            .files
+            .iter()
+            .filter(|f| matches!(f.category.as_str(), "MAIN" | "OLD_VERSION" | "ARCHIVED"))
+            .filter(|f| iso_date(f.uploaded_at).as_str() < before)
+            .collect();
+        let newest = |pick: &dyn Fn(&ModFile) -> bool| {
+            older
+                .iter()
+                .copied()
+                .filter(|f| pick(f))
+                .max_by_key(|f| f.uploaded_at)
+        };
+        let current = self.main_file().map(|f| f.name.as_str());
+        newest(&|f| Some(f.name.as_str()) == current)
+            .or_else(|| newest(&|f| f.category == "MAIN"))
+            .or_else(|| newest(&|_| true))
+    }
+
+    /// Fichier à installer en un clic, pour la version du jeu : avant
+    /// `before` si elle est ancienne, sinon le principal.
+    pub fn file_for(&self, before: Option<&str>) -> Option<&ModFile> {
+        before
+            .and_then(|b| self.main_file_before(b))
+            .or_else(|| self.main_file())
+    }
 }
 
 /// Prérequis déclaré sur Nexus.
@@ -630,7 +662,7 @@ pub fn donation_link_in(text: &str) -> Option<String> {
 }
 
 /// Secondes Unix → date ISO 8601 (UTC), sans dépendance de calendrier.
-fn iso_date(secs: i64) -> String {
+pub(crate) fn iso_date(secs: i64) -> String {
     let days = secs.div_euclid(86_400);
     let rem = secs.rem_euclid(86_400);
     // Algorithme de Howard Hinnant (civil_from_days).
@@ -1036,5 +1068,47 @@ mod tests {
         assert_eq!(info.main_file().unwrap().file_id, 2);
         info.files[1].primary = false;
         assert_eq!(info.main_file().unwrap().file_id, 1);
+    }
+
+    #[test]
+    fn an_older_game_gets_the_file_of_its_time() {
+        // 2026-10-20 et 2026-10-23, de part et d'autre de la 2.5.
+        let (before, after) = (1_792_493_526, 1_792_752_726);
+        let file = |id, name: &str, category: &str, at| ModFile {
+            file_id: id,
+            name: name.into(),
+            version: String::new(),
+            category: category.into(),
+            primary: false,
+            size: None,
+            uploaded_at: at,
+        };
+        let info = |files| ModInfo {
+            mod_id: 1,
+            name: String::new(),
+            description: String::new(),
+            author: String::new(),
+            version: String::new(),
+            thumbnail_url: None,
+            files,
+            requirements: Vec::new(),
+        };
+        let mod_ = info(vec![
+            file(1, "Main", "MAIN", after),
+            file(2, "Main", "OLD_VERSION", before),
+            file(3, "Old extra", "OLD_VERSION", before + 60),
+            file(4, "Patch", "OPTIONAL", before - 60),
+        ]);
+        assert_eq!(mod_.file_for(Some("2026-10-22")).unwrap().file_id, 2);
+        assert_eq!(mod_.file_for(None).unwrap().file_id, 1);
+        // Renommé à chaque version : le plus récent d'avant.
+        let renamed = info(vec![
+            file(1, "Main v2", "MAIN", after),
+            file(2, "Main v1", "ARCHIVED", before),
+        ]);
+        assert_eq!(renamed.file_for(Some("2026-10-22")).unwrap().file_id, 2);
+        // Publié après : rien de plus ancien, le fichier actuel.
+        let new = info(vec![file(1, "Main", "MAIN", after)]);
+        assert_eq!(new.file_for(Some("2026-10-22")).unwrap().file_id, 1);
     }
 }

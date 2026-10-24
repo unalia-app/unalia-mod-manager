@@ -4,7 +4,7 @@
 
 use serde::Deserialize;
 
-use super::{GameProfile, Mirror, NexusGame};
+use super::{GameProfile, GameVersion, Mirror, NexusGame};
 use crate::loaders::rules::InstallRules;
 
 const PROFILES: [&str; 2] = [
@@ -32,6 +32,8 @@ struct RawProfile {
     mirrors: Vec<Mirror>,
     #[serde(default)]
     launchers: Vec<String>,
+    #[serde(default)]
+    versions: Vec<GameVersion>,
 }
 
 pub fn profiles() -> Vec<GameProfile> {
@@ -60,6 +62,7 @@ pub fn profiles() -> Vec<GameProfile> {
                 frameworks: raw.frameworks,
                 mirrors: raw.mirrors,
                 launchers: raw.launchers,
+                versions: raw.versions,
             }
         })
         .collect()

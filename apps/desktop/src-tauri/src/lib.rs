@@ -52,6 +52,16 @@ struct KnownGame {
     /// Jeu hors Steam ajouté à Steam : adresse qui le lance par Steam (et
     /// son overlay).
     steam_shortcut: Option<String>,
+    /// Version du jeu choisie par l'utilisateur (resté sur une ancienne).
+    game_version: Option<String>,
+}
+
+impl KnownGame {
+    /// Jeu resté sur une ancienne version : ses mods doivent avoir été
+    /// publiés avant cette date.
+    fn mods_before(&self) -> Option<&str> {
+        self.profile.mods_before(self.game_version.as_deref()?)
+    }
 }
 
 #[derive(Clone, Default)]
@@ -95,6 +105,9 @@ struct GameEntry {
     /// Play passe par Steam (overlay, compteur FPS) : réglage du jeu, oui
     /// par défaut quand le raccourci existe.
     launch_via_steam: bool,
+    /// Ancienne version du jeu sur laquelle l'utilisateur est resté (une
+    /// des `versions` du profil) ; `None` : la plus récente.
+    game_version: Option<String>,
 }
 
 #[tauri::command]
@@ -139,6 +152,7 @@ async fn list_games(
                 moddable,
                 steam_shortcut: false,
                 launch_via_steam: false,
+                game_version: None,
             }
         })
         .collect();
@@ -197,10 +211,22 @@ async fn list_games(
             moddable: profile.supported,
             steam_shortcut: has_shortcut,
             launch_via_steam: has_shortcut && launch_settings.get(&app_id).copied().unwrap_or(true),
+            game_version: None,
             profile: Some(profile),
         });
     }
     entries.sort_by_cached_key(|e| (e.game.name.to_lowercase(), e.game.app_id));
+    {
+        let state = mods.state().lock().await;
+        for entry in &mut entries {
+            let versions = entry.profile.as_ref().map(|p| &p.versions);
+            entry.game_version = state
+                .setting(&version_setting(entry.game.app_id))
+                .ok()
+                .flatten()
+                .filter(|v| versions.is_some_and(|all| all.iter().any(|known| &known.name == v)));
+        }
+    }
 
     *library.games.lock().unwrap() = entries
         .iter()
@@ -220,6 +246,7 @@ async fn list_games(
                         .then(|| shortcuts::shortcut_for(&shortcuts, &e.game.install_dir))
                         .flatten()
                         .map(|s| s.launch_url()),
+                    game_version: e.game_version.clone(),
                 },
             ))
         })
@@ -320,6 +347,42 @@ async fn set_launch_via_steam(
         } else {
             None
         };
+    }
+    Ok(())
+}
+
+/// Réglage « version du jeu » : celle sur laquelle l'utilisateur est resté.
+fn version_setting(app_id: u32) -> String {
+    format!("game_version:{app_id}")
+}
+
+/// Version du jeu installée, quand l'utilisateur est revenu à une
+/// ancienne (`None` : la plus récente). Les prochaines installations et
+/// mises à jour prennent les fichiers publiés pour elle.
+#[tauri::command]
+async fn set_game_version(
+    library: State<'_, Library>,
+    mods: State<'_, Mods>,
+    app_id: u32,
+    version: Option<String>,
+) -> Result<(), String> {
+    let game = library
+        .game(app_id)
+        .ok_or("This game isn't in your library anymore.")?;
+    if let Some(version) = &version
+        && !game.profile.versions.iter().any(|v| &v.name == version)
+    {
+        return Err(format!(
+            "Unalia doesn't know version {version} of this game."
+        ));
+    }
+    mods.state()
+        .lock()
+        .await
+        .set_setting(&version_setting(app_id), version.as_deref())
+        .map_err(|e| e.to_string())?;
+    if let Some(game) = library.games.lock().unwrap().get_mut(&app_id) {
+        game.game_version = version;
     }
     Ok(())
 }
@@ -614,6 +677,7 @@ pub fn run() {
             list_games,
             add_manual_game,
             set_launch_via_steam,
+            set_game_version,
             add_to_steam,
             game_accent,
             catalog::search_mods,
