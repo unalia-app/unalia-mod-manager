@@ -56,6 +56,9 @@ pub struct Mods {
     cancels: SyncMutex<HashMap<(u32, String), Cancel>>,
     /// Téléchargements en cours ou interrompus (voir `Paused`).
     paused: SyncMutex<Paused>,
+    /// Fichiers choisis d'un mod Nexus qui attendent leur lien `nxm://`
+    /// (compte gratuit : un clic sur le site par fichier).
+    chosen_files: SyncMutex<HashMap<(u32, String), Vec<u32>>>,
 }
 
 impl Mods {
@@ -86,6 +89,7 @@ impl Mods {
             ready: SyncMutex::default(),
             cancels: SyncMutex::default(),
             paused: SyncMutex::new(Paused::load(data.join("downloads.json"))),
+            chosen_files: SyncMutex::default(),
         })
     }
 
@@ -209,6 +213,11 @@ pub enum Outcome<T> {
     },
     /// Annulée par l'utilisateur : rien n'a changé dans le jeu.
     Cancelled,
+    /// Mod Nexus à plusieurs fichiers (variantes, options) : l'interface
+    /// les montre, l'installation reprend avec ceux choisis.
+    Choose {
+        files: Vec<nexus_source::ModFile>,
+    },
 }
 
 // ---------------------------------------------------------------- état
@@ -378,15 +387,31 @@ pub async fn install_mod(
     mods: State<'_, Mods>,
     app_id: u32,
     mod_id: String,
+    files: Option<Vec<u32>>,
 ) -> Result<Outcome<Vec<InstalledMod>>, String> {
     let game = library.game(app_id).ok_or(UNKNOWN_GAME)?;
     if game.profile.nexus.is_some() {
         if mods.is_running(&game) {
             return Err(close_first(&game));
         }
-        return match run_nexus_install(&app, app_id, &game, &mod_id, NexusFile::Main).await {
-            Ok(done) => Ok(Outcome::Done { value: done.mods }),
-            Err(NexusFailure::Website(url)) => Ok(Outcome::Browser { url }),
+        let file = match &files {
+            Some(ids) => NexusFile::Files { ids, link: None },
+            None => NexusFile::Main,
+        };
+        let pending = (app_id, mod_id.clone());
+        return match run_nexus_install(&app, app_id, &game, &mod_id, file).await {
+            Ok(done) => {
+                mods.chosen_files.lock().unwrap().remove(&pending);
+                Ok(Outcome::Done { value: done.mods })
+            }
+            Err(NexusFailure::Website(url) | NexusFailure::NextFile(url)) => {
+                // Les liens `nxm://` du site reprendront avec ce choix.
+                if let Some(ids) = files {
+                    mods.chosen_files.lock().unwrap().insert(pending, ids);
+                }
+                Ok(Outcome::Browser { url })
+            }
+            Err(NexusFailure::Choose(files)) => Ok(Outcome::Choose { files }),
             Err(NexusFailure::Cancelled) => Ok(Outcome::Cancelled),
             Err(NexusFailure::Error(message)) => Err(message),
         };
@@ -682,6 +707,11 @@ pub async fn discard_download(
 enum NexusFailure {
     /// Compte gratuit : il faut passer par le site, à cette adresse.
     Website(String),
+    /// Compte gratuit, plusieurs fichiers : celui-ci est arrivé, le suivant
+    /// se télécharge sur le site, à cette adresse.
+    NextFile(String),
+    /// Plusieurs fichiers : à l'utilisateur de choisir.
+    Choose(Vec<nexus_source::ModFile>),
     Cancelled,
     Error(String),
 }
@@ -741,8 +771,16 @@ async fn run_nexus_install(
         Ok(done) => Ok(done),
         Err(InstallError::Cancelled) => Err(NexusFailure::Cancelled),
         Err(InstallError::Source(SourceError::WebsiteOnly { .. })) => Err(NexusFailure::Website(
-            website_download_url(&catalog, game, nexus_id).await,
+            website_download_url(&catalog, game, nexus_id, None).await,
         )),
+        Err(InstallError::NexusWebsite { file_id }) => {
+            let url = website_download_url(&catalog, game, nexus_id, Some(file_id)).await;
+            Err(match file {
+                NexusFile::Files { link: Some(_), .. } => NexusFailure::NextFile(url),
+                _ => NexusFailure::Website(url),
+            })
+        }
+        Err(InstallError::ChooseFiles(files)) => Err(NexusFailure::Choose(files)),
         Err(error) => Err(NexusFailure::Error(error_message(&error))),
     }
 }
@@ -750,13 +788,21 @@ async fn run_nexus_install(
 /// Page de téléchargement du fichier à installer sur Nexus (le principal,
 /// ou celui d'avant pour une ancienne version du jeu) : son bouton
 /// « Slow download » ouvre le lien `nxm://` qui revient à Modalia.
-async fn website_download_url(catalog: &Catalog, game: &KnownGame, mod_id: u32) -> String {
+async fn website_download_url(
+    catalog: &Catalog,
+    game: &KnownGame,
+    mod_id: u32,
+    file_id: Option<u32>,
+) -> String {
     let domain = game
         .profile
         .nexus
         .as_ref()
         .map_or("", |n| n.domain.as_str());
     let page = format!("https://www.nexusmods.com/{domain}/mods/{mod_id}");
+    if let Some(file_id) = file_id {
+        return format!("{page}?tab=files&file_id={file_id}&nmm=1");
+    }
     match catalog.nexus.mod_info(domain, mod_id).await {
         Ok(info) => match info.file_for(game.mods_before()) {
             Some(file) => format!("{page}?tab=files&file_id={}&nmm=1", file.file_id),
@@ -1011,8 +1057,11 @@ async fn apply_pending(app: &AppHandle, app_id: u32, game: &KnownGame) {
             PendingOp::Install { mod_id } if game.profile.nexus.is_some() => {
                 match run_nexus_install(app, app_id, game, mod_id, NexusFile::Main).await {
                     Ok(_) => Ok(()),
-                    Err(NexusFailure::Website(_)) => {
+                    Err(NexusFailure::Website(_) | NexusFailure::NextFile(_)) => {
                         Err("Nexus Mods needs you to start this download from its website.".into())
+                    }
+                    Err(NexusFailure::Choose(_)) => {
+                        Err("This mod has several files: install it again to pick yours.".into())
                     }
                     Err(NexusFailure::Cancelled) => Err("The install was cancelled.".into()),
                     Err(NexusFailure::Error(message)) => Err(message),
@@ -1259,6 +1308,9 @@ struct NexusInstalled {
     name: Option<String>,
     missing: Vec<Requirement>,
     error: Option<String>,
+    /// Fichier suivant d'un choix multiple : sa page de téléchargement,
+    /// déjà ouverte dans le navigateur.
+    website: Option<String>,
 }
 
 /// Lien `nxm://` venu du site : installe le fichier choisi, dans le jeu
@@ -1302,24 +1354,55 @@ async fn handle_nxm(app: AppHandle, url: String) {
                     "This link is for a game Unalia can't find ({}).",
                     link.domain
                 )),
+                website: None,
             },
         );
         return;
     };
     let mods = app.state::<Mods>();
+    // Un des fichiers choisis dans Unalia : l'installation reprend avec
+    // tout le choix.
+    let pending = (app_id, mod_id.clone());
+    let chosen = mods
+        .chosen_files
+        .lock()
+        .unwrap()
+        .get(&pending)
+        .filter(|ids| ids.contains(&link.file_id))
+        .cloned();
+    let file = match &chosen {
+        Some(ids) => NexusFile::Files {
+            ids,
+            link: Some(&link),
+        },
+        None => NexusFile::Link(&link),
+    };
+    let mut website = None;
     let result = if mods.is_running(&game) {
         Err(Some(close_first(&game)))
     } else {
-        run_nexus_install(&app, app_id, &game, &mod_id, NexusFile::Link(&link))
+        run_nexus_install(&app, app_id, &game, &mod_id, file)
             .await
             .map_err(|failure| match failure {
+                NexusFailure::NextFile(url) => {
+                    website = Some(url);
+                    None
+                }
                 NexusFailure::Website(_) => Some(
                     "Nexus Mods refused this link. It may have expired: click the download button again.".into(),
                 ),
-                NexusFailure::Cancelled => None,
+                NexusFailure::Choose(_) | NexusFailure::Cancelled => None,
                 NexusFailure::Error(message) => Some(message),
             })
     };
+    if result.is_ok() {
+        mods.chosen_files.lock().unwrap().remove(&pending);
+    }
+    // Fichier suivant : sa page s'ouvre, l'interface attend son lien.
+    if let Some(url) = &website {
+        use tauri_plugin_opener::OpenerExt;
+        let _ = app.opener().open_url(url, None::<&str>);
+    }
     let event = match result {
         Ok(done) => NexusInstalled {
             app_id,
@@ -1332,14 +1415,16 @@ async fn handle_nxm(app: AppHandle, url: String) {
             cancelled: false,
             missing: done.missing,
             error: None,
+            website: None,
         },
         Err(error) => NexusInstalled {
             app_id,
             mod_id,
-            cancelled: error.is_none(),
+            cancelled: error.is_none() && website.is_none(),
             name: None,
             missing: Vec::new(),
             error,
+            website,
         },
     };
     let _ = app.emit("nexus-installed", event);

@@ -230,6 +230,22 @@ export type InstalledMod = {
 	sha256: string;
 	installedAt: number;
 	storeDir: string;
+	/** Fichiers Nexus installés, dans l'ordre où ils sont posés. */
+	files: number[];
+};
+
+/** Un fichier d'un mod Nexus (variante, option…). */
+export type NexusModFile = {
+	fileId: number;
+	name: string;
+	version: string;
+	/** `MAIN`, `OPTIONAL`, `UPDATE`, `MISCELLANEOUS`… */
+	category: string;
+	primary: boolean;
+	size: number | null;
+	/** Secondes Unix. */
+	uploadedAt: number;
+	description: string;
 };
 
 export type InstallProgress =
@@ -255,10 +271,13 @@ export type Outcome<T> = { status: "done"; value: T } | { status: "queued" };
 export type InstallOutcome =
 	| Outcome<InstalledMod[]>
 	| { status: "browser"; url: string }
-	| { status: "cancelled" };
+	| { status: "cancelled" }
+	/** Mod Nexus à plusieurs fichiers : à choisir, le conseillé en tête. */
+	| { status: "choose"; files: NexusModFile[] };
 
-export function installMod(appId: number, modId: string): Promise<InstallOutcome> {
-	return invoke("install_mod", { appId, modId });
+/** `files` : fichiers Nexus choisis, posés dans cet ordre. */
+export function installMod(appId: number, modId: string, files?: number[]): Promise<InstallOutcome> {
+	return invoke("install_mod", { appId, modId, files: files ?? null });
 }
 
 /** Arrête une installation en cours ou en file (le jeu n'est pas touché). */
@@ -379,6 +398,8 @@ export type NexusInstalled = {
 	name: string | null;
 	missing: NexusRequirement[];
 	error: string | null;
+	/** Fichier suivant d'un choix multiple : sa page, déjà ouverte dans le navigateur. */
+	website: string | null;
 };
 
 export function nexusStatus(): Promise<NexusStatus> {

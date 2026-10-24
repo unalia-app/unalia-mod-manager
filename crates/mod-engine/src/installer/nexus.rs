@@ -9,11 +9,16 @@
 //!
 //! Tout le lot est transactionnel, comme une installation Thunderstore.
 //!
+//! Un mod peut avoir plusieurs fichiers (variantes de couleur, options) :
+//! l'utilisateur les choisit, ils sont posés dans l'ordre, chacun par-dessus
+//! le précédent, et forment un seul mod.
+//!
 //! Un jeu resté sur une ancienne version (`before`, date de sortie de la
 //! suivante) reçoit les fichiers et les releases publiés avant cette date.
 
-use std::collections::HashSet;
-use std::path::Path;
+use std::collections::{HashMap, HashSet};
+use std::fs;
+use std::path::{Path, PathBuf};
 
 /// Dépôts GitHub essayés au plus pour un mod (chacun coûte une requête).
 const MIRROR_CANDIDATES: usize = 4;
@@ -29,7 +34,7 @@ use crate::games::GameProfile;
 use crate::loaders::framework::{Framework, needed_frameworks};
 use crate::loaders::redengine::RedEngine;
 use crate::loaders::unreal::{Unreal, find_project};
-use crate::loaders::{Loader, PackageKind};
+use crate::loaders::{Loader, PackageKind, Placement};
 use crate::sources::SourceError;
 use crate::sources::github::{GitHub, repos_in};
 use crate::sources::nexus::{ModFile, ModInfo, Nexus, NxmLink, Requirement, mod_key};
@@ -42,6 +47,13 @@ pub enum NexusFile<'a> {
     Main,
     /// Le fichier choisi sur le site (lien `nxm://`).
     Link(&'a NxmLink),
+    /// Fichiers choisis dans Unalia, posés dans cet ordre. Compte gratuit :
+    /// `link` est celui qui vient d'arriver du site, les autres doivent déjà
+    /// être téléchargés (sinon `InstallError::NexusWebsite`).
+    Files {
+        ids: &'a [u32],
+        link: Option<&'a NxmLink>,
+    },
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -94,76 +106,144 @@ impl Installer<'_, Nexus> {
             }
             _ => None,
         };
-        let (main, requirements) = match from_github {
-            Some(package) => (package, Vec::new()),
+        let (parts, whole, requirements) = match from_github {
+            Some(package) => (vec![package.clone()], package, Vec::new()),
             None => {
                 let info = self.source.mod_info(domain, mod_id).await?;
-                let link = match file {
-                    NexusFile::Link(link) => Some(link),
-                    NexusFile::Main => None,
+                let id = mod_key(mod_id);
+                let previous = existing.iter().find(|m| m.id == id);
+                let (ids, link) = match file {
+                    NexusFile::Link(link) => (vec![link.file_id], Some(link)),
+                    NexusFile::Files { ids, link } => (ids.to_vec(), link),
+                    NexusFile::Main => {
+                        // Réinstallation, mise à jour : les fichiers choisis
+                        // la dernière fois, dans leur version actuelle.
+                        let mut kept: Vec<u32> = Vec::new();
+                        for old in previous.map(|p| p.files.as_slice()).unwrap_or_default() {
+                            if let Some(file) = info.successor(*old, before)
+                                && !kept.contains(&file.file_id)
+                            {
+                                kept.push(file.file_id);
+                            }
+                        }
+                        if kept.is_empty() {
+                            let choices = info.choices(before);
+                            if choices.len() > 1 && previous.is_none() {
+                                return Err(InstallError::ChooseFiles(
+                                    choices.into_iter().cloned().collect(),
+                                ));
+                            }
+                            let main = info
+                                .file_for(before)
+                                .ok_or_else(|| InstallError::NoFile(info.name.clone()))?;
+                            kept.push(main.file_id);
+                        }
+                        (kept, None)
+                    }
                 };
-                let file = match link {
-                    Some(link) => info.files.iter().find(|f| f.file_id == link.file_id),
-                    None => info.file_for(before),
-                }
-                .cloned()
-                .ok_or_else(|| InstallError::NoFile(info.name.clone()))?;
-                let version = file_version(&info, &file, before);
-                // Compte gratuit (lien du site) : une seule connexion, comme
-                // Vortex. Plusieurs connexions contourneraient le bridage.
-                let mut connections = link.map(|_| 1);
-                let url = match self
-                    .source
-                    .download_url(domain, mod_id, file.file_id, link)
-                    .await
-                {
-                    Ok(url) => url,
-                    // Compte gratuit : avant d'envoyer sur le site, on
-                    // cherche le même fichier chez l'auteur, ailleurs.
-                    Err(error @ SourceError::WebsiteOnly { .. }) if link.is_none() => {
-                        let archive = self.archive_path(&mod_key(mod_id), &version);
+                let single = ids.len() == 1;
+                let mut parts = Vec::new();
+                // Compte gratuit, plusieurs fichiers : ceux qui viennent
+                // sont téléchargés, le site est demandé pour le premier des
+                // autres. Le lien suivant reprend là.
+                let mut website = None;
+                for (index, file_id) in ids.iter().enumerate() {
+                    let file = info
+                        .files
+                        .iter()
+                        .find(|f| f.file_id == *file_id)
+                        .cloned()
+                        .ok_or_else(|| InstallError::NoFile(info.name.clone()))?;
+                    let version = file_version(&info, &file, before);
+                    let link = link.filter(|l| l.file_id == *file_id);
+                    // Compte gratuit (lien du site) : une seule connexion,
+                    // comme Vortex. Plusieurs contourneraient le bridage.
+                    let mut connections = link.map(|_| 1);
+                    let archive = self.archive_path(&id, &version, Some(*file_id));
+                    // Déjà téléchargé (fichier précédent d'un choix
+                    // multiple, compte gratuit) : rien à redemander.
+                    let url = if archive.is_file() {
+                        String::new()
+                    } else {
                         match self
-                            .github_mirror(
-                                github,
-                                profile,
-                                domain,
-                                &info,
-                                &file,
-                                &archive,
-                                before,
-                                &mut on_progress,
-                            )
+                            .source
+                            .download_url(domain, mod_id, *file_id, link)
                             .await
                         {
-                            // GitHub : pas de bridage à respecter.
-                            Some(url) => {
-                                connections = None;
-                                url
+                            Ok(url) => url,
+                            // Compte gratuit : avant d'envoyer sur le site, on
+                            // cherche le même fichier chez l'auteur, ailleurs.
+                            Err(SourceError::WebsiteOnly { .. }) if link.is_none() => {
+                                let mirror = if single {
+                                    self.github_mirror(
+                                        github,
+                                        profile,
+                                        domain,
+                                        &info,
+                                        &file,
+                                        &archive,
+                                        before,
+                                        &mut on_progress,
+                                    )
+                                    .await
+                                } else {
+                                    None
+                                };
+                                match mirror {
+                                    // GitHub : pas de bridage à respecter.
+                                    Some(url) => {
+                                        connections = None;
+                                        url
+                                    }
+                                    None => {
+                                        website.get_or_insert(*file_id);
+                                        continue;
+                                    }
+                                }
                             }
-                            None => return Err(error.into()),
+                            Err(error) => return Err(error.into()),
                         }
+                    };
+                    let part = Package {
+                        connections,
+                        id: id.clone(),
+                        // Plusieurs fichiers : la progression dit lequel.
+                        name: if single {
+                            info.name.clone()
+                        } else {
+                            file.name.clone()
+                        },
+                        author: info.author.clone(),
+                        version,
+                        icon_url: info.thumbnail_url.clone(),
+                        download_url: url,
+                        sha256: None,
+                        file_id: Some(*file_id),
+                    };
+                    if !single && !archive.is_file() {
+                        self.fetch_package(target, &part, index, ids.len(), &mut on_progress)
+                            .await?;
                     }
-                    Err(error) => return Err(error.into()),
-                };
-                let package = Package {
-                    connections,
-                    id: mod_key(mod_id),
+                    parts.push(part);
+                }
+                if let Some(file_id) = website {
+                    return Err(InstallError::NexusWebsite { file_id });
+                }
+                let whole = Package {
                     name: info.name.clone(),
-                    author: info.author.clone(),
-                    version,
-                    icon_url: info.thumbnail_url.clone(),
-                    download_url: url,
-                    sha256: None,
+                    file_id: None,
+                    ..parts[0].clone()
                 };
-                (package, info.requirements)
+                (parts, whole, info.requirements)
             }
         };
 
         // Télécharger le mod, puis les frameworks qui manquent (et ceux
         // dont ces frameworks ont besoin à leur tour).
-        let main_id = main.id.clone();
+        let main_id = whole.id.clone();
+        let chosen: Vec<u32> = parts.iter().filter_map(|p| p.file_id).collect();
         let mut fetched = vec![
-            self.fetch(target, &adapter, main, 0, 1, &mut on_progress)
+            self.fetch_parts(target, &adapter, parts, whole, &mut on_progress)
                 .await?,
         ];
         let mut planned: HashSet<String> = HashSet::from([main_id]);
@@ -222,6 +302,9 @@ impl Installer<'_, Nexus> {
             .into_iter()
             .map(|d| {
                 let mut record = d.record;
+                if record.id == requested {
+                    record.files = chosen.clone();
+                }
                 record.explicit = match &d.previous {
                     Some(previous) => previous.explicit || record.id == requested,
                     None => record.id == requested,
@@ -356,6 +439,78 @@ impl Installer<'_, Nexus> {
             icon_url: None,
             download_url: asset.url.clone(),
             sha256: None,
+            file_id: None,
+        })
+    }
+
+    /// Les fichiers choisis d'un mod, chacun placé à part puis posés l'un
+    /// sur l'autre (une variante de couleur remplace l'archive du fichier
+    /// principal) : un seul paquet, `whole`.
+    async fn fetch_parts(
+        &self,
+        target: &Target<'_>,
+        adapter: &Adapter,
+        mut parts: Vec<Package>,
+        whole: Package,
+        on_progress: &mut impl FnMut(Progress),
+    ) -> Result<Fetched, InstallError> {
+        if parts.len() == 1 {
+            return self
+                .fetch(target, adapter, parts.remove(0), 0, 1, on_progress)
+                .await;
+        }
+        let total = parts.len();
+        let mut placed = Vec::new();
+        let mut sha256 = String::new();
+        for (index, part) in parts.iter().enumerate() {
+            let (dir, sum) = self
+                .fetch_package(target, part, index, total, on_progress)
+                .await?;
+            let placements =
+                adapter
+                    .loader()
+                    .place(&part.name, &PackageKind::Mod, &list_files(&dir)?);
+            if placements.is_empty() {
+                return Err(InstallError::NothingToInstall(part.name.clone()));
+            }
+            if index == 0 {
+                sha256 = sum;
+            }
+            placed.push((dir, placements));
+        }
+        let ids: Vec<String> = parts
+            .iter()
+            .filter_map(|p| p.file_id)
+            .map(|f| f.to_string())
+            .collect();
+        let parent = placed[0]
+            .0
+            .parent()
+            .map(Path::to_path_buf)
+            .unwrap_or_default();
+        let combined = parent.join(format!(
+            "{}+{}",
+            super::path_segment(&whole.version),
+            ids.join("+")
+        ));
+        // Déjà composé (même version, mêmes fichiers) : réutilisé tel quel.
+        if !combined.is_dir() {
+            combine(&placed, &combined)?;
+        }
+        // Le dossier composé reproduit le jeu : chaque fichier à sa place.
+        let placements = list_files(&combined)?
+            .into_iter()
+            .map(|path| Placement {
+                source: path.clone(),
+                target: path,
+            })
+            .collect();
+        Ok(Fetched {
+            package: whole,
+            store_dir: combined,
+            sha256,
+            placements,
+            loader_root: None,
         })
     }
 
@@ -386,6 +541,38 @@ impl Installer<'_, Nexus> {
             loader_root: None,
         })
     }
+}
+
+/// Compose les fichiers d'un mod dans `into`, rangés comme dans le jeu : un
+/// fichier posé plus tard remplace celui du même chemin (sans tenir compte
+/// de la casse, comme Windows). Liens physiques quand c'est possible.
+fn combine(parts: &[(PathBuf, Vec<Placement>)], into: &Path) -> std::io::Result<()> {
+    let mut chosen: Vec<(String, PathBuf)> = Vec::new();
+    let mut seen: HashMap<String, usize> = HashMap::new();
+    for (dir, placements) in parts {
+        for p in placements {
+            let source = dir.join(&p.source);
+            match seen.get(&p.target.to_ascii_lowercase()) {
+                Some(&at) => chosen[at] = (p.target.clone(), source),
+                None => {
+                    seen.insert(p.target.to_ascii_lowercase(), chosen.len());
+                    chosen.push((p.target.clone(), source));
+                }
+            }
+        }
+    }
+    let tmp = into.with_extension("partial");
+    let _ = fs::remove_dir_all(&tmp);
+    for (target, source) in &chosen {
+        let dest = tmp.join(target);
+        if let Some(parent) = dest.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        if fs::hard_link(source, &dest).is_err() {
+            fs::copy(source, &dest)?;
+        }
+    }
+    fs::rename(&tmp, into)
 }
 
 /// Release d'un framework : celle de son tag s'il en a un, sinon la
@@ -495,10 +682,14 @@ pub async fn available_updates_nexus(
             let Some(id) = parse_mod_key(&m.id).filter(|id| from_nexus.contains(id)) else {
                 continue;
             };
+            let file_of = |info: &'_ ModInfo| match m.files.first() {
+                Some(first) => info.successor(*first, Some(before)).cloned(),
+                None => info.file_for(Some(before)).cloned(),
+            };
             if let Ok(info) = nexus.mod_info(domain, id).await
-                && let Some(file) = info.file_for(Some(before))
+                && let Some(file) = file_of(&info)
             {
-                updates.extend(newer(m, &file_version(&info, file, Some(before))));
+                updates.extend(newer(m, &file_version(&info, &file, Some(before))));
             }
         }
     } else if let Ok(latest) = nexus.latest_versions(domain, &from_nexus).await {

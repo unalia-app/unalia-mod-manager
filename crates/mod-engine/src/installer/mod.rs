@@ -118,6 +118,13 @@ pub enum InstallError {
     NotInstalled,
     #[error("couldn't access Unalia's storage")]
     Io(#[from] std::io::Error),
+    /// Mod Nexus à plusieurs fichiers (variantes, options) : à l'utilisateur
+    /// de choisir, le fichier conseillé en tête.
+    #[error("choose which files of this mod to install")]
+    ChooseFiles(Vec<crate::sources::nexus::ModFile>),
+    /// Compte gratuit : ce fichier se télécharge depuis le site de Nexus.
+    #[error("this file downloads from the Nexus Mods website")]
+    NexusWebsite { file_id: u32 },
     #[error("the install was cancelled")]
     Cancelled,
 }
@@ -135,6 +142,9 @@ pub struct Package {
     pub icon_url: Option<String>,
     pub download_url: String,
     pub sha256: Option<String>,
+    /// Fichier précis d'un mod Nexus : un mod en a plusieurs (variantes)
+    /// de même version, chacun a sa place dans le cache.
+    pub file_id: Option<u32>,
 }
 
 impl Package {
@@ -156,6 +166,7 @@ impl Package {
             )),
             download_url: step.version.download_url.clone(),
             sha256: step.version.sha256.clone(),
+            file_id: None,
         }
     }
 }
@@ -340,11 +351,14 @@ impl<S: ModSource> Installer<'_, S> {
         on_progress: &mut impl FnMut(Progress),
     ) -> Result<(PathBuf, String), InstallError> {
         let name = package.name.clone();
-        let version = path_segment(&package.version);
+        let version = match package.file_id {
+            Some(file) => format!("{}-f{file}", path_segment(&package.version)),
+            None => path_segment(&package.version),
+        };
 
         // Télécharger (ou reprendre l'archive déjà en cache). L'extension
         // ne compte pas : le format se lit dans le fichier.
-        let archive = self.archive_path(&package.id, &package.version);
+        let archive = self.archive_path(&package.id, &package.version, package.file_id);
         let sha256 = if archive.is_file() {
             download::sha256_file(&archive)?
         } else {
@@ -458,10 +472,11 @@ impl<S: ModSource> Installer<'_, S> {
     }
 
     /// Archive d'une version dans le cache des téléchargements.
-    fn archive_path(&self, id: &str, version: &str) -> PathBuf {
+    fn archive_path(&self, id: &str, version: &str, file_id: Option<u32>) -> PathBuf {
+        let file = file_id.map(|f| format!("-f{f}")).unwrap_or_default();
         self.paths
             .downloads
-            .join(format!("{id}-{}.zip", path_segment(version)))
+            .join(format!("{id}-{}{file}.zip", path_segment(version)))
     }
 
     /// Adaptateur du jeu : ses règles de placement si le catalogue les
@@ -535,6 +550,7 @@ fn deploy_package(
         sha256,
         installed_at: now(),
         store_dir: store_dir.to_string_lossy().into_owned(),
+        files: package.file_id.into_iter().collect(),
         deployment,
         placements,
     })

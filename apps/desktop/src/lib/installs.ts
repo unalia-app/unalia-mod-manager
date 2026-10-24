@@ -5,6 +5,7 @@ import {
 	type InstallProgress,
 	type InstalledMod,
 	type ModUpdate,
+	type NexusModFile,
 	cancelInstall,
 	checkUpdates,
 	installMod,
@@ -34,14 +35,18 @@ export type ActiveInstall = { name?: string } & (
 	| { status: "error"; message: string; details: string | null }
 );
 
+/** Mod Nexus à plusieurs fichiers : le choix demandé à l'utilisateur. */
+export type FileChoice = { appId: number; modId: string; name?: string; files: NexusModFile[] };
+
 type Snapshot = {
 	installed: Map<number, InstalledMod[]>;
 	active: Map<string, ActiveInstall>;
 	/** Mises à jour disponibles par jeu (vérifiées une fois par session). */
 	updates: Map<number, ModUpdate[]>;
+	choice: FileChoice | null;
 };
 
-let snapshot: Snapshot = { installed: new Map(), active: new Map(), updates: new Map() };
+let snapshot: Snapshot = { installed: new Map(), active: new Map(), updates: new Map(), choice: null };
 const listeners = new Set<() => void>();
 
 function update(change: (draft: Snapshot) => void) {
@@ -49,6 +54,7 @@ function update(change: (draft: Snapshot) => void) {
 		installed: new Map(snapshot.installed),
 		active: new Map(snapshot.active),
 		updates: new Map(snapshot.updates),
+		choice: snapshot.choice,
 	};
 	change(draft);
 	snapshot = draft;
@@ -84,8 +90,20 @@ function listenOnce() {
 	);
 	// Lien `nxm://` du site (bouton « Mod Manager Download ») : le moteur
 	// installe seul, l'interface apprend la fin ici.
-	void onNexusInstalled(({ appId, modId, name, missing, error, cancelled }) => {
+	void onNexusInstalled(({ appId, modId, name, missing, error, cancelled, website }) => {
 		const k = key(appId, modId);
+		// Un fichier d'un choix multiple est arrivé : la page du suivant est
+		// ouverte, on attend son lien.
+		if (website) {
+			update((s) => {
+				s.active.set(k, { status: "website", url: website, name: s.active.get(k)?.name });
+			});
+			toast({
+				title: "Downloaded, one more file to go",
+				details: "Nexus Mods opened the next file: click Slow download there.",
+			});
+			return;
+		}
 		if (cancelled) {
 			update((s) => {
 				s.active.delete(k);
@@ -156,8 +174,8 @@ export async function refreshInstalled(appId: number) {
 	});
 }
 
-/** Lance l'installation (sans attendre) : l'état suit dans le store. */
-export function install(appId: number, modId: string, name?: string): Promise<void> {
+/** Lance l'installation (sans attendre) : l'état suit dans le store. `files` : fichiers Nexus choisis. */
+export function install(appId: number, modId: string, name?: string, files?: number[]): Promise<void> {
 	const k = key(appId, modId);
 	const current = snapshot.active.get(k);
 	if (current && current.status !== "error" && current.status !== "website") return Promise.resolve();
@@ -165,7 +183,7 @@ export function install(appId: number, modId: string, name?: string): Promise<vo
 		s.active.set(k, { status: "queued", name: name ?? current?.name });
 	});
 	inFlight.add(k);
-	return installMod(appId, modId)
+	return installMod(appId, modId, files)
 		.finally(() => inFlight.delete(k))
 		.then(
 			(outcome) =>
@@ -175,6 +193,12 @@ export function install(appId: number, modId: string, name?: string): Promise<vo
 					if (outcome.status === "browser") {
 						s.active.set(k, { status: "website", url: outcome.url, name });
 						void openExternal(outcome.url);
+						return;
+					}
+					// Plusieurs fichiers : la fenêtre de choix prend le relais.
+					if (outcome.status === "choose") {
+						s.active.delete(k);
+						s.choice = { appId, modId, name, files: outcome.files };
 						return;
 					}
 					// Annulée : rien n'a changé, rien à afficher.
@@ -220,6 +244,20 @@ export async function cancel(appId: number, modId: string) {
 		if (stopped) return;
 	}
 	clearError(appId, modId);
+}
+
+/** Choix des fichiers en cours (fenêtre ouverte), sinon `null`. */
+export function useFileChoice(): FileChoice | null {
+	return useSyncExternalStore(subscribe, () => snapshot.choice, () => null);
+}
+
+/** Installe les fichiers choisis, dans cet ordre (ou ferme la fenêtre sans rien faire). */
+export function settleFileChoice(files: number[] | null) {
+	const choice = snapshot.choice;
+	update((s) => {
+		s.choice = null;
+	});
+	if (choice && files?.length) void install(choice.appId, choice.modId, choice.name, files);
 }
 
 export function clearError(appId: number, modId: string) {

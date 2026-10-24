@@ -33,6 +33,9 @@ pub struct InstalledMod {
     pub installed_at: i64,
     /// Dossier du mod dans le stockage de Modalia.
     pub store_dir: String,
+    /// Fichiers Nexus installés, dans l'ordre où ils sont posés (le
+    /// principal puis ses variantes) : repris par les mises à jour.
+    pub files: Vec<u32>,
     #[serde(skip)]
     pub deployment: Deployment,
     /// Où va chaque fichier du stockage : réutilisé tel quel pour
@@ -76,6 +79,7 @@ CREATE TABLE IF NOT EXISTS installed_mods (
     store_dir    TEXT NOT NULL,
     deployment   TEXT NOT NULL,
     placements   TEXT NOT NULL DEFAULT '[]',
+    files        TEXT NOT NULL DEFAULT '[]',
     PRIMARY KEY (game, id)
 );
 
@@ -158,8 +162,8 @@ impl State {
             tx.execute(
                 "INSERT OR REPLACE INTO installed_mods
                  (game, id, name, author, version, icon_url, loader_root, enabled, explicit,
-                  sha256, installed_at, store_dir, deployment, placements)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
+                  sha256, installed_at, store_dir, deployment, placements, files)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
                 params![
                     m.game,
                     m.id,
@@ -175,6 +179,7 @@ impl State {
                     m.store_dir,
                     serde_json::to_string(&m.deployment)?,
                     serde_json::to_string(&m.placements)?,
+                    serde_json::to_string(&m.files)?,
                 ],
             )?;
         }
@@ -299,6 +304,7 @@ struct Row {
     m: InstalledMod,
     deployment: String,
     placements: String,
+    files: String,
 }
 
 impl Row {
@@ -306,6 +312,7 @@ impl Row {
         let mut m = self.m;
         m.deployment = serde_json::from_str(&self.deployment)?;
         m.placements = serde_json::from_str(&self.placements)?;
+        m.files = serde_json::from_str(&self.files)?;
         Ok(m)
     }
 }
@@ -318,6 +325,14 @@ fn migrate(conn: &Connection) -> rusqlite::Result<()> {
     if !has_placements {
         conn.execute_batch(
             "ALTER TABLE installed_mods ADD COLUMN placements TEXT NOT NULL DEFAULT '[]'",
+        )?;
+    }
+    let has_files = conn
+        .prepare("SELECT 1 FROM pragma_table_info('installed_mods') WHERE name = 'files'")?
+        .exists([])?;
+    if !has_files {
+        conn.execute_batch(
+            "ALTER TABLE installed_mods ADD COLUMN files TEXT NOT NULL DEFAULT '[]'",
         )?;
     }
     Ok(())
@@ -338,10 +353,12 @@ fn row(r: &rusqlite::Row<'_>) -> rusqlite::Result<Row> {
             sha256: r.get("sha256")?,
             installed_at: r.get("installed_at")?,
             store_dir: r.get("store_dir")?,
+            files: Vec::new(),
             deployment: Deployment::default(),
             placements: Vec::new(),
         },
         deployment: r.get("deployment")?,
         placements: r.get("placements")?,
+        files: r.get("files")?,
     })
 }

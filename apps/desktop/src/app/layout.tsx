@@ -5,6 +5,7 @@ import { DevShortcuts } from "@/components/dev-shortcuts";
 import { DisplayScale } from "@/components/display-scale";
 import { BetaBubble } from "@/components/feedback/beta-bubble";
 import { FeedbackDialog } from "@/components/feedback/feedback-dialog";
+import { FilePicker } from "@/components/game/file-picker";
 import { OverlayScrollbar } from "@/components/overlay-scrollbar";
 import { Toaster } from "@/components/toaster";
 
@@ -26,6 +27,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
 				<DisplayScale />
 				<BetaBubble />
 				<FeedbackDialog />
+				<FilePicker />
 			</body>
 		</html>
 	);

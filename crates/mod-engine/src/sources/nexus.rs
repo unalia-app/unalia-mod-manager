@@ -116,6 +116,8 @@ pub struct ModFile {
     pub size: Option<u64>,
     /// Secondes depuis l'époque Unix.
     pub uploaded_at: i64,
+    /// Note de l'auteur sur ce fichier (Markdown simple).
+    pub description: String,
 }
 
 /// Ce qu'il faut savoir d'un mod pour l'installer.
@@ -134,13 +136,80 @@ pub struct ModInfo {
 }
 
 impl ModInfo {
-    /// Fichier à installer en un clic : le principal, sinon le plus récent
-    /// des fichiers « MAIN ».
+    /// Fichier à installer en un clic : le principal, sinon celui que son
+    /// nom désigne comme tel (« Main File », à côté des variantes de
+    /// couleur), sinon le plus récent des fichiers « MAIN ».
     pub fn main_file(&self) -> Option<&ModFile> {
         let main = self.files.iter().filter(|f| f.category == "MAIN");
         main.clone()
             .find(|f| f.primary)
+            .or_else(|| {
+                main.clone()
+                    .filter(|f| f.name.to_lowercase().contains("main"))
+                    .max_by_key(|f| f.uploaded_at)
+            })
             .or_else(|| main.max_by_key(|f| f.uploaded_at))
+    }
+
+    /// Fichiers entre lesquels choisir (variantes, options), celui à
+    /// installer d'office en tête. Pour une ancienne version du jeu, chaque
+    /// fichier actuel tel qu'il était avant `before`.
+    pub fn choices(&self, before: Option<&str>) -> Vec<&ModFile> {
+        let main = self.main_file().map(|f| f.file_id);
+        let mut current: Vec<&ModFile> = self
+            .files
+            .iter()
+            .filter(|f| CURRENT.contains(&f.category.as_str()))
+            .collect();
+        // Le principal, puis par catégorie, les plus récents d'abord.
+        current.sort_by_key(|f| {
+            let rank = CURRENT.iter().position(|c| *c == f.category);
+            (
+                Some(f.file_id) != main,
+                rank,
+                std::cmp::Reverse(f.uploaded_at),
+            )
+        });
+        let mut list: Vec<&ModFile> = Vec::new();
+        for file in current {
+            let file = match before {
+                Some(before) => self.as_of(file, before),
+                None => Some(file),
+            };
+            if let Some(file) = file
+                && !list.iter().any(|f| f.file_id == file.file_id)
+            {
+                list.push(file);
+            }
+        }
+        list
+    }
+
+    /// Le même fichier aujourd'hui (mise à jour, réinstallation), ou tel
+    /// qu'il était avant `before` : le plus récent du même nom. Plus de
+    /// fichier de ce nom : celui-ci, tel quel.
+    pub fn successor(&self, file_id: u32, before: Option<&str>) -> Option<&ModFile> {
+        let old = self.files.iter().find(|f| f.file_id == file_id)?;
+        let current = self
+            .files
+            .iter()
+            .filter(|f| CURRENT.contains(&f.category.as_str()))
+            .filter(|f| same_name(&f.name, &old.name))
+            .max_by_key(|f| f.uploaded_at);
+        match before {
+            Some(before) => self.as_of(current.unwrap_or(old), before),
+            None => current,
+        }
+        .or(Some(old))
+    }
+
+    /// Le plus récent fichier du nom de `file` publié avant `before`.
+    fn as_of<'a>(&'a self, file: &'a ModFile, before: &str) -> Option<&'a ModFile> {
+        self.files
+            .iter()
+            .filter(|f| same_name(&f.name, &file.name))
+            .filter(|f| iso_date(f.uploaded_at).as_str() < before)
+            .max_by_key(|f| f.uploaded_at)
     }
 
     /// Fichier à installer pour un jeu resté sur une version sortie avant
@@ -174,6 +243,16 @@ impl ModInfo {
             .and_then(|b| self.main_file_before(b))
             .or_else(|| self.main_file())
     }
+}
+
+/// Catégories des fichiers actuels d'un mod, dans l'ordre d'affichage. Les
+/// autres (`OLD_VERSION`, `ARCHIVED`) sont des versions remplacées.
+const CURRENT: [&str; 4] = ["MAIN", "OPTIONAL", "UPDATE", "MISCELLANEOUS"];
+
+/// Deux noms de fichier pour le même fichier, d'une version à l'autre
+/// (`WHITE_BLACK` devenu `White_Black`).
+fn same_name(a: &str, b: &str) -> bool {
+    a.trim().eq_ignore_ascii_case(b.trim())
 }
 
 /// Prérequis déclaré sur Nexus.
@@ -393,7 +472,7 @@ impl Nexus {
             .graphql(
                 "query($mod: ID!, $game: ID!) {
                     modFiles(modId: $mod, gameId: $game) {
-                        fileId name version category primary sizeInBytes date
+                        fileId name version category primary sizeInBytes date description
                     }
                 }",
                 json!({ "mod": mod_id.to_string(), "game": game_id.to_string() }),
@@ -410,6 +489,9 @@ impl Nexus {
                 primary: f.primary == 1,
                 size: f.size_in_bytes.and_then(|s| s.parse().ok()),
                 uploaded_at: f.date,
+                description: bbcode_to_markdown(f.description.as_deref().unwrap_or_default())
+                    .trim()
+                    .to_owned(),
             })
             .collect();
         files.sort_by_key(|f| std::cmp::Reverse(f.uploaded_at));
@@ -914,6 +996,7 @@ struct RawFile {
     size_in_bytes: Option<String>,
     #[serde(default)]
     date: i64,
+    description: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -1050,6 +1133,7 @@ mod tests {
             primary,
             size: None,
             uploaded_at: at,
+            description: String::new(),
         };
         let mut info = ModInfo {
             mod_id: 1,
@@ -1082,6 +1166,7 @@ mod tests {
             primary: false,
             size: None,
             uploaded_at: at,
+            description: String::new(),
         };
         let info = |files| ModInfo {
             mod_id: 1,

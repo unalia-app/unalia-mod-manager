@@ -12,7 +12,6 @@ use mod_engine::games::{GameCatalog, GameProfile};
 use mod_engine::installer::{
     InstallError, Installer, NexusFile, NexusInstall, Paths, Target, available_updates_nexus,
 };
-use mod_engine::sources::SourceError;
 use mod_engine::sources::github::GitHub;
 use mod_engine::sources::nexus::{Nexus, NxmLink};
 use mod_engine::state::State;
@@ -417,7 +416,7 @@ async fn a_free_account_is_sent_to_the_website() {
 
     let err = w.install(COOL_HUD, NexusFile::Main).await.unwrap_err();
     assert!(
-        matches!(err, InstallError::Source(SourceError::WebsiteOnly { .. })),
+        matches!(err, InstallError::NexusWebsite { file_id: 50000 }),
         "{err:?}"
     );
     assert_eq!(snapshot(&w.game), before);
@@ -583,7 +582,7 @@ async fn a_github_file_that_nexus_attributes_elsewhere_is_not_used() {
 
     let err = w.install(COOL_HUD, NexusFile::Main).await.unwrap_err();
     assert!(
-        matches!(err, InstallError::Source(SourceError::WebsiteOnly { .. })),
+        matches!(err, InstallError::NexusWebsite { file_id: 50000 }),
         "{err:?}"
     );
     assert_eq!(snapshot(&w.game), before);
@@ -730,4 +729,153 @@ async fn a_game_kept_on_an_older_version_gets_the_files_of_its_time() {
         .map(|u| (u.mod_id.as_str(), u.current.as_str(), u.latest.as_str()))
         .collect();
     assert_eq!(back, [("nexus-6000", "2.0", "1.4")]);
+}
+
+/// La Porsche 911 GT3 RS (mod 11180) : un fichier principal et des
+/// variantes de couleur, tous « MAIN », aucun marqué comme principal.
+/// Chaque couleur remplace l'archive du fichier principal.
+async fn publish_gt3(w: &mut World) {
+    let mod_id = 11180;
+    w.graphql(
+        vec![
+            Matcher::Regex("modRequirements".into()),
+            mod_id_matcher(mod_id),
+        ],
+        json!({ "legacyModsByDomain": { "nodes": [{
+            "modId": mod_id, "name": "Porsche 911 GT3 RS", "summary": "", "author": "aalexbug",
+            "thumbnailUrl": null, "pictureUrl": null, "downloads": 1,
+            "updatedAt": "2023-12-24T00:00:00Z", "createdAt": "2023-11-23T00:00:00Z",
+            "version": "1.2", "adultContent": false, "status": "published",
+            "description": "", "modCategory": { "name": "Vehicles" }, "gameId": 3333,
+            "modRequirements": { "nexusRequirements": { "nodes": [] } }
+        }] } }),
+    )
+    .await;
+    let main: Files = vec![
+        ("archive/pc/mod/porsche_gt3_rs.archive", b"white"),
+        ("archive/pc/mod/porsche_gt3_rs.xl", b"xl"),
+        (
+            "archive/pc/mod/porsche_gt3_rs_interior.archive",
+            b"interior",
+        ),
+    ];
+    let black: Files = vec![
+        ("archive/pc/mod/porsche_gt3_rs.archive", b"black yellow"),
+        ("archive/pc/mod/porsche_gt3_rs.xl", b"xl"),
+    ];
+    let file = |id: u32, name: &str, category: &str, date: i64| {
+        json!({ "fileId": id, "name": name, "version": "1.2", "category": category,
+                "primary": 0, "sizeInBytes": "10", "date": date,
+                "description": "DRAG THE ARCHIVE FOLDER IN THE GAME MAIN FOLDER" })
+    };
+    w.graphql(
+        vec![
+            Matcher::Regex("modFiles".into()),
+            Matcher::Regex(format!(r#""mod":"{mod_id}""#)),
+        ],
+        json!({ "modFiles": [
+            file(59389, "Porsche 911 GT3 RS BLACK_YELLOW", "ARCHIVED", 1_701_369_886),
+            file(62171, "Porsche 911 GT3 RS (Main File)you need this", "MAIN", 1_703_436_412),
+            file(62172, "Porsche 911 GT3 RS Black_Yellow", "MAIN", 1_703_436_457),
+            file(62175, "Porsche 911 GT3 RS White_Black", "MAIN", 1_703_436_525),
+        ] }),
+    )
+    .await;
+    for (file_id, files) in [(62171, main), (62172, black)] {
+        let path =
+            format!("/v1/games/cyberpunk2077/mods/{mod_id}/files/{file_id}/download_link.json");
+        let download = format!("/cdn/{file_id}.zip");
+        w.server
+            .mock("GET", path.as_str())
+            .match_query(Matcher::UrlEncoded("key".into(), "site-key".into()))
+            .with_body(
+                json!([{ "name": "Nexus CDN", "short_name": "CDN",
+                         "URI": format!("{}{download}", w.server.url()) }])
+                .to_string(),
+            )
+            .create_async()
+            .await;
+        w.server
+            .mock("GET", path.as_str())
+            .match_query(Matcher::Missing)
+            .with_status(403)
+            .create_async()
+            .await;
+        w.server
+            .mock("GET", download.as_str())
+            .with_body(zip_bytes(&files))
+            .create_async()
+            .await;
+    }
+}
+
+fn file_link(mod_id: u32, file_id: u32) -> NxmLink {
+    NxmLink::parse(&format!(
+        "nxm://cyberpunk2077/mods/{mod_id}/files/{file_id}?key=site-key&expires=1792500000"
+    ))
+    .unwrap()
+}
+
+#[tokio::test]
+async fn a_color_variant_goes_on_top_of_the_main_file() {
+    let mut w = World::new().await;
+    publish_gt3(&mut w).await;
+
+    // Plusieurs fichiers : à l'utilisateur de choisir, le principal en tête.
+    let err = w.install(11180, NexusFile::Main).await.unwrap_err();
+    let InstallError::ChooseFiles(files) = err else {
+        panic!("{err:?}");
+    };
+    let ids: Vec<u32> = files.iter().map(|f| f.file_id).collect();
+    assert_eq!(ids, [62171, 62175, 62172]);
+
+    // Compte gratuit : le principal arrive du site, la couleur doit suivre.
+    let chosen = [62171, 62172];
+    let main = file_link(11180, 62171);
+    let err = w
+        .install(
+            11180,
+            NexusFile::Files {
+                ids: &chosen,
+                link: Some(&main),
+            },
+        )
+        .await
+        .unwrap_err();
+    assert!(
+        matches!(err, InstallError::NexusWebsite { file_id: 62172 }),
+        "{err:?}"
+    );
+    assert!(!w.game.join("archive").exists());
+
+    // La couleur arrive : le principal est déjà là, tout est posé.
+    let color = file_link(11180, 62172);
+    let done = w
+        .install(
+            11180,
+            NexusFile::Files {
+                ids: &chosen,
+                link: Some(&color),
+            },
+        )
+        .await
+        .unwrap();
+    let mod_dir = w.game.join("archive/pc/mod");
+    assert_eq!(
+        fs::read(mod_dir.join("porsche_gt3_rs.archive")).unwrap(),
+        b"black yellow"
+    );
+    assert!(mod_dir.join("porsche_gt3_rs_interior.archive").is_file());
+    let gt3 = done.mods.iter().find(|m| m.id == "nexus-11180").unwrap();
+    assert_eq!(gt3.files, [62171, 62172]);
+    assert_eq!(gt3.name, "Porsche 911 GT3 RS");
+
+    // Réinstaller (mise à jour) garde le même choix, sans rien redemander.
+    let done = w.install(11180, NexusFile::Main).await.unwrap();
+    let gt3 = done.mods.iter().find(|m| m.id == "nexus-11180").unwrap();
+    assert_eq!(gt3.files, [62171, 62172]);
+    assert_eq!(
+        fs::read(mod_dir.join("porsche_gt3_rs.archive")).unwrap(),
+        b"black yellow"
+    );
 }

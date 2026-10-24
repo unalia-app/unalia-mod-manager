@@ -338,6 +338,7 @@ fn store_paths_can_be_rebased_after_a_move() {
         sha256: String::new(),
         installed_at: 0,
         store_dir: dir.into(),
+        files: Vec::new(),
         deployment: Deployment::default(),
         placements: Vec::new(),
     };
