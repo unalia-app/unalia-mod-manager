@@ -287,13 +287,14 @@ function ModRow({ mod: m, appId }: { mod: InstalledMod; appId: number }) {
 						<span className={cn("truncate text-sm font-medium", enabled && !removing ? "text-fg" : "text-fg-subtle")}>
 							{m.name}
 						</span>
+						<span className="shrink-0 font-mono text-[11px] text-fg-muted">{versionLabel(m.version)}</span>
 						{loader && <Badge tone="accent">Loader</Badge>}
 						{!loader && !m.explicit && <Badge>Dependency</Badge>}
 						{pending && <Badge tone="accent">Pending</Badge>}
-						{update && !pending && <Badge tone="accent">v{update.latest} available</Badge>}
+						{update && !pending && <Badge tone="accent">{versionLabel(update.latest)} available</Badge>}
 					</span>
 					<span className="block truncate text-xs text-fg-subtle">
-						by {m.author} · v{m.version}
+						{m.author ? `by ${m.author}` : "\u00a0"}
 					</span>
 				</span>
 			</button>
@@ -330,6 +331,15 @@ function ModRow({ mod: m, appId }: { mod: InstalledMod; appId: number }) {
 			</button>
 		</div>
 	);
+}
+
+/**
+ * Version lisible : `v1.4`, mais une date telle quelle (ancien fichier
+ * Nexus sans numéro, installé pour une version plus ancienne du jeu).
+ */
+function versionLabel(version: string): string {
+	if (!version) return "";
+	return /^\d{4}-\d{2}-\d{2}$/.test(version) ? version : `v${version}`;
 }
 
 function ModThumb({ src, dimmed }: { src: string | null; dimmed: boolean }) {
