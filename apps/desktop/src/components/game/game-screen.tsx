@@ -100,7 +100,8 @@ export function GameScreen() {
 
 				{game?.moddable && game.profile && (
 					<>
-						<section key={game.appId} className="flex items-end gap-6 pt-10">
+						{/* Au-dessus des onglets : le menu « Game version » s'ouvre vers eux. */}
+						<section key={game.appId} className="relative z-20 flex items-end gap-6 pt-10">
 							<GameCover
 								game={game}
 								className="h-36 w-24 animate-fade-up rounded-lg border-line-strong text-lg shadow-2xl shadow-black/50"
