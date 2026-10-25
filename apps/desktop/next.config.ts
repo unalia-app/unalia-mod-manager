@@ -9,6 +9,8 @@ const nextConfig: NextConfig = {
   trailingSlash: true,
   transpilePackages: ["@modalia/ui"],
   devIndicators: false,
+  // Pas d'AGENTS.md régénéré à chaque `next dev`.
+  agentRules: false,
 };
 
 export default nextConfig;
