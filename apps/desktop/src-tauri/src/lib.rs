@@ -577,10 +577,18 @@ async fn source_artwork(app: &AppHandle, app_id: u32, kind: ArtworkKind) -> Opti
         ArtworkKind::Hero | ArtworkKind::HeroBlur => remote.hero.map(|u| (u, "hero")),
         ArtworkKind::Header | ArtworkKind::Logo => None,
     };
-    // Sinon, les images publiques de la page Steam du jeu : utile pour une
-    // copie GOG ou Epic d'un jeu aussi vendu sur Steam.
-    let (url, name) = thunderstore.or_else(|| steam_store_art(app_id, kind))?;
+    // Sinon, les images publiques de la page Steam du jeu : utile pour un
+    // jeu pas encore ouvert dans Steam, ou une copie GOG ou Epic d'un jeu
+    // aussi vendu sur Steam.
+    let (url, name) = match thunderstore {
+        Some(found) => found,
+        None => steam_store_art(&app.state::<Catalog>().client, app_id, kind).await?,
+    };
+    // Sans la requête (`?t=...` des images du magasin Steam).
     let extension = url
+        .split(['?', '#'])
+        .next()
+        .unwrap_or(&url)
         .rsplit('.')
         .next()
         .filter(|e| e.len() <= 4 && e.chars().all(|c| c.is_ascii_alphanumeric()))
@@ -611,19 +619,65 @@ async fn source_artwork(app: &AppHandle, app_id: u32, kind: ArtworkKind) -> Opti
 /// Image publique de la page Steam d'un jeu. Les jeux sans identifiant
 /// Steam ont un identifiant dérivé, bit de poids fort à 1 (`manual_app_id`) :
 /// rien à chercher pour eux.
-fn steam_store_art(app_id: u32, kind: ArtworkKind) -> Option<(String, &'static str)> {
+///
+/// Les jeux récents rangent leurs images sous une empreinte
+/// (`.../apps/<appid>/<hash>/library_hero.jpg`) : l'API publique du magasin
+/// donne ces chemins. Elle ne connaît pas le logo, ni certains vieux jeux :
+/// on se rabat alors sur l'ancienne adresse, sans empreinte.
+async fn steam_store_art(
+    client: &mod_engine::HttpClient,
+    app_id: u32,
+    kind: ArtworkKind,
+) -> Option<(String, &'static str)> {
     if app_id & 0x8000_0000 != 0 {
         return None;
     }
-    let (file, name) = match kind {
-        ArtworkKind::Cover => ("library_600x900_2x.jpg", "steam-cover"),
-        ArtworkKind::Hero | ArtworkKind::HeroBlur => ("library_hero.jpg", "steam-hero"),
-        ArtworkKind::Header => ("header.jpg", "steam-header"),
-        ArtworkKind::Logo => ("logo.png", "steam-logo"),
+    let (asset, file, name) = match kind {
+        ArtworkKind::Cover => (Some("library_capsule_2x"), "library_600x900_2x.jpg", "steam-cover"),
+        ArtworkKind::Hero | ArtworkKind::HeroBlur => (Some("library_hero"), "library_hero.jpg", "steam-hero"),
+        ArtworkKind::Header => (Some("header"), "header.jpg", "steam-header"),
+        ArtworkKind::Logo => (None, "logo.png", "steam-logo"),
     };
+    if let Some(asset) = asset
+        && let Some(url) = store_asset_url(client, app_id, asset).await
+    {
+        return Some((url, name));
+    }
     Some((
         format!("https://cdn.cloudflare.steamstatic.com/steam/apps/{app_id}/{file}"),
         name,
+    ))
+}
+
+/// Adresse d'une image du magasin Steam (`IStoreBrowseService/GetItems`,
+/// sans clé).
+async fn store_asset_url(client: &mod_engine::HttpClient, app_id: u32, asset: &str) -> Option<String> {
+    let input = serde_json::json!({
+        "ids": [{ "appid": app_id }],
+        "context": { "language": "english", "country_code": "US" },
+        "data_request": { "include_assets": true },
+    });
+    let response: serde_json::Value = client
+        .get("https://api.steampowered.com/IStoreBrowseService/GetItems/v1/")
+        .query(&[("input_json", input.to_string())])
+        .send()
+        .await
+        .ok()?
+        .error_for_status()
+        .ok()?
+        .json()
+        .await
+        .ok()?;
+    let assets = &response["response"]["store_items"][0]["assets"];
+    let format = assets["asset_url_format"].as_str()?;
+    let path = assets[asset].as_str()?;
+    // Un chemin relatif simple : rien qui remonte ni ne change d'hôte.
+    if path.contains("..") || path.contains("://") || path.starts_with('/') {
+        return None;
+    }
+    Some(format!(
+        "https://shared.akamai.steamstatic.com/store_item_assets/{}",
+        format.replace("${FILENAME}", path)
     ))
 }
 
