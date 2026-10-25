@@ -313,6 +313,9 @@ impl Installer<'_, Nexus> {
             })
             .collect();
         state.save_all(&records)?;
+        for record in &records {
+            super::keep_only(Path::new(&record.store_dir));
+        }
 
         let mods = state.list(target.game)?;
         let missing = requirements

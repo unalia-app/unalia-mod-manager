@@ -155,6 +155,20 @@ impl State {
             .transpose()
     }
 
+    /// `id` est-il installé dans au moins un jeu ? Le cache des archives
+    /// est commun à tous les jeux.
+    pub fn installed_anywhere(&self, id: &str) -> Result<bool, StateError> {
+        Ok(self
+            .conn
+            .query_row(
+                "SELECT 1 FROM installed_mods WHERE id = ?1 LIMIT 1",
+                params![id],
+                |_| Ok(()),
+            )
+            .optional()?
+            .is_some())
+    }
+
     /// Enregistre plusieurs mods d'un coup : tout ou rien.
     pub fn save_all(&mut self, mods: &[InstalledMod]) -> Result<(), StateError> {
         let tx = self.conn.transaction()?;

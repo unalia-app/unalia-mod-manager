@@ -32,15 +32,20 @@ use crate::{KnownGame, Library};
 const STARTING_FOR: Duration = Duration::from_secs(60);
 /// Fréquence de la veille des processus.
 const WATCH_EVERY: Duration = Duration::from_secs(2);
+/// Délai pendant lequel un retrait peut être annulé : le stockage du mod
+/// n'est libéré qu'après. Large devant le toast « Undo », qui se met en
+/// pause au survol.
+const UNDO_FOR: Duration = Duration::from_secs(120);
 
 pub struct Mods {
     /// Une installation à la fois : elle garde la base pendant toute sa
     /// durée, les suivantes attendent leur tour (file d'attente).
     state: Mutex<ModState>,
     paths: Paths,
-    /// Mods tout juste désinstallés, gardés pour « Undo ». Côté moteur : la
-    /// webview ne renvoie qu'un identifiant, jamais un chemin.
-    removed: SyncMutex<HashMap<(String, String), InstalledMod>>,
+    /// Mods tout juste désinstallés, gardés pour « Undo » avec l'instant du
+    /// retrait. Côté moteur : la webview ne renvoie qu'un identifiant,
+    /// jamais un chemin.
+    removed: SyncMutex<HashMap<(String, String), (Instant, InstalledMod)>>,
     processes: SyncMutex<ProcessWatcher>,
     /// Jeux vus en cours d'exécution au dernier passage de la veille.
     running: SyncMutex<HashSet<u32>>,
@@ -867,8 +872,33 @@ pub async fn uninstall_mod(
     let mut state = mods.state.lock().await;
     let removed = installer::uninstall(&mut state, &key, &game.dir, &mod_id)
         .map_err(|e| error_message(&e))?;
-    mods.removed.lock().unwrap().insert((key, mod_id), removed);
+    let at = Instant::now();
+    mods.removed
+        .lock()
+        .unwrap()
+        .insert((key.clone(), mod_id.clone()), (at, removed));
+    tauri::async_runtime::spawn(purge_later(app, key, mod_id, at));
     Ok(Outcome::Done { value: () })
+}
+
+/// Libère le stockage d'un mod retiré, si « Undo » n'a pas servi.
+async fn purge_later(app: AppHandle, key: String, mod_id: String, at: Instant) {
+    tokio::time::sleep(UNDO_FOR).await;
+    let mods = app.state::<Mods>();
+    let entry = (key, mod_id);
+    {
+        let mut removed = mods.removed.lock().unwrap();
+        // Restauré, ou retiré à nouveau depuis : ce n'est plus ce retrait-là.
+        if removed.get(&entry).is_none_or(|(when, _)| *when != at) {
+            return;
+        }
+        removed.remove(&entry);
+    }
+    let _fetching = mods.fetching.lock().await;
+    let state = mods.state.lock().await;
+    if let Err(error) = installer::purge(&state, &mods.paths, &entry.0, &entry.1) {
+        eprintln!("couldn't free the storage of {}: {error}", entry.1);
+    }
 }
 
 /// Annule une désinstallation récente.
@@ -884,7 +914,7 @@ pub async fn restore_mod(
         return Err("Close the game first, then try again.".into());
     }
     let key = game_key(app_id);
-    let removed = mods
+    let (_, removed) = mods
         .removed
         .lock()
         .unwrap()
@@ -1078,9 +1108,11 @@ async fn apply_pending(app: &AppHandle, app_id: u32, game: &KnownGame) {
                     .map_err(|e| error_message(&e))
             }
             PendingOp::Uninstall { mod_id } => {
+                // Pas de « Undo » pour un retrait appliqué à la fermeture du
+                // jeu : le stockage est libéré tout de suite.
                 let mut state = mods.state.lock().await;
                 installer::uninstall(&mut state, &key, &game.dir, mod_id)
-                    .map(|_| ())
+                    .and_then(|_| installer::purge(&state, &mods.paths, &key, mod_id))
                     .map_err(|e| error_message(&e))
             }
         };

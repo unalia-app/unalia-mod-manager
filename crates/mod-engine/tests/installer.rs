@@ -448,6 +448,73 @@ async fn updates_are_detected_then_applied_in_one_click() {
     );
     assert!(plugin(&w.game, KNIGHT, "KnightV7.dll").is_file());
     assert_eq!(after.len(), 3, "les dépendances à jour ne bougent pas");
+
+    // Seule la version installée reste dans le stockage.
+    let store = w.paths.store.join("steam-1030300").join(KNIGHT);
+    let versions: Vec<_> = fs::read_dir(&store)
+        .unwrap()
+        .map(|e| e.unwrap().file_name())
+        .collect();
+    assert_eq!(versions, ["0.7.0"]);
+}
+
+fn names(dir: &Path) -> Vec<String> {
+    let mut names: Vec<String> = fs::read_dir(dir)
+        .map(|entries| {
+            entries
+                .map(|e| e.unwrap().file_name().to_string_lossy().into_owned())
+                .collect()
+        })
+        .unwrap_or_default();
+    names.sort();
+    names
+}
+
+#[tokio::test]
+async fn purging_a_removed_mod_frees_its_storage_but_not_the_others() {
+    let mut w = World::new().await;
+    w.publish_knight().await;
+    w.install(KNIGHT).await.0.unwrap();
+    let game = "steam:1030300";
+    let store = w.paths.store.join("steam-1030300");
+    assert!(names(&w.paths.downloads).contains(&format!("{KNIGHT}-0.6.7.zip")));
+
+    // Réinstallé avant la purge (« Undo ») : rien ne part.
+    let removed = installer::uninstall(&mut w.state, game, &w.game, KNIGHT).unwrap();
+    installer::restore(&mut w.state, &w.game, removed).unwrap();
+    installer::purge(&w.state, &w.paths, game, KNIGHT).unwrap();
+    assert!(store.join(KNIGHT).is_dir());
+
+    installer::uninstall(&mut w.state, game, &w.game, KNIGHT).unwrap();
+    installer::purge(&w.state, &w.paths, game, KNIGHT).unwrap();
+    assert!(!store.join(KNIGHT).exists());
+    assert_eq!(names(&store), [LOADER, PREPATCHER]);
+    assert_eq!(
+        names(&w.paths.downloads),
+        [
+            format!("{LOADER}-1.0.3.zip"),
+            format!("{PREPATCHER}-1.4.0.zip")
+        ]
+    );
+
+    // Un identifiant qui sortirait du stockage est ignoré.
+    installer::purge(&w.state, &w.paths, game, "..").unwrap();
+    assert!(w.paths.store.is_dir());
+}
+
+#[tokio::test]
+async fn archives_stay_cached_while_another_game_has_the_mod() {
+    let mut w = World::new().await;
+    w.publish_knight().await;
+    w.install(KNIGHT).await.0.unwrap();
+    let mut other = w.state.get("steam:1030300", KNIGHT).unwrap().unwrap();
+    other.game = "steam:42".into();
+    w.state.save(&other).unwrap();
+
+    installer::uninstall(&mut w.state, "steam:1030300", &w.game, KNIGHT).unwrap();
+    installer::purge(&w.state, &w.paths, "steam:1030300", KNIGHT).unwrap();
+    assert!(!w.paths.store.join("steam-1030300").join(KNIGHT).exists());
+    assert!(names(&w.paths.downloads).contains(&format!("{KNIGHT}-0.6.7.zip")));
 }
 
 #[tokio::test]

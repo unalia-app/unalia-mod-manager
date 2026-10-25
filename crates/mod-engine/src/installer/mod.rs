@@ -10,7 +10,7 @@ mod nexus;
 pub use nexus::{NexusFile, NexusInstall, available_updates_nexus};
 
 use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::{Component, Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use serde::Serialize;
@@ -247,6 +247,9 @@ impl<S: ModSource> Installer<'_, S> {
             })
             .collect();
         state.save_all(&records)?;
+        for record in &records {
+            keep_only(Path::new(&record.store_dir));
+        }
         Ok(state.list(target.game)?)
     }
 
@@ -455,8 +458,12 @@ impl<S: ModSource> Installer<'_, S> {
             }
             if let Err(source) = extracted {
                 // Archive illisible : on la retire du cache pour qu'un nouvel
-                // essai la télécharge à nouveau.
+                // essai la télécharge à nouveau. Le dossier du mod part aussi
+                // s'il n'a servi qu'à cet essai.
                 let _ = fs::remove_file(&archive);
+                if let Some(parent) = store_dir.parent() {
+                    let _ = fs::remove_dir(parent);
+                }
                 return Err(InstallError::Archive { name, source });
             }
         }
@@ -795,7 +802,8 @@ pub fn set_enabled(
 
 /// Désinstalle un mod. Le loader ne part qu'en dernier, avec tout ce que
 /// BepInEx a écrit dans ses dossiers : le jeu retrouve son état d'origine.
-/// Le stockage est conservé pour permettre l'annulation (`restore`).
+/// Le stockage est conservé pour permettre l'annulation (`restore`), puis
+/// libéré par `purge`.
 pub fn uninstall(
     state: &mut State,
     game: &str,
@@ -809,6 +817,69 @@ pub fn uninstall(
     deploy::undeploy(game_dir, &m.deployment, m.is_loader());
     state.remove(game, id)?;
     Ok(m)
+}
+
+/// Libère le stockage d'un mod désinstallé, une fois l'annulation passée :
+/// ses dossiers extraits et, si aucun autre jeu ne l'a, ses archives en
+/// cache. Sans effet s'il a été réinstallé entre-temps.
+pub fn purge(state: &State, paths: &Paths, game: &str, id: &str) -> Result<(), InstallError> {
+    // L'identifiant devient un nom de dossier : un seul segment, rien qui
+    // remonte.
+    let mut parts = Path::new(id).components();
+    if !matches!(
+        (parts.next(), parts.next()),
+        (Some(Component::Normal(_)), None)
+    ) {
+        return Ok(());
+    }
+    if state.get(game, id)?.is_some() {
+        return Ok(());
+    }
+    let dir = paths.store.join(game.replace(':', "-")).join(id);
+    if let Err(error) = fs::remove_dir_all(&dir)
+        && error.kind() != std::io::ErrorKind::NotFound
+    {
+        return Err(error.into());
+    }
+    if !state.installed_anywhere(id)? {
+        let prefix = format!("{id}-");
+        if let Ok(entries) = fs::read_dir(&paths.downloads) {
+            for path in entries.flatten().map(|e| e.path()) {
+                let archive = path
+                    .file_name()
+                    .and_then(|n| n.to_str())
+                    .is_some_and(|n| n.starts_with(&prefix) && n.ends_with(".zip"));
+                if archive {
+                    let _ = fs::remove_file(path);
+                }
+            }
+        }
+        discard_partial_downloads(paths, id);
+    }
+    Ok(())
+}
+
+/// Ne garde, dans le stockage d'un mod, que le dossier de sa version
+/// installée : les anciennes versions et les fichiers Nexus déjà composés
+/// partent (leurs archives restent en cache).
+pub(crate) fn keep_only(store_dir: &Path) {
+    let (Some(parent), Some(keep)) = (store_dir.parent(), store_dir.file_name()) else {
+        return;
+    };
+    let Ok(entries) = fs::read_dir(parent) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        if entry.file_name() == keep {
+            continue;
+        }
+        let path = entry.path();
+        let _ = if path.is_dir() {
+            fs::remove_dir_all(&path)
+        } else {
+            fs::remove_file(&path)
+        };
+    }
 }
 
 /// Annule une désinstallation : remet le mod tel qu'il était.
