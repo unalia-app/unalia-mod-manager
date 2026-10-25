@@ -5,7 +5,7 @@ Thanks for helping. Game profiles, bug reports and fixes are the most useful con
 ## Before you start
 
 - **Open an issue before any new feature or screen.** We agree on the idea first, so your work does not get turned down.
-- Bug fixes and game profiles can go straight to a pull request.
+- Bug fixes and game profiles can go straight to a merge request.
 - Security problems never go in a public issue: see [SECURITY.md](SECURITY.md).
 
 ## Run the project
@@ -52,8 +52,8 @@ A profile is a TOML file in `games/` for a game that is not in the Thunderstore 
 
 - Use the existing components and tokens (`packages/ui`, `DESIGN.md`). No one-off colors or spacings.
 - The interface is in English.
-- **Every pull request that changes the interface includes screenshots or a short video.**
-- The maintainer may touch up the interface of a pull request to keep it consistent. You stay credited with a `Co-authored-by` line.
+- **Every merge request that changes the interface includes screenshots or a short video.**
+- The maintainer may touch up the interface of a merge request to keep it consistent. You stay credited with a `Co-authored-by` line.
 
 ## Commits
 
