@@ -784,6 +784,7 @@ pub fn run() {
             log::info!("Unalia Mod Manager {} started", app.package_info().version);
             app.manage(Catalog::new(&app.path().app_cache_dir()?));
             app.manage(mods::Mods::open(app.handle())?);
+            mods::tidy_storage(app.handle());
             mods::nexus_setup(app.handle());
             tauri::async_runtime::spawn(mods::watch(app.handle().clone()));
             Ok(())
@@ -807,6 +808,7 @@ pub fn run() {
             mods::set_mod_enabled,
             mods::uninstall_mod,
             mods::restore_mod,
+            mods::revert_mod,
             mods::missing_mods,
             mods::put_back_mods,
             mods::forgotten_games,

@@ -17,7 +17,7 @@ use serde::Serialize;
 
 use crate::HttpClient;
 use crate::archive::{self, ArchiveError, Limits};
-use crate::deploy::{self, DeployError, Deployment};
+use crate::deploy::{self, DeployError, Deployment, Source};
 use crate::download::{self, Cancel, DownloadError};
 use crate::games::GameCatalog;
 use crate::loaders::bepinex::BepInEx;
@@ -26,14 +26,23 @@ use crate::loaders::{Loader, PackageKind, Placement};
 use crate::resolver::{self, Installed, PlanStep, ResolveError};
 use crate::sources::{ModSource, SourceError};
 use crate::state::{InstalledMod, State, StateError};
+use crate::store::{Freed, Manifest, Store};
 
 /// Dossiers de Modalia.
 #[derive(Debug, Clone)]
 pub struct Paths {
-    /// Mods extraits, un dossier par jeu, mod et version.
+    /// Stockage des mods (`store::Store`) : chaque fichier une seule fois,
+    /// et un paquet par version extraite.
     pub store: PathBuf,
-    /// Archives téléchargées.
+    /// Archives téléchargées, retirées une fois extraites (débuts de
+    /// téléchargement compris, pour reprendre).
     pub downloads: PathBuf,
+}
+
+impl Paths {
+    pub fn store(&self) -> Store {
+        Store::new(&self.store)
+    }
 }
 
 /// Le jeu dans lequel on installe.
@@ -116,6 +125,8 @@ pub enum InstallError {
     LoaderToggle,
     #[error("this mod isn't installed")]
     NotInstalled,
+    #[error("this version is no longer kept: install it again from the mod's page")]
+    NoPreviousVersion,
     #[error("couldn't access Unalia's storage")]
     Io(#[from] std::io::Error),
     /// Mod Nexus à plusieurs fichiers (variantes, options) : à l'utilisateur
@@ -171,11 +182,12 @@ impl Package {
     }
 }
 
-/// Paquet téléchargé et extrait, avec la destination de ses fichiers.
+/// Paquet téléchargé et rangé, avec la destination de ses fichiers.
 struct Fetched {
     package: Package,
-    store_dir: PathBuf,
-    sha256: String,
+    /// Clé du paquet dans le stockage.
+    key: String,
+    manifest: Manifest,
     placements: Vec<Placement>,
     loader_root: Option<String>,
 }
@@ -208,17 +220,17 @@ impl<S: ModSource> Installer<'_, S> {
         let mut done: Vec<Done> = Vec::new();
         for (index, step) in plan.steps.iter().enumerate() {
             if let Err(error) = self.check_cancel() {
-                rollback(target.game_dir, &done);
+                rollback(&self.paths.store(), target.game_dir, &done);
                 return Err(error);
             }
-            let previous = existing.iter().find(|m| m.id == step.id).cloned();
+            let mut previous = existing.iter().find(|m| m.id == step.id).cloned();
             match self
                 .install_step(
                     target,
                     step,
                     index,
                     total,
-                    previous.as_ref(),
+                    previous.as_mut(),
                     &existing,
                     &mut on_progress,
                 )
@@ -226,12 +238,13 @@ impl<S: ModSource> Installer<'_, S> {
             {
                 Ok(record) => done.push(Done { record, previous }),
                 Err(error) => {
-                    rollback(target.game_dir, &done);
+                    rollback(&self.paths.store(), target.game_dir, &done);
                     return Err(error);
                 }
             }
         }
 
+        let replaced = replaced(&done);
         let records: Vec<InstalledMod> = done
             .into_iter()
             .map(|d| {
@@ -247,9 +260,7 @@ impl<S: ModSource> Installer<'_, S> {
             })
             .collect();
         state.save_all(&records)?;
-        for record in &records {
-            keep_only(Path::new(&record.store_dir));
-        }
+        keep_replaced(state, self.paths, &replaced)?;
         Ok(state.list(target.game)?)
     }
 
@@ -303,30 +314,30 @@ impl<S: ModSource> Installer<'_, S> {
         step: &PlanStep,
         index: usize,
         total: usize,
-        previous: Option<&InstalledMod>,
+        previous: Option<&mut InstalledMod>,
         existing: &[InstalledMod],
         on_progress: &mut impl FnMut(Progress),
     ) -> Result<InstalledMod, InstallError> {
         let package = Package::of_step(step);
-        let (store_dir, sha256) = self
+        let (key, manifest) = self
             .fetch_package(target, &package, index, total, on_progress)
             .await?;
         let loader_root = step.loader.then(|| self.loader_root(&step.id)).flatten();
         let placements = self.loader_for(target.community).place(
             &step.id,
             &package_kind(loader_root.as_deref()),
-            &list_files(&store_dir)?,
+            &files_of(&manifest),
         );
         let fetched = Fetched {
             package,
-            store_dir,
-            sha256,
+            key,
+            manifest,
             placements,
             loader_root,
         };
         // Dernière occasion d'annuler : ensuite, le jeu est modifié.
         self.check_cancel()?;
-        deploy_package(target, fetched, previous, existing)
+        deploy_package(&self.paths.store(), target, fetched, previous, existing)
     }
 
     /// Pour un paquet déjà en cache, aucun accès réseau.
@@ -337,14 +348,27 @@ impl<S: ModSource> Installer<'_, S> {
         index: usize,
         total: usize,
         on_progress: &mut impl FnMut(Progress),
-    ) -> Result<(PathBuf, String), InstallError> {
+    ) -> Result<(String, Manifest), InstallError> {
         self.fetch_package(target, &Package::of_step(step), index, total, on_progress)
             .await
     }
 
-    /// Télécharge et extrait un paquet dans le stockage, sans toucher au
-    /// jeu. Renvoie le dossier extrait et l'empreinte de l'archive. Déjà
-    /// fait pour cette version : instantané.
+    /// Clé d'une version dans le stockage.
+    fn package_key(&self, game: &str, package: &Package) -> String {
+        package_key(game, &package.id, &package.version, package.file_id)
+    }
+
+    /// Cette version est-elle déjà rangée, ou son archive téléchargée ?
+    fn cached(&self, game: &str, id: &str, version: &str, file_id: Option<u32>) -> bool {
+        self.paths
+            .store()
+            .has(&package_key(game, id, version, file_id))
+            || self.archive_path(id, version, file_id).is_file()
+    }
+
+    /// Télécharge un paquet et range ses fichiers dans le stockage, sans
+    /// toucher au jeu. Renvoie sa clé et son contenu. Déjà fait pour cette
+    /// version : instantané.
     async fn fetch_package(
         &self,
         target: &Target<'_>,
@@ -352,12 +376,15 @@ impl<S: ModSource> Installer<'_, S> {
         index: usize,
         total: usize,
         on_progress: &mut impl FnMut(Progress),
-    ) -> Result<(PathBuf, String), InstallError> {
+    ) -> Result<(String, Manifest), InstallError> {
         let name = package.name.clone();
-        let version = match package.file_id {
-            Some(file) => format!("{}-f{file}", path_segment(&package.version)),
-            None => path_segment(&package.version),
-        };
+        let store = self.paths.store();
+        let key = self.package_key(target.game, package);
+        if store.has(&key)
+            && let Ok(manifest) = store.manifest(&key)
+        {
+            return Ok((key, manifest));
+        }
 
         // Télécharger (ou reprendre l'archive déjà en cache). L'extension
         // ne compte pas : le format se lit dans le fichier.
@@ -409,66 +436,68 @@ impl<S: ModSource> Installer<'_, S> {
             name: name.clone(),
         });
 
-        // Extraire dans le stockage (une fois par version).
-        let store_dir = self
-            .paths
-            .store
-            .join(target.game.replace(':', "-"))
-            .join(&package.id)
-            .join(&version);
-        if !store_dir.is_dir() {
-            if let Some(parent) = store_dir.parent() {
-                fs::create_dir_all(parent)?;
-            }
-            // Sur un fil à part : extraire 10 Go prend des minutes, le fil
-            // asynchrone doit rester libre. La progression revient par canal.
-            let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
-            let (from, to) = (archive.clone(), store_dir.clone());
-            let cancel = self.cancel.cloned();
-            let job = tokio::task::spawn_blocking(move || {
-                let mut last = 0;
-                archive::extract_cancellable(
-                    &from,
-                    &to,
-                    Limits::default(),
-                    cancel.as_ref(),
-                    |done, size| {
-                        // Un message par Mo suffit à l'affichage.
-                        if done - last >= 1024 * 1024 || done == size {
-                            last = done;
-                            let _ = tx.send((done, size));
-                        }
-                    },
-                )
+        // Extraire à côté du stockage, puis y ranger chaque fichier. Sur un
+        // fil à part : extraire et hacher 10 Go prend des minutes, le fil
+        // asynchrone doit rester libre. La progression revient par canal.
+        let scratch = store.scratch()?;
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        let (from, to) = (archive.clone(), scratch.join("package"));
+        let cancel = self.cancel.cloned();
+        let (job_store, job_key, job_sha) = (store.clone(), key.clone(), sha256.clone());
+        let job = tokio::task::spawn_blocking(move || {
+            let mut last = 0;
+            archive::extract_cancellable(
+                &from,
+                &to,
+                Limits::default(),
+                cancel.as_ref(),
+                |done, size| {
+                    // Un message par Mo suffit à l'affichage.
+                    if done - last >= 1024 * 1024 || done == size {
+                        last = done;
+                        let _ = tx.send((done, size));
+                    }
+                },
+            )?;
+            // Erreur de rangement (disque plein…) : l'archive, elle, est
+            // bonne et reste en cache.
+            Ok::<_, ArchiveError>(job_store.ingest(&job_key, &to, &job_sha))
+        });
+        while let Some((done, size)) = rx.recv().await {
+            on_progress(Progress::Extracting {
+                index,
+                total,
+                name: name.clone(),
+                done,
+                size,
             });
-            while let Some((done, size)) = rx.recv().await {
-                on_progress(Progress::Extracting {
-                    index,
-                    total,
-                    name: name.clone(),
-                    done,
-                    size,
-                });
-            }
-            let extracted = job
-                .await
-                .map_err(|e| InstallError::Io(std::io::Error::other(e)))?;
-            if let Err(ArchiveError::Cancelled) = extracted {
-                return Err(InstallError::Cancelled);
-            }
-            if let Err(source) = extracted {
-                // Archive illisible : on la retire du cache pour qu'un nouvel
-                // essai la télécharge à nouveau. Le dossier du mod part aussi
-                // s'il n'a servi qu'à cet essai.
+        }
+        let ingested = job
+            .await
+            .map_err(|e| InstallError::Io(std::io::Error::other(e)))?;
+        match ingested {
+            Ok(Ok(manifest)) => {
+                // Tout est rangé : l'archive ferait doublon.
+                let _ = fs::remove_dir_all(&scratch);
                 let _ = fs::remove_file(&archive);
-                if let Some(parent) = store_dir.parent() {
-                    let _ = fs::remove_dir(parent);
-                }
-                return Err(InstallError::Archive { name, source });
+                Ok((key, manifest))
+            }
+            Ok(Err(error)) => {
+                let _ = fs::remove_dir_all(&scratch);
+                Err(error.into())
+            }
+            Err(ArchiveError::Cancelled) => {
+                let _ = fs::remove_dir_all(&scratch);
+                Err(InstallError::Cancelled)
+            }
+            Err(source) => {
+                // Archive illisible : on la retire du cache pour qu'un nouvel
+                // essai la télécharge à nouveau.
+                let _ = fs::remove_dir_all(&scratch);
+                let _ = fs::remove_file(&archive);
+                Err(InstallError::Archive { name, source })
             }
         }
-
-        Ok((store_dir, sha256))
     }
 
     fn check_cancel(&self) -> Result<(), InstallError> {
@@ -510,33 +539,46 @@ impl<S: ModSource> Installer<'_, S> {
     }
 }
 
-/// Pose un paquet extrait dans le jeu et renvoie son enregistrement. Une
-/// mise à jour retire d'abord l'ancienne version ; en cas d'échec, elle est
+/// Pose un paquet rangé dans le jeu et renvoie son enregistrement. Une
+/// mise à jour retire d'abord l'ancienne version, dont les configs
+/// modifiées sont gardées dans `previous` ; en cas d'échec, elle est
 /// remise.
 fn deploy_package(
+    store: &Store,
     target: &Target<'_>,
     fetched: Fetched,
-    previous: Option<&InstalledMod>,
+    mut previous: Option<&mut InstalledMod>,
     existing: &[InstalledMod],
 ) -> Result<InstalledMod, InstallError> {
     let Fetched {
         package,
-        store_dir,
-        sha256,
+        key,
+        manifest,
         placements,
         loader_root,
     } = fetched;
     if let Some((path, other)) = owned_elsewhere(&placements, existing, &package.id) {
         return Err(InstallError::Conflict { path, other });
     }
-    if let Some(old) = previous {
-        deploy::undeploy(target.game_dir, &old.deployment, false);
+    if let Some(old) = previous.as_deref_mut() {
+        take_down(store, target.game_dir, old, false);
     }
-    let deployment = match deploy::deploy(&store_dir, target.game_dir, &placements) {
+    // Même version réinstallée : les configs modifiées restent.
+    let edits = previous
+        .as_deref()
+        .filter(|old| old.package == key)
+        .map(|old| old.edits.clone())
+        .unwrap_or_default();
+    let from = Source {
+        store,
+        manifest: &manifest,
+        edits: &edits,
+    };
+    let deployment = match deploy::deploy(from, target.game_dir, &placements) {
         Ok(d) => d,
         Err(source) => {
-            if let Some(old) = previous {
-                redeploy(target.game_dir, old);
+            if let Some(old) = previous.as_deref() {
+                redeploy(store, target.game_dir, old);
             }
             return Err(InstallError::Deploy {
                 name: package.name,
@@ -554,13 +596,78 @@ fn deploy_package(
         loader_root,
         enabled: true,
         explicit: false,
-        sha256,
+        sha256: manifest.sha256,
         installed_at: now(),
-        store_dir: store_dir.to_string_lossy().into_owned(),
+        package: key,
+        legacy_store_dir: String::new(),
         files: package.file_id.into_iter().collect(),
         deployment,
         placements,
+        edits,
+        previous_versions: Vec::new(),
     })
+}
+
+/// Contenu d'un mod enregistré, depuis le stockage.
+fn manifest_of(store: &Store, m: &InstalledMod) -> Result<Manifest, InstallError> {
+    store.manifest(&m.package).map_err(|_| InstallError::Deploy {
+        name: m.name.clone(),
+        source: DeployError::MissingSource(m.package.clone()),
+    })
+}
+
+/// Pose un mod enregistré, avec ses configs modifiées.
+fn put_up(store: &Store, game_dir: &Path, m: &InstalledMod) -> Result<Deployment, InstallError> {
+    let manifest = manifest_of(store, m)?;
+    let from = Source {
+        store,
+        manifest: &manifest,
+        edits: &m.edits,
+    };
+    deploy::deploy(from, game_dir, &placements_of(m, &manifest)).map_err(|source| {
+        InstallError::Deploy {
+            name: m.name.clone(),
+            source,
+        }
+    })
+}
+
+/// Retire un mod du jeu, en gardant d'abord dans `m.edits` les configs que
+/// le joueur y a modifiées. Renvoie ce qui n'a pas pu être retiré.
+fn take_down(store: &Store, game_dir: &Path, m: &mut InstalledMod, purge_dirs: bool) -> Vec<String> {
+    if let Ok(manifest) = store.manifest(&m.package) {
+        let from = Source {
+            store,
+            manifest: &manifest,
+            edits: &m.edits,
+        };
+        if let Ok(edits) = deploy::capture_edits(from, game_dir, &placements_of(m, &manifest)) {
+            m.edits = edits;
+        }
+    }
+    deploy::undeploy(game_dir, &m.deployment, purge_dirs)
+}
+
+/// Les fichiers d'un paquet, dans l'ordre.
+fn files_of(manifest: &Manifest) -> Vec<String> {
+    manifest.files.keys().cloned().collect()
+}
+
+fn package_key(game: &str, id: &str, version: &str, file_id: Option<u32>) -> String {
+    let version = match file_id {
+        Some(file) => format!("{}-f{file}", path_segment(version)),
+        None => path_segment(version),
+    };
+    format!("{}/{version}", mod_prefix(game, id))
+}
+
+/// Dossier des paquets d'un mod dans le stockage (`<jeu>/<mod>`).
+fn mod_prefix(game: &str, id: &str) -> String {
+    format!("{}/{}", game_segment(game), path_segment(id))
+}
+
+fn game_segment(game: &str) -> String {
+    path_segment(&game.replace(':', "-"))
 }
 
 /// Un fichier que ce paquet veut poser appartient-il déjà à un autre mod ?
@@ -655,22 +762,49 @@ struct Done {
     previous: Option<InstalledMod>,
 }
 
-fn rollback(game_dir: &Path, done: &[Done]) {
+fn rollback(store: &Store, game_dir: &Path, done: &[Done]) {
     for d in done.iter().rev() {
         deploy::undeploy(game_dir, &d.record.deployment, d.record.is_loader());
         if let Some(old) = &d.previous {
-            redeploy(game_dir, old);
+            redeploy(store, game_dir, old);
         }
     }
 }
 
+/// Versions remplacées par une installation (une réinstallation de la même
+/// version ne remplace rien).
+fn replaced(done: &[Done]) -> Vec<InstalledMod> {
+    done.iter()
+        .filter_map(|d| d.previous.clone().filter(|p| p.package != d.record.package))
+        .collect()
+}
+
+/// Garde les versions remplacées pour y revenir, puis fait le ménage du
+/// stockage.
+fn keep_replaced(
+    state: &mut State,
+    paths: &Paths,
+    replaced: &[InstalledMod],
+) -> Result<(), InstallError> {
+    let at = now();
+    for old in replaced.iter().filter(|old| !old.package.is_empty()) {
+        state.push_previous(old, at)?;
+    }
+    collect_garbage(state, paths)?;
+    Ok(())
+}
+
+/// Ménage du stockage : retire ce qu'aucun mod installé, aucune version
+/// gardée ni aucune config modifiée n'utilise.
+pub fn collect_garbage(state: &State, paths: &Paths) -> Result<Freed, InstallError> {
+    let (packages, blobs) = state.referenced()?;
+    Ok(paths.store().gc(&packages, &blobs)?)
+}
+
 /// Remet en place une version déjà enregistrée (annulation d'une mise à
 /// jour ratée). Au mieux : l'utilisateur pourra réinstaller sinon.
-fn redeploy(game_dir: &Path, old: &InstalledMod) {
-    let store = Path::new(&old.store_dir);
-    if let Ok(placements) = placements_of(old) {
-        let _ = deploy::deploy(store, game_dir, &placements);
-    }
+fn redeploy(store: &Store, game_dir: &Path, old: &InstalledMod) {
+    let _ = put_up(store, game_dir, old);
 }
 
 fn package_kind(loader_root: Option<&str>) -> PackageKind {
@@ -684,26 +818,16 @@ fn package_kind(loader_root: Option<&str>) -> PackageKind {
 
 /// Placements enregistrés à l'installation ; pour un mod installé avant
 /// leur ajout, recalcul avec les règles BepInEx d'alors.
-fn placements_of(m: &InstalledMod) -> std::io::Result<Vec<Placement>> {
+fn placements_of(m: &InstalledMod, manifest: &Manifest) -> Vec<Placement> {
     if !m.placements.is_empty() {
-        return Ok(m.placements.clone());
+        return m.placements.clone();
     }
-    placements(&m.id, m.loader_root.as_deref(), Path::new(&m.store_dir))
+    bepinex_placements(&m.id, m.loader_root.as_deref(), &files_of(manifest))
 }
 
-/// Où vont les fichiers d'un paquet extrait, selon les règles BepInEx.
-fn placements(
-    id: &str,
-    loader_root: Option<&str>,
-    store_dir: &Path,
-) -> std::io::Result<Vec<Placement>> {
-    let kind = match loader_root {
-        Some(root) => PackageKind::Loader {
-            root_folder: root.to_owned(),
-        },
-        None => PackageKind::Mod,
-    };
-    Ok(BepInEx.place(id, &kind, &list_files(store_dir)?))
+/// Où vont les fichiers d'un paquet, selon les règles BepInEx.
+fn bepinex_placements(id: &str, loader_root: Option<&str>, files: &[String]) -> Vec<Placement> {
+    BepInEx.place(id, &package_kind(loader_root), files)
 }
 
 fn list_files(dir: &Path) -> std::io::Result<Vec<String>> {
@@ -771,6 +895,7 @@ pub async fn available_updates<S: ModSource>(
 /// reviennent), le stockage les garde.
 pub fn set_enabled(
     state: &mut State,
+    paths: &Paths,
     game: &str,
     game_dir: &Path,
     id: &str,
@@ -783,16 +908,11 @@ pub fn set_enabled(
     if m.enabled == enabled {
         return Ok(m);
     }
+    let store = paths.store();
     if enabled {
-        let store = Path::new(&m.store_dir);
-        m.deployment = deploy::deploy(store, game_dir, &placements_of(&m)?).map_err(|source| {
-            InstallError::Deploy {
-                name: m.name.clone(),
-                source,
-            }
-        })?;
+        m.deployment = put_up(&store, game_dir, &m)?;
     } else {
-        deploy::undeploy(game_dir, &m.deployment, false);
+        take_down(&store, game_dir, &mut m, false);
         m.deployment = Deployment::default();
     }
     m.enabled = enabled;
@@ -806,15 +926,17 @@ pub fn set_enabled(
 /// libéré par `purge`.
 pub fn uninstall(
     state: &mut State,
+    paths: &Paths,
     game: &str,
     game_dir: &Path,
     id: &str,
 ) -> Result<InstalledMod, InstallError> {
-    let m = state.get(game, id)?.ok_or(InstallError::NotInstalled)?;
+    let mut m = state.get(game, id)?.ok_or(InstallError::NotInstalled)?;
     if m.is_loader() && state.list(game)?.iter().any(|other| other.id != m.id) {
         return Err(InstallError::LoaderInUse);
     }
-    deploy::undeploy(game_dir, &m.deployment, m.is_loader());
+    let purge_dirs = m.is_loader();
+    take_down(&paths.store(), game_dir, &mut m, purge_dirs);
     state.remove(game, id)?;
     Ok(m)
 }
@@ -850,17 +972,87 @@ pub fn missing(state: &State, game: &str, game_dir: &Path) -> Result<Vec<Install
 
 /// Repose un mod depuis le stockage, sans rien retélécharger. Ce qui
 /// restait de lui dans le jeu est retiré d'abord.
-pub fn put_back(state: &mut State, game: &str, game_dir: &Path, id: &str) -> Result<InstalledMod, InstallError> {
+pub fn put_back(
+    state: &mut State,
+    paths: &Paths,
+    game: &str,
+    game_dir: &Path,
+    id: &str,
+) -> Result<InstalledMod, InstallError> {
     let mut m = state.get(game, id)?.ok_or(InstallError::NotInstalled)?;
-    deploy::undeploy(game_dir, &m.deployment, false);
-    m.deployment = deploy::deploy(Path::new(&m.store_dir), game_dir, &placements_of(&m)?).map_err(|source| {
-        InstallError::Deploy {
-            name: m.name.clone(),
-            source,
-        }
-    })?;
+    let store = paths.store();
+    take_down(&store, game_dir, &mut m, false);
+    m.deployment = put_up(&store, game_dir, &m)?;
     state.save(&m)?;
     Ok(m)
+}
+
+/// Revient à une version précédente d'un mod, gardée dans le stockage :
+/// rien n'est retéléchargé. La version quittée devient à son tour une
+/// version précédente. Un mod désactivé change de version sans revenir
+/// dans le jeu.
+pub fn revert(
+    state: &mut State,
+    paths: &Paths,
+    game: &str,
+    game_dir: &Path,
+    id: &str,
+    package: &str,
+) -> Result<InstalledMod, InstallError> {
+    let mut current = state.get(game, id)?.ok_or(InstallError::NotInstalled)?;
+    let old = current
+        .previous_versions
+        .iter()
+        .find(|v| v.package == package)
+        .cloned()
+        .ok_or(InstallError::NoPreviousVersion)?;
+    let store = paths.store();
+    let manifest = store
+        .manifest(&old.package)
+        .map_err(|_| InstallError::NoPreviousVersion)?;
+    let mut next = InstalledMod {
+        version: old.version,
+        sha256: old.sha256,
+        installed_at: old.installed_at,
+        files: old.files,
+        placements: if old.placements.is_empty() {
+            bepinex_placements(id, current.loader_root.as_deref(), &files_of(&manifest))
+        } else {
+            old.placements
+        },
+        edits: old.edits,
+        package: old.package,
+        legacy_store_dir: String::new(),
+        deployment: Deployment::default(),
+        previous_versions: Vec::new(),
+        ..current.clone()
+    };
+    if current.enabled {
+        let existing = state.list(game)?;
+        if let Some((path, other)) = owned_elsewhere(&next.placements, &existing, id) {
+            return Err(InstallError::Conflict { path, other });
+        }
+        take_down(&store, game_dir, &mut current, false);
+        let from = Source {
+            store: &store,
+            manifest: &manifest,
+            edits: &next.edits,
+        };
+        next.deployment = match deploy::deploy(from, game_dir, &next.placements) {
+            Ok(d) => d,
+            Err(source) => {
+                redeploy(&store, game_dir, &current);
+                return Err(InstallError::Deploy {
+                    name: current.name,
+                    source,
+                });
+            }
+        };
+    }
+    state.remove_previous(game, id, &next.package)?;
+    state.save(&next)?;
+    state.push_previous(&current, now())?;
+    state.get(game, id)?.ok_or(InstallError::NotInstalled)
 }
 
 /// Oublie un jeu désinstallé : ses mods quittent la base et leur stockage
@@ -872,36 +1064,22 @@ pub fn forget(state: &mut State, paths: &Paths, game: &str) -> Result<usize, Ins
         purge(state, paths, game, &m.id)?;
     }
     state.set_pending(game, &[])?;
-    let _ = fs::remove_dir(store_of(paths, game));
+    state.forget_game_previous(game)?;
+    paths.store().remove_packages(&game_segment(game))?;
+    collect_garbage(state, paths)?;
     Ok(mods.len())
 }
 
-/// Place qu'occupe le stockage d'un jeu, en octets.
+/// Place qu'occupe le stockage d'un jeu, en octets : chaque fichier compté
+/// une fois, versions précédentes comprises.
 pub fn storage_size(paths: &Paths, game: &str) -> u64 {
-    fn walk(dir: &Path) -> u64 {
-        let Ok(entries) = fs::read_dir(dir) else {
-            return 0;
-        };
-        entries
-            .flatten()
-            .map(|entry| match entry.file_type() {
-                Ok(kind) if kind.is_dir() => walk(&entry.path()),
-                Ok(_) => entry.metadata().map_or(0, |m| m.len()),
-                Err(_) => 0,
-            })
-            .sum()
-    }
-    walk(&store_of(paths, game))
-}
-
-fn store_of(paths: &Paths, game: &str) -> PathBuf {
-    paths.store.join(game.replace(':', "-"))
+    paths.store().size_of(&game_segment(game))
 }
 
 /// Libère le stockage d'un mod désinstallé, une fois l'annulation passée :
-/// ses dossiers extraits et, si aucun autre jeu ne l'a, ses archives en
-/// cache. Sans effet s'il a été réinstallé entre-temps.
-pub fn purge(state: &State, paths: &Paths, game: &str, id: &str) -> Result<(), InstallError> {
+/// ses paquets, ses versions précédentes et, si aucun autre jeu ne l'a, ses
+/// archives en cache. Sans effet s'il a été réinstallé entre-temps.
+pub fn purge(state: &mut State, paths: &Paths, game: &str, id: &str) -> Result<(), InstallError> {
     // L'identifiant devient un nom de dossier : un seul segment, rien qui
     // remonte.
     let mut parts = Path::new(id).components();
@@ -914,12 +1092,9 @@ pub fn purge(state: &State, paths: &Paths, game: &str, id: &str) -> Result<(), I
     if state.get(game, id)?.is_some() {
         return Ok(());
     }
-    let dir = store_of(paths, game).join(id);
-    if let Err(error) = fs::remove_dir_all(&dir)
-        && error.kind() != std::io::ErrorKind::NotFound
-    {
-        return Err(error.into());
-    }
+    state.forget_previous(game, id)?;
+    paths.store().remove_packages(&mod_prefix(game, id))?;
+    collect_garbage(state, paths)?;
     if !state.installed_anywhere(id)? {
         let prefix = format!("{id}-");
         if let Ok(entries) = fs::read_dir(&paths.downloads) {
@@ -938,47 +1113,89 @@ pub fn purge(state: &State, paths: &Paths, game: &str, id: &str) -> Result<(), I
     Ok(())
 }
 
-/// Ne garde, dans le stockage d'un mod, que le dossier de sa version
-/// installée : les anciennes versions et les fichiers Nexus déjà composés
-/// partent (leurs archives restent en cache).
-pub(crate) fn keep_only(store_dir: &Path) {
-    let (Some(parent), Some(keep)) = (store_dir.parent(), store_dir.file_name()) else {
-        return;
-    };
-    let Ok(entries) = fs::read_dir(parent) else {
-        return;
-    };
-    for entry in entries.flatten() {
-        if entry.file_name() == keep {
-            continue;
-        }
-        let path = entry.path();
-        let _ = if path.is_dir() {
-            fs::remove_dir_all(&path)
-        } else {
-            fs::remove_file(&path)
-        };
-    }
-}
-
 /// Annule une désinstallation : remet le mod tel qu'il était.
 pub fn restore(
     state: &mut State,
+    paths: &Paths,
     game_dir: &Path,
     removed: InstalledMod,
 ) -> Result<InstalledMod, InstallError> {
     let mut m = removed;
     if m.enabled {
-        let store = Path::new(&m.store_dir);
-        m.deployment = deploy::deploy(store, game_dir, &placements_of(&m)?).map_err(|source| {
-            InstallError::Deploy {
-                name: m.name.clone(),
-                source,
-            }
-        })?;
+        m.deployment = put_up(&paths.store(), game_dir, &m)?;
     }
     state.save(&m)?;
     Ok(m)
+}
+
+/// Dossiers du stockage d'aujourd'hui ; tout autre dossier vient de
+/// l'ancien stockage (un dossier par jeu, mod et version).
+const STORE_DIRS: &[&str] = &["files", "packages", "tmp"];
+
+/// Réglage : le stockage est au format des paquets.
+const STORE_FORMAT: &str = "store_format";
+
+/// Passe les mods de l'ancien stockage (un dossier extrait par version) au
+/// stockage par empreinte, sans rien retélécharger, puis retire les restes
+/// de l'ancien : versions oubliées, mods qui ne sont plus installés, et
+/// archives en cache, devenues des doublons. Renvoie le nombre de mods
+/// migrés. Sans effet la deuxième fois.
+pub fn migrate_store(state: &mut State, paths: &Paths) -> Result<usize, InstallError> {
+    if state.setting(STORE_FORMAT)?.as_deref() == Some("2") {
+        return Ok(0);
+    }
+    let store = paths.store();
+    let mut migrated = 0;
+    let mut lost = 0;
+    for game in state.games()? {
+        for mut m in state.list(&game)? {
+            if !m.package.is_empty() {
+                continue;
+            }
+            let dir = PathBuf::from(&m.legacy_store_dir);
+            if !dir.is_dir() {
+                lost += 1;
+                continue;
+            }
+            // Calculés avant de vider le dossier : ils en lisent la liste.
+            if m.placements.is_empty() {
+                m.placements = bepinex_placements(&m.id, m.loader_root.as_deref(), &list_files(&dir)?);
+            }
+            let version = dir
+                .file_name()
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_default();
+            let key = format!("{}/{}", mod_prefix(&game, &m.id), path_segment(&version));
+            store.ingest(&key, &dir, &m.sha256)?;
+            m.package = key;
+            m.legacy_store_dir = String::new();
+            state.save(&m)?;
+            migrated += 1;
+        }
+    }
+    // Un mod sans dossier (stockage effacé à la main) garde ses archives :
+    // de quoi le réinstaller sans tout retélécharger.
+    if lost == 0 {
+        if let Ok(entries) = fs::read_dir(&paths.store) {
+            for entry in entries.flatten() {
+                let name = entry.file_name();
+                let legacy = !STORE_DIRS.iter().any(|d| name == *d);
+                if legacy && entry.file_type().is_ok_and(|t| t.is_dir()) {
+                    let _ = fs::remove_dir_all(entry.path());
+                }
+            }
+        }
+        if let Ok(entries) = fs::read_dir(&paths.downloads) {
+            for path in entries.flatten().map(|e| e.path()) {
+                if path.extension().is_some_and(|e| e == "zip") {
+                    let _ = fs::remove_file(path);
+                }
+            }
+        }
+        state.set_setting(STORE_FORMAT, Some("2"))?;
+    }
+    collect_garbage(state, paths)?;
+    Ok(migrated)
 }
 
 fn now() -> i64 {

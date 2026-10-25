@@ -17,8 +17,7 @@
 //! suivante) reçoit les fichiers et les releases publiés avant cette date.
 
 use std::collections::{HashMap, HashSet};
-use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 /// Dépôts GitHub essayés au plus pour un mod (chacun coûte une requête).
 const MIRROR_CANDIDATES: usize = 4;
@@ -26,8 +25,8 @@ const MIRROR_CANDIDATES: usize = 4;
 use serde::Serialize;
 
 use super::{
-    Done, Fetched, InstallError, Installer, Package, Progress, Target, deploy_package, list_files,
-    rollback,
+    Done, Fetched, InstallError, Installer, Package, Progress, Target, deploy_package, files_of,
+    keep_replaced, replaced, rollback,
 };
 use crate::download;
 use crate::games::GameProfile;
@@ -39,6 +38,7 @@ use crate::sources::SourceError;
 use crate::sources::github::{GitHub, repos_in};
 use crate::sources::nexus::{ModFile, ModInfo, Nexus, NxmLink, Requirement, mod_key};
 use crate::state::{InstalledMod, State};
+use crate::store::Manifest;
 
 /// Ce que l'utilisateur a demandé.
 #[derive(Debug, Clone, Copy)]
@@ -160,9 +160,10 @@ impl Installer<'_, Nexus> {
                     // comme Vortex. Plusieurs contourneraient le bridage.
                     let mut connections = link.map(|_| 1);
                     let archive = self.archive_path(&id, &version, Some(*file_id));
+                    let cached = self.cached(target.game, &id, &version, Some(*file_id));
                     // Déjà téléchargé (fichier précédent d'un choix
                     // multiple, compte gratuit) : rien à redemander.
-                    let url = if archive.is_file() {
+                    let url = if cached {
                         String::new()
                     } else {
                         match self
@@ -220,7 +221,7 @@ impl Installer<'_, Nexus> {
                         sha256: None,
                         file_id: Some(*file_id),
                     };
-                    if !single && !archive.is_file() {
+                    if !single && !cached {
                         self.fetch_package(target, &part, index, ids.len(), &mut on_progress)
                             .await?;
                     }
@@ -282,6 +283,7 @@ impl Installer<'_, Nexus> {
         // profonds), le mod demandé en dernier.
         let requested = mod_key(mod_id);
         let total = fetched.len();
+        let store = self.paths.store();
         let mut done: Vec<Done> = Vec::new();
         for (index, item) in fetched.into_iter().rev().enumerate() {
             on_progress(Progress::Installing {
@@ -289,15 +291,16 @@ impl Installer<'_, Nexus> {
                 total,
                 name: item.package.name.clone(),
             });
-            let previous = existing.iter().find(|m| m.id == item.package.id).cloned();
-            match deploy_package(target, item, previous.as_ref(), &existing) {
+            let mut previous = existing.iter().find(|m| m.id == item.package.id).cloned();
+            match deploy_package(&store, target, item, previous.as_mut(), &existing) {
                 Ok(record) => done.push(Done { record, previous }),
                 Err(error) => {
-                    rollback(target.game_dir, &done);
+                    rollback(&store, target.game_dir, &done);
                     return Err(error);
                 }
             }
         }
+        let replaced = replaced(&done);
         let records: Vec<InstalledMod> = done
             .into_iter()
             .map(|d| {
@@ -313,9 +316,7 @@ impl Installer<'_, Nexus> {
             })
             .collect();
         state.save_all(&records)?;
-        for record in &records {
-            super::keep_only(Path::new(&record.store_dir));
-        }
+        keep_replaced(state, self.paths, &replaced)?;
 
         let mods = state.list(target.game)?;
         let missing = requirements
@@ -464,44 +465,35 @@ impl Installer<'_, Nexus> {
         }
         let total = parts.len();
         let mut placed = Vec::new();
-        let mut sha256 = String::new();
         for (index, part) in parts.iter().enumerate() {
-            let (dir, sum) = self
+            let (_, manifest) = self
                 .fetch_package(target, part, index, total, on_progress)
                 .await?;
             let placements =
                 adapter
                     .loader()
-                    .place(&part.name, &PackageKind::Mod, &list_files(&dir)?);
+                    .place(&part.name, &PackageKind::Mod, &files_of(&manifest));
             if placements.is_empty() {
                 return Err(InstallError::NothingToInstall(part.name.clone()));
             }
-            if index == 0 {
-                sha256 = sum;
-            }
-            placed.push((dir, placements));
+            placed.push((manifest, placements));
         }
         let ids: Vec<String> = parts
             .iter()
             .filter_map(|p| p.file_id)
             .map(|f| f.to_string())
             .collect();
-        let parent = placed[0]
-            .0
-            .parent()
-            .map(Path::to_path_buf)
-            .unwrap_or_default();
-        let combined = parent.join(format!(
-            "{}+{}",
+        let key = format!(
+            "{}/{}+{}",
+            super::mod_prefix(target.game, &whole.id),
             super::path_segment(&whole.version),
             ids.join("+")
-        ));
-        // Déjà composé (même version, mêmes fichiers) : réutilisé tel quel.
-        if !combined.is_dir() {
-            combine(&placed, &combined)?;
-        }
-        // Le dossier composé reproduit le jeu : chaque fichier à sa place.
-        let placements = list_files(&combined)?
+        );
+        // Le paquet composé reproduit le jeu : chaque fichier à sa place.
+        // Aucun fichier copié : il reprend le contenu des paquets.
+        let manifest = combine(&placed);
+        self.paths.store().save_manifest(&key, &manifest)?;
+        let placements = files_of(&manifest)
             .into_iter()
             .map(|path| Placement {
                 source: path.clone(),
@@ -510,8 +502,8 @@ impl Installer<'_, Nexus> {
             .collect();
         Ok(Fetched {
             package: whole,
-            store_dir: combined,
-            sha256,
+            key,
+            manifest,
             placements,
             loader_root: None,
         })
@@ -526,56 +518,50 @@ impl Installer<'_, Nexus> {
         total: usize,
         on_progress: &mut impl FnMut(Progress),
     ) -> Result<Fetched, InstallError> {
-        let (store_dir, sha256) = self
+        let (key, manifest) = self
             .fetch_package(target, &package, index, total, on_progress)
             .await?;
         let placements =
             adapter
                 .loader()
-                .place(&package.name, &PackageKind::Mod, &list_files(&store_dir)?);
+                .place(&package.name, &PackageKind::Mod, &files_of(&manifest));
         if placements.is_empty() {
             return Err(InstallError::NothingToInstall(package.name));
         }
         Ok(Fetched {
             package,
-            store_dir,
-            sha256,
+            key,
+            manifest,
             placements,
             loader_root: None,
         })
     }
 }
 
-/// Compose les fichiers d'un mod dans `into`, rangés comme dans le jeu : un
-/// fichier posé plus tard remplace celui du même chemin (sans tenir compte
-/// de la casse, comme Windows). Liens physiques quand c'est possible.
-fn combine(parts: &[(PathBuf, Vec<Placement>)], into: &Path) -> std::io::Result<()> {
-    let mut chosen: Vec<(String, PathBuf)> = Vec::new();
-    let mut seen: HashMap<String, usize> = HashMap::new();
-    for (dir, placements) in parts {
+/// Compose les fichiers d'un mod, rangés comme dans le jeu : un fichier posé
+/// plus tard remplace celui du même chemin (sans tenir compte de la casse,
+/// comme Windows). L'empreinte est celle de la première archive.
+fn combine(parts: &[(Manifest, Vec<Placement>)]) -> Manifest {
+    let mut combined = Manifest {
+        sha256: parts
+            .first()
+            .map(|(m, _)| m.sha256.clone())
+            .unwrap_or_default(),
+        files: Default::default(),
+    };
+    let mut seen: HashMap<String, String> = HashMap::new();
+    for (manifest, placements) in parts {
         for p in placements {
-            let source = dir.join(&p.source);
-            match seen.get(&p.target.to_ascii_lowercase()) {
-                Some(&at) => chosen[at] = (p.target.clone(), source),
-                None => {
-                    seen.insert(p.target.to_ascii_lowercase(), chosen.len());
-                    chosen.push((p.target.clone(), source));
-                }
+            let Some(entry) = manifest.files.get(&p.source) else {
+                continue;
+            };
+            if let Some(earlier) = seen.insert(p.target.to_ascii_lowercase(), p.target.clone()) {
+                combined.files.remove(&earlier);
             }
+            combined.files.insert(p.target.clone(), entry.clone());
         }
     }
-    let tmp = into.with_extension("partial");
-    let _ = fs::remove_dir_all(&tmp);
-    for (target, source) in &chosen {
-        let dest = tmp.join(target);
-        if let Some(parent) = dest.parent() {
-            fs::create_dir_all(parent)?;
-        }
-        if fs::hard_link(source, &dest).is_err() {
-            fs::copy(source, &dest)?;
-        }
-    }
-    fs::rename(&tmp, into)
+    combined
 }
 
 /// Release d'un framework : celle de son tag s'il en a un, sinon la

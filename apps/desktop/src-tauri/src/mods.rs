@@ -909,7 +909,7 @@ pub async fn set_mod_enabled(
         return Ok(Outcome::Queued);
     }
     let mut state = mods.state.lock().await;
-    let value = installer::set_enabled(&mut state, &game_key(app_id), &game.dir, &mod_id, enabled)
+    let value = installer::set_enabled(&mut state, &mods.paths, &game_key(app_id), &game.dir, &mod_id, enabled)
         .map_err(|e| error_message(&e))?;
     Ok(Outcome::Done { value })
 }
@@ -929,7 +929,7 @@ pub async fn uninstall_mod(
     }
     let key = game_key(app_id);
     let mut state = mods.state.lock().await;
-    let removed = installer::uninstall(&mut state, &key, &game.dir, &mod_id)
+    let removed = installer::uninstall(&mut state, &mods.paths, &key, &game.dir, &mod_id)
         .map_err(|e| error_message(&e))?;
     let at = Instant::now();
     mods.removed
@@ -954,8 +954,8 @@ async fn purge_later(app: AppHandle, key: String, mod_id: String, at: Instant) {
         removed.remove(&entry);
     }
     let _fetching = mods.fetching.lock().await;
-    let state = mods.state.lock().await;
-    if let Err(error) = installer::purge(&state, &mods.paths, &entry.0, &entry.1) {
+    let mut state = mods.state.lock().await;
+    if let Err(error) = installer::purge(&mut state, &mods.paths, &entry.0, &entry.1) {
         log::warn!("couldn't free the storage of {}: {error}", entry.1);
     }
 }
@@ -980,7 +980,51 @@ pub async fn restore_mod(
         .remove(&(key, mod_id))
         .ok_or("This mod can't be restored anymore.")?;
     let mut state = mods.state.lock().await;
-    installer::restore(&mut state, &game.dir, removed).map_err(|e| error_message(&e))
+    installer::restore(&mut state, &mods.paths, &game.dir, removed).map_err(|e| error_message(&e))
+}
+
+/// Revient à une version précédente d'un mod (`package`, l'une de ses
+/// `previousVersions`), sans rien retélécharger.
+#[tauri::command]
+pub async fn revert_mod(
+    library: State<'_, Library>,
+    mods: State<'_, Mods>,
+    app_id: u32,
+    mod_id: String,
+    package: String,
+) -> Result<InstalledMod, String> {
+    let game = library.game(app_id).ok_or(UNKNOWN_GAME)?;
+    if mods.is_running(&game) {
+        return Err("Close the game first, then try again.".into());
+    }
+    let mut state = mods.state.lock().await;
+    installer::revert(&mut state, &mods.paths, &game_key(app_id), &game.dir, &mod_id, &package)
+        .map_err(|e| error_message(&e))
+}
+
+/// Au démarrage : passe l'ancien stockage au stockage par empreinte (une
+/// seule fois, sans rien retélécharger), puis fait le ménage. Les commandes
+/// qui touchent aux mods attendent la fin.
+pub fn tidy_storage(app: &AppHandle) {
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let mods = app.state::<Mods>();
+        let _fetching = mods.fetching.lock().await;
+        let mut state = mods.state.lock().await;
+        let result = tokio::task::block_in_place(|| {
+            let migrated = installer::migrate_store(&mut state, &mods.paths)?;
+            let freed = installer::collect_garbage(&state, &mods.paths)?;
+            Ok::<_, installer::InstallError>((migrated, freed))
+        });
+        match result {
+            Ok((migrated, freed)) => log::info!(
+                "storage: {migrated} mods moved to packages, {} files freed ({})",
+                freed.files,
+                mod_engine::download::human_size(freed.bytes)
+            ),
+            Err(error) => log::warn!("couldn't tidy the storage: {error}"),
+        }
+    });
 }
 
 // ------------------------------------------------- jeu réinstallé ou parti
@@ -1015,7 +1059,7 @@ pub async fn put_back_mods(
     let mut state = mods.state.lock().await;
     let missing = installer::missing(&state, &key, &game.dir).map_err(|e| error_message(&e))?;
     for m in &missing {
-        installer::put_back(&mut state, &key, &game.dir, &m.id).map_err(|e| error_message(&e))?;
+        installer::put_back(&mut state, &mods.paths, &key, &game.dir, &m.id).map_err(|e| error_message(&e))?;
     }
     log::info!("put back {} mods in {key}", missing.len());
     Ok(missing.len())
@@ -1283,7 +1327,7 @@ async fn apply_pending(app: &AppHandle, app_id: u32, game: &KnownGame) {
                 .map_err(|e| error_message(&e)),
             PendingOp::SetEnabled { mod_id, enabled } => {
                 let mut state = mods.state.lock().await;
-                installer::set_enabled(&mut state, &key, &game.dir, mod_id, *enabled)
+                installer::set_enabled(&mut state, &mods.paths, &key, &game.dir, mod_id, *enabled)
                     .map(|_| ())
                     .map_err(|e| error_message(&e))
             }
@@ -1291,8 +1335,8 @@ async fn apply_pending(app: &AppHandle, app_id: u32, game: &KnownGame) {
                 // Pas de « Undo » pour un retrait appliqué à la fermeture du
                 // jeu : le stockage est libéré tout de suite.
                 let mut state = mods.state.lock().await;
-                installer::uninstall(&mut state, &key, &game.dir, mod_id)
-                    .and_then(|_| installer::purge(&state, &mods.paths, &key, mod_id))
+                installer::uninstall(&mut state, &mods.paths, &key, &game.dir, mod_id)
+                    .and_then(|_| installer::purge(&mut state, &mods.paths, &key, mod_id))
                     .map_err(|e| error_message(&e))
             }
         };

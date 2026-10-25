@@ -4,6 +4,15 @@ All notable changes to Unalia Mod Manager. The format follows [Keep a Changelog]
 
 ## [Unreleased]
 
+### Added
+
+- Go back to one of the last 3 versions of a mod in one click from My mods, without downloading it again.
+
+### Changed
+
+- Mod files are stored once, by their fingerprint: versions, mods and games share identical files, and downloaded archives are removed once unpacked. Existing mods move to the new storage on first launch, along with a clean-up of leftovers.
+- Config files are copied into the game instead of linked, and your changes to them are kept when a mod is turned off and on.
+
 ## [0.1.0] - not released yet
 
 First public beta, Windows only.

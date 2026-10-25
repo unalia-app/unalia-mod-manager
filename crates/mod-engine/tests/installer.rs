@@ -322,25 +322,25 @@ async fn toggling_and_uninstalling_everything_restores_the_game() {
     let knight_dll = plugin(&w.game, KNIGHT, "Knight.dll");
 
     // Désactiver / réactiver (SPEC §9, scénario 2).
-    let off = installer::set_enabled(&mut w.state, game, &w.game, KNIGHT, false).unwrap();
+    let off = installer::set_enabled(&mut w.state, &w.paths, game, &w.game, KNIGHT, false).unwrap();
     assert!(!off.enabled && !knight_dll.exists());
-    installer::set_enabled(&mut w.state, game, &w.game, KNIGHT, true).unwrap();
+    installer::set_enabled(&mut w.state, &w.paths, game, &w.game, KNIGHT, true).unwrap();
     assert!(knight_dll.is_file());
     assert!(matches!(
-        installer::set_enabled(&mut w.state, game, &w.game, LOADER, false),
+        installer::set_enabled(&mut w.state, &w.paths, game, &w.game, LOADER, false),
         Err(InstallError::LoaderToggle)
     ));
 
     // Le loader part en dernier.
     assert!(matches!(
-        installer::uninstall(&mut w.state, game, &w.game, LOADER),
+        installer::uninstall(&mut w.state, &w.paths, game, &w.game, LOADER),
         Err(InstallError::LoaderInUse)
     ));
 
     // Désinstaller, puis annuler (toast « Undo »).
-    let removed = installer::uninstall(&mut w.state, game, &w.game, KNIGHT).unwrap();
+    let removed = installer::uninstall(&mut w.state, &w.paths, game, &w.game, KNIGHT).unwrap();
     assert!(!knight_dll.exists());
-    installer::restore(&mut w.state, &w.game, removed).unwrap();
+    installer::restore(&mut w.state, &w.paths, &w.game, removed).unwrap();
     assert!(knight_dll.is_file());
     assert!(w.state.get(game, KNIGHT).unwrap().unwrap().explicit);
 
@@ -349,7 +349,7 @@ async fn toggling_and_uninstalling_everything_restores_the_game() {
 
     // Tout retirer (SPEC §9, scénario 4) : retour exact à l'état d'origine.
     for id in [KNIGHT, PREPATCHER, LOADER] {
-        installer::uninstall(&mut w.state, game, &w.game, id).unwrap();
+        installer::uninstall(&mut w.state, &w.paths, game, &w.game, id).unwrap();
     }
     assert_eq!(snapshot(&w.game), original);
     assert!(w.state.list(game).unwrap().is_empty());
@@ -362,7 +362,7 @@ async fn removing_every_mod_at_once_restores_the_game() {
     let original = snapshot(&w.game);
     w.install(KNIGHT).await.0.unwrap();
     let game = "steam:1030300";
-    installer::set_enabled(&mut w.state, game, &w.game, KNIGHT, false).unwrap();
+    installer::set_enabled(&mut w.state, &w.paths, game, &w.game, KNIGHT, false).unwrap();
     fs::write(w.game.join("BepInEx/LogOutput.log"), "log").unwrap();
     assert_eq!(w.state.games().unwrap(), [game]);
 
@@ -392,7 +392,7 @@ async fn mods_wiped_by_a_game_reinstall_are_put_back_from_storage() {
     assert_eq!(missing[0], LOADER);
 
     for id in &missing {
-        installer::put_back(&mut w.state, game, &w.game, id).unwrap();
+        installer::put_back(&mut w.state, &w.paths, game, &w.game, id).unwrap();
     }
     assert!(installer::missing(&w.state, game, &w.game).unwrap().is_empty());
     assert_eq!(snapshot(&w.game), installed);
@@ -409,8 +409,9 @@ async fn forgetting_an_uninstalled_game_frees_its_storage() {
     fs::remove_dir_all(&w.game).unwrap();
     assert_eq!(installer::forget(&mut w.state, &w.paths, game).unwrap(), 3);
     assert!(w.state.games().unwrap().is_empty());
-    assert!(!w.paths.store.join("steam-1030300").exists());
+    assert!(!w.paths.store.join("packages/steam-1030300").exists());
     assert_eq!(installer::storage_size(&w.paths, game), 0);
+    assert!(names(&w.paths.store.join("files")).is_empty());
     assert!(!names(&w.paths.downloads).iter().any(|n| n.ends_with(".zip")));
 }
 
@@ -508,14 +509,37 @@ async fn updates_are_detected_then_applied_in_one_click() {
     assert!(plugin(&w.game, KNIGHT, "KnightV7.dll").is_file());
     assert_eq!(after.len(), 3, "les dépendances à jour ne bougent pas");
 
-    // Seule la version installée reste dans le stockage.
-    let store = w.paths.store.join("steam-1030300").join(KNIGHT);
-    let versions: Vec<_> = fs::read_dir(&store)
-        .unwrap()
-        .map(|e| e.unwrap().file_name())
-        .collect();
-    assert_eq!(versions, ["0.7.0"]);
+    // L'ancienne version reste dans le stockage, pour y revenir.
+    let store = w.paths.store.join("packages/steam-1030300").join(KNIGHT);
+    assert_eq!(names(&store), ["0.6.7.json", "0.7.0.json"]);
+    let previous: Vec<_> = knight.previous_versions.iter().map(|v| v.version.as_str()).collect();
+    assert_eq!(previous, ["0.6.7"]);
+    assert!(names(&w.paths.downloads).is_empty(), "archives rangées puis retirées");
+
+    // Retour à la 0.6.7 : rien n'est retéléchargé (le serveur ne sert plus
+    // rien), la 0.7.0 devient la version précédente.
+    w.server.reset();
+    let old = &knight.previous_versions[0].package;
+    let back = installer::revert(&mut w.state, &w.paths, game, &w.game, KNIGHT, old).unwrap();
+    assert_eq!(back.version, "0.6.7");
+    assert!(back.explicit);
+    assert!(old_dll.is_file());
+    assert!(!plugin(&w.game, KNIGHT, "KnightV7.dll").exists());
+    let previous: Vec<_> = back.previous_versions.iter().map(|v| v.version.as_str()).collect();
+    assert_eq!(previous, ["0.7.0"]);
+
+    // Et retour à la 0.7.0.
+    let new = &back.previous_versions[0].package;
+    let again = installer::revert(&mut w.state, &w.paths, game, &w.game, KNIGHT, new).unwrap();
+    assert_eq!(again.version, "0.7.0");
+    assert!(plugin(&w.game, KNIGHT, "KnightV7.dll").is_file());
+    assert!(!old_dll.exists());
+    assert!(matches!(
+        installer::revert(&mut w.state, &w.paths, game, &w.game, KNIGHT, "steam-1030300/nope/1"),
+        Err(InstallError::NoPreviousVersion)
+    ));
 }
+
 
 fn names(dir: &Path) -> Vec<String> {
     let mut names: Vec<String> = fs::read_dir(dir)
@@ -535,45 +559,58 @@ async fn purging_a_removed_mod_frees_its_storage_but_not_the_others() {
     w.publish_knight().await;
     w.install(KNIGHT).await.0.unwrap();
     let game = "steam:1030300";
-    let store = w.paths.store.join("steam-1030300");
-    assert!(names(&w.paths.downloads).contains(&format!("{KNIGHT}-0.6.7.zip")));
+    let store = w.paths.store.join("packages/steam-1030300");
+    assert!(names(&w.paths.downloads).is_empty(), "archives rangées puis retirées");
 
     // Réinstallé avant la purge (« Undo ») : rien ne part.
-    let removed = installer::uninstall(&mut w.state, game, &w.game, KNIGHT).unwrap();
-    installer::restore(&mut w.state, &w.game, removed).unwrap();
-    installer::purge(&w.state, &w.paths, game, KNIGHT).unwrap();
+    let removed = installer::uninstall(&mut w.state, &w.paths, game, &w.game, KNIGHT).unwrap();
+    installer::restore(&mut w.state, &w.paths, &w.game, removed).unwrap();
+    installer::purge(&mut w.state, &w.paths, game, KNIGHT).unwrap();
     assert!(store.join(KNIGHT).is_dir());
 
-    installer::uninstall(&mut w.state, game, &w.game, KNIGHT).unwrap();
-    installer::purge(&w.state, &w.paths, game, KNIGHT).unwrap();
+    installer::uninstall(&mut w.state, &w.paths, game, &w.game, KNIGHT).unwrap();
+    installer::purge(&mut w.state, &w.paths, game, KNIGHT).unwrap();
     assert!(!store.join(KNIGHT).exists());
     assert_eq!(names(&store), [LOADER, PREPATCHER]);
-    assert_eq!(
-        names(&w.paths.downloads),
-        [
-            format!("{LOADER}-1.0.3.zip"),
-            format!("{PREPATCHER}-1.4.0.zip")
-        ]
-    );
+    // Les fichiers des autres mods restent.
+    let stored = w.paths.store();
+    for m in w.state.list(game).unwrap() {
+        for entry in stored.manifest(&m.package).unwrap().files.values() {
+            assert!(stored.blob(&entry.hash).is_file());
+        }
+    }
 
     // Un identifiant qui sortirait du stockage est ignoré.
-    installer::purge(&w.state, &w.paths, game, "..").unwrap();
+    installer::purge(&mut w.state, &w.paths, game, "..").unwrap();
     assert!(w.paths.store.is_dir());
 }
 
 #[tokio::test]
-async fn archives_stay_cached_while_another_game_has_the_mod() {
+async fn files_stay_stored_while_another_game_uses_them() {
     let mut w = World::new().await;
     w.publish_knight().await;
     w.install(KNIGHT).await.0.unwrap();
+    // Le même mod dans un autre jeu : son paquet a le même contenu.
     let mut other = w.state.get("steam:1030300", KNIGHT).unwrap().unwrap();
+    let packages = w.paths.store.join("packages");
+    let theirs = format!("steam-42/{KNIGHT}/0.6.7");
+    fs::create_dir_all(packages.join(format!("steam-42/{KNIGHT}"))).unwrap();
+    fs::copy(
+        packages.join(format!("{}.json", other.package)),
+        packages.join(format!("{theirs}.json")),
+    )
+    .unwrap();
     other.game = "steam:42".into();
+    other.package = theirs.clone();
     w.state.save(&other).unwrap();
 
-    installer::uninstall(&mut w.state, "steam:1030300", &w.game, KNIGHT).unwrap();
-    installer::purge(&w.state, &w.paths, "steam:1030300", KNIGHT).unwrap();
-    assert!(!w.paths.store.join("steam-1030300").join(KNIGHT).exists());
-    assert!(names(&w.paths.downloads).contains(&format!("{KNIGHT}-0.6.7.zip")));
+    installer::uninstall(&mut w.state, &w.paths, "steam:1030300", &w.game, KNIGHT).unwrap();
+    installer::purge(&mut w.state, &w.paths, "steam:1030300", KNIGHT).unwrap();
+    assert!(!packages.join("steam-1030300").join(KNIGHT).exists());
+    let store = w.paths.store();
+    for entry in store.manifest(&theirs).unwrap().files.values() {
+        assert!(store.blob(&entry.hash).is_file());
+    }
 }
 
 #[tokio::test]
@@ -689,14 +726,14 @@ async fn melonloader_games_install_through_their_rules() {
 
     // Désactiver puis réactiver suit les placements enregistrés.
     let game = "steam:1030300";
-    installer::set_enabled(&mut w.state, game, &w.game, COOL, false).unwrap();
+    installer::set_enabled(&mut w.state, &w.paths, game, &w.game, COOL, false).unwrap();
     assert!(!w.game.join("Mods/CoolMod.dll").exists());
-    installer::set_enabled(&mut w.state, game, &w.game, COOL, true).unwrap();
+    installer::set_enabled(&mut w.state, &w.paths, game, &w.game, COOL, true).unwrap();
     assert!(w.game.join("Mods/CoolMod.dll").is_file());
 
     // Tout retirer rend le jeu intact.
-    installer::uninstall(&mut w.state, game, &w.game, COOL).unwrap();
-    installer::uninstall(&mut w.state, game, &w.game, MELON).unwrap();
+    installer::uninstall(&mut w.state, &w.paths, game, &w.game, COOL).unwrap();
+    installer::uninstall(&mut w.state, &w.paths, game, &w.game, MELON).unwrap();
     assert_eq!(snapshot(&w.game), before);
 }
 
@@ -771,4 +808,128 @@ fn partial_downloads_are_found_per_mod_and_discarded() {
     assert!(paths.downloads.join("nexus-4198-1.27.4.zip").is_file());
     assert!(paths.downloads.join("nexus-41980-1.0.part").is_file());
     assert_eq!(partial_downloads(&paths, "Author-Mod").len(), 1);
+}
+
+#[tokio::test]
+async fn the_old_storage_moves_to_packages_without_downloading() {
+    use mod_engine::deploy::Deployment;
+    use mod_engine::loaders::Placement;
+    use mod_engine::state::InstalledMod;
+    let mut w = World::new().await;
+    let game = "steam:1030300";
+
+    // Ancien stockage : un dossier extrait par version, lié dans le jeu.
+    let legacy = w.paths.store.join("steam-1030300").join(KNIGHT).join("0.6.7");
+    fs::create_dir_all(legacy.join("plugins")).unwrap();
+    fs::write(legacy.join("plugins/Knight.dll"), "knight").unwrap();
+    fs::write(legacy.join("plugins/knight.cfg"), "speed = 1").unwrap();
+    let placements = vec![
+        Placement {
+            source: "plugins/Knight.dll".into(),
+            target: format!("BepInEx/plugins/{KNIGHT}/Knight.dll"),
+        },
+        Placement {
+            source: "plugins/knight.cfg".into(),
+            target: "BepInEx/config/knight.cfg".into(),
+        },
+    ];
+    let plugins = w.game.join("BepInEx/plugins").join(KNIGHT);
+    fs::create_dir_all(&plugins).unwrap();
+    fs::create_dir_all(w.game.join("BepInEx/config")).unwrap();
+    fs::hard_link(legacy.join("plugins/Knight.dll"), plugins.join("Knight.dll")).unwrap();
+    let config = w.game.join("BepInEx/config/knight.cfg");
+    fs::hard_link(legacy.join("plugins/knight.cfg"), &config).unwrap();
+    w.state
+        .save(&InstalledMod {
+            game: game.into(),
+            id: KNIGHT.into(),
+            name: "Knight".into(),
+            author: "shownyoung".into(),
+            version: "0.6.7".into(),
+            icon_url: None,
+            loader_root: None,
+            enabled: true,
+            explicit: true,
+            sha256: "abc".into(),
+            installed_at: 0,
+            package: String::new(),
+            legacy_store_dir: legacy.to_string_lossy().into_owned(),
+            files: Vec::new(),
+            deployment: Deployment {
+                files: placements.iter().map(|p| p.target.clone()).collect(),
+                created_dirs: Vec::new(),
+                copied: 0,
+            },
+            placements,
+            edits: BTreeMap::new(),
+            previous_versions: Vec::new(),
+        })
+        .unwrap();
+    // Restes : une vieille version, un mod retiré, une archive en cache.
+    let old = w.paths.store.join("steam-1030300").join(KNIGHT).join("0.6.0");
+    fs::create_dir_all(&old).unwrap();
+    fs::write(old.join("Knight.dll"), "old").unwrap();
+    fs::create_dir_all(w.paths.store.join("steam-1030300/Gone-Mod/1.0")).unwrap();
+    fs::create_dir_all(&w.paths.downloads).unwrap();
+    fs::write(w.paths.downloads.join(format!("{KNIGHT}-0.6.7.zip")), "zip").unwrap();
+    fs::write(w.paths.downloads.join(format!("{KNIGHT}-0.7.0.part")), "part").unwrap();
+
+    assert_eq!(installer::migrate_store(&mut w.state, &w.paths).unwrap(), 1);
+    let knight = w.state.get(game, KNIGHT).unwrap().unwrap();
+    assert_eq!(knight.package, format!("steam-1030300/{KNIGHT}/0.6.7"));
+    assert!(knight.legacy_store_dir.is_empty());
+    assert_eq!(names(&w.paths.store), ["files", "packages"]);
+    assert_eq!(names(&w.paths.downloads), [format!("{KNIGHT}-0.7.0.part")]);
+    assert_eq!(fs::read_to_string(plugins.join("Knight.dll")).unwrap(), "knight");
+
+    // La config liée ne partage plus son contenu avec le stockage.
+    fs::write(&config, "speed = 9").unwrap();
+    let store = w.paths.store();
+    let manifest = store.manifest(&knight.package).unwrap();
+    let stored = store.blob(&manifest.files["plugins/knight.cfg"].hash);
+    assert_eq!(fs::read_to_string(stored).unwrap(), "speed = 1");
+
+    // Le mod se désactive et revient depuis le stockage, config comprise.
+    installer::set_enabled(&mut w.state, &w.paths, game, &w.game, KNIGHT, false).unwrap();
+    assert!(!plugins.join("Knight.dll").exists());
+    installer::set_enabled(&mut w.state, &w.paths, game, &w.game, KNIGHT, true).unwrap();
+    assert_eq!(fs::read_to_string(plugins.join("Knight.dll")).unwrap(), "knight");
+    assert_eq!(fs::read_to_string(&config).unwrap(), "speed = 9");
+
+    // Une seule fois.
+    assert_eq!(installer::migrate_store(&mut w.state, &w.paths).unwrap(), 0);
+}
+
+#[test]
+fn identical_files_are_stored_once_and_freed_when_unused() {
+    use mod_engine::store::Store;
+    use std::collections::HashSet;
+    let tmp = tempfile::tempdir().unwrap();
+    let store = Store::new(tmp.path());
+    let pack = |key: &str, files: &[(&str, &str)]| {
+        let dir = store.scratch().unwrap();
+        for (path, content) in files {
+            fs::write(dir.join(path), content).unwrap();
+        }
+        store.ingest(key, &dir, "").unwrap()
+    };
+    let one = pack("g/a/1", &[("same.dll", "same"), ("a.dll", "one")]);
+    let two = pack("g/a/2", &[("same.dll", "same"), ("a.dll", "two")]);
+    assert_eq!(one.files["same.dll"], two.files["same.dll"]);
+    let hashes = [&one.files["same.dll"], &one.files["a.dll"], &two.files["a.dll"]].map(|e| e.hash.clone());
+    let blobs = |store: &Store| hashes.iter().filter(|h| store.blob(h).is_file()).count();
+    assert_eq!(blobs(&store), 3, "le fichier commun n'est rangé qu'une fois");
+    assert_eq!(store.size_of("g"), 4 + 3 + 3);
+
+    // Paquets récents gardés même sans mod qui les utilise (délai de grâce).
+    let keep: HashSet<String> = HashSet::from(["g/a/2".to_owned()]);
+    store.gc(&keep, &HashSet::new()).unwrap();
+    assert_eq!(blobs(&store), 3);
+
+    // Retiré : ses fichiers propres partent, le fichier commun reste.
+    fs::remove_file(tmp.path().join("packages/g/a/1.json")).unwrap();
+    let freed = store.gc(&keep, &HashSet::new()).unwrap();
+    assert_eq!(freed.files, 1);
+    assert_eq!(blobs(&store), 2);
+    assert!(store.has("g/a/2") && !store.has("g/a/1"));
 }

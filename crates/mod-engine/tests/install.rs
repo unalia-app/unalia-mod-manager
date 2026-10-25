@@ -7,11 +7,12 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use mod_engine::archive::{self, ArchiveError, Limits};
-use mod_engine::deploy::{self, DeployError};
+use mod_engine::deploy::{self, DeployError, Source};
 use mod_engine::loaders::bepinex::BepInEx;
 use mod_engine::loaders::{Loader, PackageKind, Placement};
 use mod_engine::resolver::{Installed, ResolveError, resolve};
 use mod_engine::sources::{Dependency, Mod, ModVersion, SourceError};
+use mod_engine::store::{Manifest, Store};
 use zip::write::SimpleFileOptions;
 
 // ---------------------------------------------------------------- outils
@@ -119,12 +120,64 @@ fn mod_zip(dir: &Path) -> PathBuf {
     )
 }
 
+/// Paquet rangé dans un stockage de test.
+struct Stored {
+    store: Store,
+    manifest: Manifest,
+    edits: BTreeMap<String, String>,
+}
+
+impl Stored {
+    fn source(&self) -> Source<'_> {
+        Source {
+            store: &self.store,
+            manifest: &self.manifest,
+            edits: &self.edits,
+        }
+    }
+
+    /// Contenu rangé d'un fichier du paquet.
+    fn blob(&self, path: &str) -> PathBuf {
+        self.store.blob(&self.manifest.files[path].hash)
+    }
+}
+
 /// Extrait un paquet dans le stockage et calcule où vont ses fichiers.
-fn stage(store: &Path, archive: &Path, id: &str, kind: &PackageKind) -> (PathBuf, Vec<Placement>) {
-    let dir = store.join(id);
+fn stage(store: &Path, archive: &Path, id: &str, kind: &PackageKind) -> (Stored, Vec<Placement>) {
+    let store = Store::new(store);
+    let dir = store.scratch().unwrap().join(id);
     let files = archive::extract(archive, &dir, Limits::default()).unwrap();
+    let manifest = store.ingest(id, &dir, "").unwrap();
+    assert_eq!(manifest.files.keys().cloned().collect::<Vec<_>>(), sorted(files.clone()));
     let placements = BepInEx.place(id, kind, &files);
-    (dir, placements)
+    let stored = Stored {
+        store,
+        manifest,
+        edits: BTreeMap::new(),
+    };
+    (stored, placements)
+}
+
+/// Range des fichiers donnés tels quels dans le stockage.
+fn pack(store: &Path, key: &str, files: &[(&str, &str)]) -> Stored {
+    let store = Store::new(store);
+    let dir = store.scratch().unwrap();
+    for (path, content) in files {
+        let file = dir.join(path);
+        fs::create_dir_all(file.parent().unwrap()).unwrap();
+        fs::write(file, content).unwrap();
+    }
+    let manifest = store.ingest(key, &dir, "").unwrap();
+    Stored {
+        store,
+        manifest,
+        edits: BTreeMap::new(),
+    }
+}
+
+fn sorted(mut files: Vec<String>) -> Vec<String> {
+    files.sort();
+    files
 }
 
 fn loader_kind() -> PackageKind {
@@ -343,14 +396,14 @@ fn install_then_uninstall_restores_the_game_exactly() {
         "silksong_modding-BepInExPack_Silksong",
         &loader_kind(),
     );
-    let loader = deploy::deploy(&loader_dir, &game, &loader_files).unwrap();
+    let loader = deploy::deploy(loader_dir.source(), &game, &loader_files).unwrap();
     let (mod_dir, mod_files) = stage(
         &store,
         &mod_zip(tmp.path()),
         "Bigfootmech-Silksong_Skip_Intro",
         &PackageKind::Mod,
     );
-    let skip_intro = deploy::deploy(&mod_dir, &game, &mod_files).unwrap();
+    let skip_intro = deploy::deploy(mod_dir.source(), &game, &mod_files).unwrap();
 
     assert!(game.join("winhttp.dll").is_file());
     assert!(game.join("BepInEx/core/BepInEx.dll").is_file());
@@ -375,7 +428,7 @@ fn install_then_uninstall_restores_the_game_exactly() {
     #[cfg(unix)]
     {
         use std::os::unix::fs::MetadataExt;
-        let stored = fs::metadata(mod_dir.join("plugins/SkipIntro.dll")).unwrap();
+        let stored = fs::metadata(mod_dir.blob("plugins/SkipIntro.dll")).unwrap();
         let linked = fs::metadata(
             game.join("BepInEx/plugins/Bigfootmech-Silksong_Skip_Intro/SkipIntro.dll"),
         )
@@ -414,7 +467,7 @@ fn never_overwrites_an_existing_file() {
         "silksong_modding-BepInExPack_Silksong",
         &loader_kind(),
     );
-    let err = deploy::deploy(&dir, &game, &files).unwrap_err();
+    let err = deploy::deploy(dir.source(), &game, &files).unwrap_err();
 
     assert!(
         matches!(&err, DeployError::Conflict(f) if f == "winhttp.dll"),
@@ -427,10 +480,7 @@ fn never_overwrites_an_existing_file() {
 #[test]
 fn a_failure_halfway_rolls_everything_back() {
     let (tmp, game) = game();
-    let store = tmp.path().join("store");
-    fs::create_dir_all(&store).unwrap();
-    fs::write(store.join("a.txt"), "a").unwrap();
-    fs::write(store.join("b.txt"), "b").unwrap();
+    let store = pack(&tmp.path().join("store"), "test", &[("a.txt", "a"), ("b.txt", "b")]);
     let before = snapshot(&game);
 
     // Le 2e fichier vise un dossier qui est en fait un fichier du jeu :
@@ -445,7 +495,7 @@ fn a_failure_halfway_rolls_everything_back() {
             target: "UnityPlayer.dll/b.txt".into(),
         },
     ];
-    let err = deploy::deploy(&store, &game, &placements).unwrap_err();
+    let err = deploy::deploy(store.source(), &game, &placements).unwrap_err();
 
     assert!(matches!(err, DeployError::Io { .. }), "{err:?}");
     assert_eq!(
@@ -467,24 +517,62 @@ fn disable_and_enable_are_undeploy_and_redeploy() {
     );
     let plugin = game.join("BepInEx/plugins/Bigfootmech-Silksong_Skip_Intro/SkipIntro.dll");
 
-    let deployed = deploy::deploy(&dir, &game, &files).unwrap();
+    let deployed = deploy::deploy(dir.source(), &game, &files).unwrap();
     deploy::undeploy(&game, &deployed, false);
     assert!(!plugin.exists());
     assert!(
-        dir.join("plugins/SkipIntro.dll").is_file(),
+        dir.blob("plugins/SkipIntro.dll").is_file(),
         "le stockage garde le mod désactivé"
     );
 
-    deploy::deploy(&dir, &game, &files).unwrap();
+    deploy::deploy(dir.source(), &game, &files).unwrap();
     assert!(plugin.is_file());
+}
+
+#[test]
+fn configs_are_copied_and_their_edits_kept() {
+    let (tmp, game) = game();
+    let (mut stored, files) = stage(
+        &tmp.path().join("store"),
+        &mod_zip(tmp.path()),
+        "Bigfootmech-Silksong_Skip_Intro",
+        &PackageKind::Mod,
+    );
+    let config = game.join("BepInEx/config/com.bigfootmech.skipintro.cfg");
+    let plugin = game.join("BepInEx/plugins/Bigfootmech-Silksong_Skip_Intro/SkipIntro.dll");
+    let original = stored.blob("config/com.bigfootmech.skipintro.cfg");
+
+    let deployed = deploy::deploy(stored.source(), &game, &files).unwrap();
+    // BepInEx réécrit sa config sur place : le contenu rangé ne bouge pas.
+    fs::write(&config, "enabled = false").unwrap();
+    assert_eq!(fs::read_to_string(&original).unwrap(), "enabled = true");
+    // Le reste est lié : le jeu voit le contenu rangé lui-même.
+    fs::write(&plugin, "patched").unwrap();
+    assert_eq!(
+        fs::read_to_string(stored.blob("plugins/SkipIntro.dll")).unwrap(),
+        "patched"
+    );
+
+    // Désactivé puis réactivé : la config modifiée revient.
+    stored.edits = deploy::capture_edits(stored.source(), &game, &files).unwrap();
+    assert_eq!(stored.edits.len(), 1);
+    deploy::undeploy(&game, &deployed, false);
+    assert!(!config.exists());
+    deploy::deploy(stored.source(), &game, &files).unwrap();
+    assert_eq!(fs::read_to_string(&config).unwrap(), "enabled = false");
+
+    // Remise à l'original : plus rien à garder.
+    fs::write(&config, "enabled = true").unwrap();
+    let edits = deploy::capture_edits(stored.source(), &game, &files).unwrap();
+    assert!(edits.is_empty());
 }
 
 #[test]
 fn refuses_unsafe_targets() {
     let (tmp, game) = game();
-    fs::write(tmp.path().join("x"), "x").unwrap();
+    let stored = pack(&tmp.path().join("store"), "test", &[("x", "x")]);
     let err = deploy::deploy(
-        tmp.path(),
+        stored.source(),
         &game,
         &[Placement {
             source: "x".into(),

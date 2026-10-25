@@ -229,9 +229,20 @@ export type InstalledMod = {
 	explicit: boolean;
 	sha256: string;
 	installedAt: number;
-	storeDir: string;
+	/** Paquet du stockage qui contient ses fichiers. */
+	package: string;
 	/** Fichiers Nexus installés, dans l'ordre où ils sont posés. */
 	files: number[];
+	/** Versions d'avant, gardées pour y revenir sans rien retélécharger, la plus récente en tête. */
+	previousVersions: PreviousVersion[];
+};
+
+export type PreviousVersion = {
+	version: string;
+	package: string;
+	/** Secondes Unix. */
+	installedAt: number;
+	replacedAt: number;
 };
 
 /** Un fichier d'un mod Nexus (variante, option…). */
@@ -308,6 +319,11 @@ export function uninstallMod(appId: number, modId: string): Promise<Outcome<null
 
 export function restoreMod(appId: number, modId: string): Promise<InstalledMod> {
 	return invoke("restore_mod", { appId, modId });
+}
+
+/** Revient à une version précédente (`package`, l'une des `previousVersions`). */
+export function revertMod(appId: number, modId: string, pkg: string): Promise<InstalledMod> {
+	return invoke("revert_mod", { appId, modId, package: pkg });
 }
 
 /** Mods actifs effacés du dossier du jeu (jeu réinstallé, fichiers vérifiés) : leurs noms. */

@@ -337,10 +337,13 @@ fn store_paths_can_be_rebased_after_a_move() {
         explicit: true,
         sha256: String::new(),
         installed_at: 0,
-        store_dir: dir.into(),
+        package: String::new(),
+        legacy_store_dir: dir.into(),
         files: Vec::new(),
         deployment: Deployment::default(),
         placements: Vec::new(),
+        edits: Default::default(),
+        previous_versions: Vec::new(),
     };
     state
         .save_all(&[
@@ -353,11 +356,11 @@ fn store_paths_can_be_rebased_after_a_move() {
         .rebase_store(Path::new("C:/Roaming/mods"), Path::new("C:/Local/mods"))
         .unwrap();
     assert_eq!(
-        state.get("steam:1", "a-One").unwrap().unwrap().store_dir,
+        state.get("steam:1", "a-One").unwrap().unwrap().legacy_store_dir,
         "C:/Local/mods/steam-1/a-One/1.0.0"
     );
     assert_eq!(
-        state.get("steam:1", "b-Two").unwrap().unwrap().store_dir,
+        state.get("steam:1", "b-Two").unwrap().unwrap().legacy_store_dir,
         "D:/Elsewhere/b-Two",
         "un chemin hors de l'ancien stockage ne bouge pas"
     );

@@ -15,6 +15,7 @@ pub mod loaders;
 pub mod resolver;
 pub mod sources;
 pub mod state;
+pub mod store;
 
 pub use reqwest::Client as HttpClient;
 

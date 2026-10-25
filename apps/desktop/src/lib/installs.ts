@@ -13,6 +13,7 @@ import {
 	onInstallProgress,
 	onNexusInstalled,
 	restoreMod,
+	revertMod,
 	setModEnabled,
 	splitError,
 	uninstallMod,
@@ -296,6 +297,14 @@ export async function remove(appId: number, modId: string): Promise<"done" | "qu
 export async function restore(appId: number, modId: string) {
 	await restoreMod(appId, modId);
 	await refreshInstalled(appId);
+}
+
+/** Revient à une version précédente du mod, gardée dans le stockage. */
+export async function revert(appId: number, modId: string, pkg: string): Promise<InstalledMod> {
+	const reverted = await revertMod(appId, modId, pkg);
+	await refreshInstalled(appId);
+	recheckUpdates(appId);
+	return reverted;
 }
 
 /** Mods installés du jeu (`undefined` pendant le premier chargement). */

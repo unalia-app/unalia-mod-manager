@@ -4,7 +4,9 @@
 //! liens physiques (hard links) : instantané, sans doublon sur le disque,
 //! et sans droits administrateur sous Windows (contrairement aux liens
 //! symboliques). Si le stockage et le jeu sont sur deux disques différents,
-//! un lien physique est impossible : on copie.
+//! un lien physique est impossible : on copie. Les fichiers de config sont
+//! toujours copiés (`store::is_editable`) ; ce que le joueur y change est
+//! gardé (`capture_edits`).
 //!
 //! Garanties (SPEC §2.2) :
 //! - aucun fichier existant du jeu n'est jamais écrasé ni modifié : un
@@ -14,7 +16,7 @@
 //! - chaque fichier posé et chaque dossier créé est enregistré, pour que le
 //!   retrait rende le dossier exactement dans son état d'origine.
 
-use std::collections::HashSet;
+use std::collections::{BTreeMap, HashSet};
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
@@ -22,7 +24,28 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 use crate::archive::safe_relative_path;
+use crate::download::sha256_file;
 use crate::loaders::Placement;
+use crate::store::{Manifest, Store, is_editable};
+
+/// D'où viennent les fichiers d'un mod : son paquet dans le stockage, et
+/// les configs que le joueur a modifiées (destination → contenu rangé).
+#[derive(Debug, Clone, Copy)]
+pub struct Source<'a> {
+    pub store: &'a Store,
+    pub manifest: &'a Manifest,
+    pub edits: &'a BTreeMap<String, String>,
+}
+
+impl Source<'_> {
+    /// Contenu à poser en `target` : la config modifiée, sinon le fichier
+    /// `source` du paquet.
+    fn hash(&self, source: &str, target: &str) -> Option<(&str, u64)> {
+        let entry = self.manifest.files.get(source)?;
+        let hash = self.edits.get(target).unwrap_or(&entry.hash);
+        Some((hash, entry.size))
+    }
+}
 
 /// Ce qu'un déploiement a posé dans le jeu (chemins relatifs au jeu).
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -50,9 +73,9 @@ pub enum DeployError {
     },
 }
 
-/// Pose les fichiers de `store_dir` dans `game_dir` selon `placements`.
+/// Pose les fichiers de `from` dans `game_dir` selon `placements`.
 pub fn deploy(
-    store_dir: &Path,
+    from: Source<'_>,
     game_dir: &Path,
     placements: &[Placement],
 ) -> Result<Deployment, DeployError> {
@@ -62,24 +85,26 @@ pub fn deploy(
     for p in placements {
         let target = safe_relative_path(&p.target)
             .ok_or_else(|| DeployError::UnsafeTarget(p.target.clone()))?;
-        let source = safe_relative_path(&p.source)
-            .ok_or_else(|| DeployError::UnsafeTarget(p.source.clone()))?;
-        let source = store_dir.join(source);
+        let (hash, size) = from
+            .hash(&p.source, &p.target)
+            .ok_or_else(|| DeployError::MissingSource(p.source.clone()))?;
+        let source = from.store.blob(hash);
         if !source.is_file() {
             return Err(DeployError::MissingSource(p.source.clone()));
         }
+        let copy = is_editable(&p.target, size);
         // Deux fichiers du paquet vers la même destination : on refuse
         // plutôt que d'en perdre un.
         if !targets.insert(target.clone()) || exists(&game_dir.join(&target)) {
             return Err(DeployError::Conflict(p.target.clone()));
         }
-        plan.push((source, target, &p.target));
+        plan.push((source, target, &p.target, copy));
     }
 
     // 2. Écrire, en retirant tout au premier échec.
     let mut done = Deployment::default();
-    for (source, target, name) in plan {
-        if let Err(error) = place(game_dir, &source, &target, &mut done) {
+    for (source, target, name, copy) in plan {
+        if let Err(error) = place(game_dir, &source, &target, copy, &mut done) {
             undeploy(game_dir, &done, false);
             return Err(DeployError::Io {
                 path: name.clone(),
@@ -91,7 +116,13 @@ pub fn deploy(
     Ok(done)
 }
 
-fn place(game_dir: &Path, source: &Path, target: &Path, done: &mut Deployment) -> io::Result<()> {
+fn place(
+    game_dir: &Path,
+    source: &Path,
+    target: &Path,
+    copy: bool,
+    done: &mut Deployment,
+) -> io::Result<()> {
     let mut dir = PathBuf::new();
     for part in target.parent().into_iter().flat_map(Path::components) {
         dir.push(part);
@@ -102,11 +133,47 @@ fn place(game_dir: &Path, source: &Path, target: &Path, done: &mut Deployment) -
         }
     }
     let destination = game_dir.join(target);
-    if fs::hard_link(source, &destination).is_err() {
+    if copy {
+        fs::copy(source, &destination)?;
+    } else if fs::hard_link(source, &destination).is_err() {
         fs::copy(source, &destination)?;
         done.copied += 1;
     }
     Ok(())
+}
+
+/// Configs du mod que le joueur a modifiées dans le jeu, à garder pour la
+/// prochaine fois qu'elles sont posées : à appeler avant de les retirer.
+/// Une config revenue à l'original n'est plus une modification ; une
+/// config absente garde sa dernière version connue.
+pub fn capture_edits(
+    from: Source<'_>,
+    game_dir: &Path,
+    placements: &[Placement],
+) -> io::Result<BTreeMap<String, String>> {
+    let mut edits = from.edits.clone();
+    for p in placements {
+        let Some(entry) = from.manifest.files.get(&p.source) else {
+            continue;
+        };
+        if !is_editable(&p.target, entry.size) {
+            continue;
+        }
+        let Some(target) = safe_relative_path(&p.target) else {
+            continue;
+        };
+        let path = game_dir.join(target);
+        let Ok(hash) = sha256_file(&path) else {
+            continue;
+        };
+        if hash == entry.hash {
+            edits.remove(&p.target);
+        } else if edits.get(&p.target) != Some(&hash) {
+            let kept = from.store.add_copy(&path)?;
+            edits.insert(p.target.clone(), kept.hash);
+        }
+    }
+    Ok(edits)
 }
 
 /// Retire ce que `deployment` a posé. Les dossiers créés sont retirés s'ils

@@ -1,6 +1,18 @@
 "use client";
 
-import { Badge, Button, Skeleton, Spinner, Switch, cn } from "@modalia/ui";
+import {
+	Badge,
+	Button,
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+	Skeleton,
+	Spinner,
+	Switch,
+	cn,
+} from "@modalia/ui";
 import { ArrowUp, ExternalLink, Layers, Package, Pause, Play, Trash2, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
@@ -20,6 +32,7 @@ import {
 	overallProgress,
 	remove,
 	restore,
+	revert,
 	toggle,
 	updateAll,
 	useActiveInstall,
@@ -86,7 +99,8 @@ export function MyMods({ appId, onDiscover }: { appId: number; onDiscover: () =>
 					</Button>
 				)}
 			</div>
-			<ul className="overflow-hidden rounded-xl border border-line bg-surface">
+			{/* Sans overflow-hidden : le menu de version d'une ligne déborde sur les suivantes. */}
+			<ul className="rounded-xl border border-line bg-surface">
 				{mods.map((m, i) => (
 					<li key={m.id} className={cn(i > 0 && "border-t border-line")}>
 						<ModRow mod={m} appId={appId} />
@@ -245,6 +259,9 @@ function ModRow({ mod: m, appId }: { mod: InstalledMod; appId: number }) {
 	const update = useModUpdate(appId, m.id);
 	const active = useActiveInstall(appId, m.id);
 	const updating = active?.status === "queued" || active?.status === "running";
+	// Versions d'avant gardées : la version devient un menu pour y revenir.
+	const picker = m.previousVersions.length > 0 && !pending && !updating;
+	const [menuOpen, setMenuOpen] = useState(false);
 
 	const fail = (error: unknown) => {
 		const { message, details } = splitError(error);
@@ -275,7 +292,14 @@ function ModRow({ mod: m, appId }: { mod: InstalledMod; appId: number }) {
 	};
 
 	return (
-		<div className={cn("flex animate-row-in items-center gap-3 px-4 py-3", removing && "opacity-60")}>
+		<div
+			className={cn(
+				"flex animate-row-in items-center gap-3 px-4 py-3",
+				removing && "opacity-60",
+				// Menu de version ouvert : peint au-dessus des lignes suivantes.
+				menuOpen && "relative z-20",
+			)}
+		>
 			<button
 				type="button"
 				onClick={() => router.push(modHref(appId, m.id))}
@@ -287,7 +311,7 @@ function ModRow({ mod: m, appId }: { mod: InstalledMod; appId: number }) {
 						<span className={cn("truncate text-sm font-medium", enabled && !removing ? "text-fg" : "text-fg-subtle")}>
 							{m.name}
 						</span>
-						<span className="shrink-0 font-mono text-[11px] text-fg-muted">{versionLabel(m.version)}</span>
+						{!picker && <span className="shrink-0 font-mono text-[11px] text-fg-muted">{versionLabel(m.version)}</span>}
 						{loader && <Badge tone="accent">Loader</Badge>}
 						{!loader && !m.explicit && <Badge>Dependency</Badge>}
 						{pending && <Badge tone="accent">Pending</Badge>}
@@ -299,6 +323,7 @@ function ModRow({ mod: m, appId }: { mod: InstalledMod; appId: number }) {
 				</span>
 			</button>
 
+			{picker && <VersionPicker mod={m} appId={appId} onError={fail} onOpenChange={setMenuOpen} />}
 			{updating ? (
 				<span className="flex items-center gap-1.5 text-[11px] text-accent">
 					<Spinner className="size-3" />
@@ -330,6 +355,57 @@ function ModRow({ mod: m, appId }: { mod: InstalledMod; appId: number }) {
 				<Trash2 className="size-4" />
 			</button>
 		</div>
+	);
+}
+
+/**
+ * Version installée, et celles d'avant pour y revenir en un clic : elles sont
+ * gardées dans le stockage, rien n'est retéléchargé.
+ */
+function VersionPicker({
+	mod: m,
+	appId,
+	onError,
+	onOpenChange,
+}: {
+	mod: InstalledMod;
+	appId: number;
+	onError: (error: unknown) => void;
+	onOpenChange: (open: boolean) => void;
+}) {
+	const [busy, setBusy] = useState(false);
+	const choose = (pkg: string) => {
+		if (pkg === m.package) return;
+		setBusy(true);
+		revert(appId, m.id, pkg)
+			.then((reverted) => {
+				toast({
+					title: `${m.name} is back to ${versionLabel(reverted.version)}`,
+					// La version quittée est devenue une version précédente.
+					action: { label: "Undo", onClick: () => void revert(appId, m.id, m.package).catch(onError) },
+				});
+			}, onError)
+			.finally(() => setBusy(false));
+	};
+
+	return (
+		<span title="Go back to a version you had before, without downloading it again">
+			<Select value={m.package} onValueChange={choose} onOpenChange={onOpenChange} disabled={busy} className="w-28">
+				<SelectTrigger className="h-7 px-2.5 py-0 font-mono text-[11px]">
+					<SelectValue />
+				</SelectTrigger>
+				<SelectContent>
+					<SelectItem value={m.package} className="font-mono text-xs">
+						{versionLabel(m.version)}
+					</SelectItem>
+					{m.previousVersions.map((v) => (
+						<SelectItem key={v.package} value={v.package} className="font-mono text-xs">
+							{versionLabel(v.version)}
+						</SelectItem>
+					))}
+				</SelectContent>
+			</Select>
+		</span>
 	);
 }
 
