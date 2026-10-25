@@ -51,12 +51,13 @@ export function ContinueCard({ game }: { game: SteamGame }) {
 				className="absolute inset-0 -z-10 bg-[radial-gradient(60%_90%_at_0%_100%,color-mix(in_oklch,var(--color-accent)_22%,transparent),transparent)]"
 			/>
 
+			<p className="absolute top-7 left-7 flex items-center gap-2 text-xs font-medium tracking-wide text-fg-subtle uppercase">
+				<Sparkles className="size-3.5 text-accent" />
+				Continue modding
+			</p>
+
 			<div className="flex w-full flex-wrap items-end justify-between gap-6 p-7">
 				<div className="min-w-0">
-					<p className="mb-3 flex items-center gap-2 text-xs font-medium tracking-wide text-fg-subtle uppercase">
-						<Sparkles className="size-3.5 text-accent" />
-						Continue modding
-					</p>
 					{logo !== "missing" && (
 						<img
 							src={artworkUrl(game.appId, "logo")}
