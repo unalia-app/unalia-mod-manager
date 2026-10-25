@@ -5,8 +5,9 @@ import { useSyncExternalStore } from "react";
 
 /**
  * Taille de l'interface : comme le zoom d'un navigateur, tout grandit
- * (textes, marges, icônes). `auto` part de la définition de l'écran : sur un
- * 2K à 100 %, la même taille physique qu'en 1080p.
+ * (textes, marges, icônes). `auto` part de la définition de l'écran : 100 %
+ * jusqu'au 2K, comme Unalia dans un navigateur ; agrandi seulement sur un
+ * écran 4K réglé à 100 % dans Windows, où tout serait minuscule.
  */
 export type InterfaceSize = "auto" | 1 | 1.1 | 1.25 | 1.5;
 
@@ -35,10 +36,7 @@ async function readMonitorWidth(): Promise<number | null> {
 export function autoScale(
 	screenWidth = monitorWidth ?? (typeof window === "undefined" ? 1920 : window.screen.width),
 ): number {
-	if (screenWidth >= 3000) return 1.5;
-	if (screenWidth >= 2200) return 1.2;
-	if (screenWidth >= 1900) return 1.1;
-	return 1;
+	return screenWidth >= 3000 ? 1.5 : 1;
 }
 
 function read(): InterfaceSize {

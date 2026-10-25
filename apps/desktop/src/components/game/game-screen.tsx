@@ -93,7 +93,7 @@ export function GameScreen() {
 				{game && <GameSwitcher current={game} />}
 			</AppHeader>
 
-			<div className="relative z-10 mx-auto w-full max-w-6xl px-8 pb-20 2xl:max-w-7xl min-[1900px]:max-w-[96rem]">
+			<div className="relative z-10 mx-auto w-full max-w-[120rem] px-8 pb-20 xl:px-12">
 				{game === undefined && <HeroSkeleton />}
 				{game === null && <GameMissing />}
 				{game && !game.moddable && <NotModdable game={game} />}
