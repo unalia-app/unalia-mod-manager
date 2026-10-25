@@ -832,6 +832,72 @@ pub fn uninstall_all(state: &mut State, game: &str, game_dir: &Path) -> Result<u
     Ok(count)
 }
 
+/// Mods actifs dont au moins un fichier a quitté le jeu : jeu réinstallé,
+/// fichiers vérifiés par Steam, ou effacés à la main. Loader en tête.
+pub fn missing(state: &State, game: &str, game_dir: &Path) -> Result<Vec<InstalledMod>, InstallError> {
+    Ok(state
+        .list(game)?
+        .into_iter()
+        .filter(|m| {
+            m.enabled
+                && m.deployment
+                    .files
+                    .iter()
+                    .any(|file| fs::symlink_metadata(game_dir.join(file)).is_err())
+        })
+        .collect())
+}
+
+/// Repose un mod depuis le stockage, sans rien retélécharger. Ce qui
+/// restait de lui dans le jeu est retiré d'abord.
+pub fn put_back(state: &mut State, game: &str, game_dir: &Path, id: &str) -> Result<InstalledMod, InstallError> {
+    let mut m = state.get(game, id)?.ok_or(InstallError::NotInstalled)?;
+    deploy::undeploy(game_dir, &m.deployment, false);
+    m.deployment = deploy::deploy(Path::new(&m.store_dir), game_dir, &placements_of(&m)?).map_err(|source| {
+        InstallError::Deploy {
+            name: m.name.clone(),
+            source,
+        }
+    })?;
+    state.save(&m)?;
+    Ok(m)
+}
+
+/// Oublie un jeu désinstallé : ses mods quittent la base et leur stockage
+/// est libéré. Rien n'est retiré du jeu : son dossier n'existe plus.
+pub fn forget(state: &mut State, paths: &Paths, game: &str) -> Result<usize, InstallError> {
+    let mods = state.list(game)?;
+    for m in &mods {
+        state.remove(game, &m.id)?;
+        purge(state, paths, game, &m.id)?;
+    }
+    state.set_pending(game, &[])?;
+    let _ = fs::remove_dir(store_of(paths, game));
+    Ok(mods.len())
+}
+
+/// Place qu'occupe le stockage d'un jeu, en octets.
+pub fn storage_size(paths: &Paths, game: &str) -> u64 {
+    fn walk(dir: &Path) -> u64 {
+        let Ok(entries) = fs::read_dir(dir) else {
+            return 0;
+        };
+        entries
+            .flatten()
+            .map(|entry| match entry.file_type() {
+                Ok(kind) if kind.is_dir() => walk(&entry.path()),
+                Ok(_) => entry.metadata().map_or(0, |m| m.len()),
+                Err(_) => 0,
+            })
+            .sum()
+    }
+    walk(&store_of(paths, game))
+}
+
+fn store_of(paths: &Paths, game: &str) -> PathBuf {
+    paths.store.join(game.replace(':', "-"))
+}
+
 /// Libère le stockage d'un mod désinstallé, une fois l'annulation passée :
 /// ses dossiers extraits et, si aucun autre jeu ne l'a, ses archives en
 /// cache. Sans effet s'il a été réinstallé entre-temps.
@@ -848,7 +914,7 @@ pub fn purge(state: &State, paths: &Paths, game: &str, id: &str) -> Result<(), I
     if state.get(game, id)?.is_some() {
         return Ok(());
     }
-    let dir = paths.store.join(game.replace(':', "-")).join(id);
+    let dir = store_of(paths, game).join(id);
     if let Err(error) = fs::remove_dir_all(&dir)
         && error.kind() != std::io::ErrorKind::NotFound
     {

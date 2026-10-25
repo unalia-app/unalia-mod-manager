@@ -17,7 +17,7 @@ use mod_engine::installer::{
 use mod_engine::launch::{self, LaunchTarget, PendingOp, ProcessWatcher};
 use mod_engine::sources::SourceError;
 use mod_engine::sources::nexus::{self as nexus_source, Account, NxmLink, Requirement};
-use mod_engine::state::{InstalledMod, State as ModState};
+use mod_engine::state::{InstalledMod, ManualGame, State as ModState};
 use serde::{Deserialize, Serialize};
 use tauri::async_runtime::Mutex;
 use tauri::{AppHandle, Emitter, Manager, State};
@@ -981,6 +981,127 @@ pub async fn restore_mod(
         .ok_or("This mod can't be restored anymore.")?;
     let mut state = mods.state.lock().await;
     installer::restore(&mut state, &game.dir, removed).map_err(|e| error_message(&e))
+}
+
+// ------------------------------------------------- jeu réinstallé ou parti
+
+/// Mods actifs effacés du dossier du jeu (jeu réinstallé, fichiers vérifiés
+/// par Steam) : leurs noms.
+#[tauri::command]
+pub async fn missing_mods(
+    library: State<'_, Library>,
+    mods: State<'_, Mods>,
+    app_id: u32,
+) -> Result<Vec<String>, String> {
+    let game = library.game(app_id).ok_or(UNKNOWN_GAME)?;
+    let state = mods.state.lock().await;
+    let missing = installer::missing(&state, &game_key(app_id), &game.dir).map_err(|e| error_message(&e))?;
+    Ok(missing.into_iter().map(|m| m.name).collect())
+}
+
+/// Repose depuis le stockage les mods effacés du jeu, sans rien
+/// retélécharger. Renvoie leur nombre.
+#[tauri::command]
+pub async fn put_back_mods(
+    library: State<'_, Library>,
+    mods: State<'_, Mods>,
+    app_id: u32,
+) -> Result<usize, String> {
+    let game = library.game(app_id).ok_or(UNKNOWN_GAME)?;
+    if mods.is_running(&game) {
+        return Err("Close the game first, then try again.".into());
+    }
+    let key = game_key(app_id);
+    let mut state = mods.state.lock().await;
+    let missing = installer::missing(&state, &key, &game.dir).map_err(|e| error_message(&e))?;
+    for m in &missing {
+        installer::put_back(&mut state, &key, &game.dir, &m.id).map_err(|e| error_message(&e))?;
+    }
+    log::info!("put back {} mods in {key}", missing.len());
+    Ok(missing.len())
+}
+
+/// Jeu désinstallé dont Unalia garde encore les mods dans son stockage.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ForgottenGame {
+    app_id: u32,
+    name: String,
+    mods: usize,
+    /// Octets du stockage libérés en l'oubliant.
+    size: u64,
+}
+
+/// Le jeu n'est plus nulle part : ni dans Steam, ni dans son dossier
+/// ajouté à la main. Steam illisible : seuls les ajouts à la main comptent.
+fn game_gone(app_id: u32, steam: Option<&HashMap<u32, PathBuf>>, manual: &[ManualGame]) -> bool {
+    match manual.iter().find(|g| g.app_id == app_id) {
+        Some(game) => !Path::new(&game.path).is_dir() && steam.is_none_or(|s| !s.contains_key(&app_id)),
+        None => steam.is_some_and(|s| !s.contains_key(&app_id)),
+    }
+}
+
+fn app_id_of(key: &str) -> Option<u32> {
+    key.strip_prefix("steam:")?.parse().ok()
+}
+
+#[tauri::command]
+pub async fn forgotten_games(
+    app: AppHandle,
+    catalog: State<'_, Catalog>,
+    mods: State<'_, Mods>,
+) -> Result<Vec<ForgottenGame>, String> {
+    let steam = tauri::async_runtime::spawn_blocking(crate::steam_dirs)
+        .await
+        .map_err(crate::support::logged)?;
+    let games_catalog = catalog.games(&app).await;
+    let state = mods.state.lock().await;
+    let manual = state.manual_games().map_err(crate::support::logged)?;
+    let mut forgotten = Vec::new();
+    for key in state.games().map_err(crate::support::logged)? {
+        let Some(app_id) = app_id_of(&key) else {
+            continue;
+        };
+        if !game_gone(app_id, steam.as_ref(), &manual) {
+            continue;
+        }
+        let profile = games_catalog.as_ref().and_then(|c| {
+            c.by_steam_app_id(app_id).or_else(|| {
+                let game = manual.iter().find(|g| g.app_id == app_id)?;
+                c.by_id(&game.profile_id)
+            })
+        });
+        forgotten.push(ForgottenGame {
+            app_id,
+            name: profile.map_or_else(|| format!("Steam game {app_id}"), |p| p.name.clone()),
+            mods: state.list(&key).map_err(crate::support::logged)?.len(),
+            size: installer::storage_size(&mods.paths, &key),
+        });
+    }
+    Ok(forgotten)
+}
+
+/// Oublie un jeu désinstallé et libère le stockage de ses mods.
+#[tauri::command]
+pub async fn forget_game(mods: State<'_, Mods>, app_id: u32) -> Result<(), String> {
+    let steam = tauri::async_runtime::spawn_blocking(crate::steam_dirs)
+        .await
+        .map_err(crate::support::logged)?;
+    let _fetching = mods.fetching.lock().await;
+    let mut state = mods.state.lock().await;
+    let manual = state.manual_games().map_err(crate::support::logged)?;
+    // Revérifié ici : oublier un jeu encore là laisserait ses mods dans son
+    // dossier sans plus aucun moyen de les retirer.
+    if !game_gone(app_id, steam.as_ref(), &manual) {
+        return Err("This game is installed again: open it to manage its mods.".into());
+    }
+    let key = game_key(app_id);
+    let count = installer::forget(&mut state, &mods.paths, &key).map_err(|e| error_message(&e))?;
+    if manual.iter().any(|g| g.app_id == app_id) {
+        state.remove_manual_game(app_id).map_err(crate::support::logged)?;
+    }
+    log::info!("forgot {key} and its {count} mods");
+    Ok(())
 }
 
 // ---------------------------------------------------------------- jeu

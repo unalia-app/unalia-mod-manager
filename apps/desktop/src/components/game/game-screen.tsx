@@ -11,6 +11,7 @@ import { GameCover } from "@/components/game-cover";
 import { Discover } from "@/components/game/discover";
 import { GameUpdatedBanner } from "@/components/game/game-updated-banner";
 import { GameVersion } from "@/components/game/game-version";
+import { MissingModsBanner } from "@/components/game/missing-mods-banner";
 import { GameSwitcher } from "@/components/game/game-switcher";
 import { MyMods } from "@/components/game/my-mods";
 import { NexusConnect } from "@/components/game/nexus-connect";
@@ -124,6 +125,7 @@ export function GameScreen() {
 						</section>
 
 						<PendingBanner appId={game.appId} />
+						<MissingModsBanner game={game} />
 						<GameUpdatedBanner game={game} />
 
 						<div className="mt-10 animate-fade-up [animation-delay:120ms]">

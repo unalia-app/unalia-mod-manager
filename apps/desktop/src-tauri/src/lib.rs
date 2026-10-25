@@ -638,15 +638,11 @@ fn steam_root() -> Option<PathBuf> {
     detect::find_steam_root()
 }
 
-/// Dossier de chaque jeu Steam installé.
-#[cfg(windows)]
-fn steam_dirs() -> HashMap<u32, PathBuf> {
-    steam_root()
-        .and_then(|root| detect::scan_steam(&root).ok())
-        .unwrap_or_default()
-        .into_iter()
-        .map(|game| (game.app_id, game.install_dir))
-        .collect()
+/// Dossier de chaque jeu Steam installé. `None` : Steam introuvable ou
+/// illisible, on ne sait pas quels jeux sont là.
+fn steam_dirs() -> Option<HashMap<u32, PathBuf>> {
+    let games = detect::scan_steam(&steam_root()?).ok()?;
+    Some(games.into_iter().map(|game| (game.app_id, game.install_dir)).collect())
 }
 
 /// Protocole `artwork://localhost/<appid>/<type>` (Windows :
@@ -711,7 +707,7 @@ pub fn run() {
     #[cfg(windows)]
     if std::env::args().any(|arg| arg == "--remove-all-mods") {
         if let Some(base) = std::env::var_os("LOCALAPPDATA") {
-            mods::remove_all(&Path::new(&base).join(&context.config().identifier), steam_dirs());
+            mods::remove_all(&Path::new(&base).join(&context.config().identifier), steam_dirs().unwrap_or_default());
         }
         return;
     }
@@ -757,6 +753,10 @@ pub fn run() {
             mods::set_mod_enabled,
             mods::uninstall_mod,
             mods::restore_mod,
+            mods::missing_mods,
+            mods::put_back_mods,
+            mods::forgotten_games,
+            mods::forget_game,
             mods::cancel_pending,
             mods::check_updates,
             mods::game_status,

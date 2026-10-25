@@ -310,6 +310,29 @@ export function restoreMod(appId: number, modId: string): Promise<InstalledMod> 
 	return invoke("restore_mod", { appId, modId });
 }
 
+/** Mods actifs effacés du dossier du jeu (jeu réinstallé, fichiers vérifiés) : leurs noms. */
+export function missingMods(appId: number): Promise<string[]> {
+	if (!isTauri()) return Promise.resolve([]);
+	return invoke("missing_mods", { appId });
+}
+
+/** Repose les mods effacés depuis le stockage, sans rien retélécharger. Renvoie leur nombre. */
+export function putBackMods(appId: number): Promise<number> {
+	return invoke("put_back_mods", { appId });
+}
+
+/** Jeu désinstallé dont Unalia garde encore les mods. `size` : octets libérés en l'oubliant. */
+export type ForgottenGame = { appId: number; name: string; mods: number; size: number };
+
+export function forgottenGames(): Promise<ForgottenGame[]> {
+	if (!isTauri()) return Promise.resolve([]);
+	return invoke("forgotten_games");
+}
+
+export function forgetGame(appId: number): Promise<void> {
+	return invoke("forget_game", { appId });
+}
+
 export type ModUpdate = { modId: string; current: string; latest: string };
 
 export function checkUpdates(appId: number): Promise<ModUpdate[]> {

@@ -372,6 +372,49 @@ async fn removing_every_mod_at_once_restores_the_game() {
 }
 
 #[tokio::test]
+async fn mods_wiped_by_a_game_reinstall_are_put_back_from_storage() {
+    let mut w = World::new().await;
+    w.publish_knight().await;
+    w.install(KNIGHT).await.0.unwrap();
+    let game = "steam:1030300";
+    let installed = snapshot(&w.game);
+    assert!(installer::missing(&w.state, game, &w.game).unwrap().is_empty());
+
+    // Steam désinstalle puis réinstalle le jeu : un dossier neuf.
+    fs::remove_dir_all(&w.game).unwrap();
+    copy_dir(&Path::new(env!("CARGO_MANIFEST_DIR")).join(GAME), &w.game);
+    let missing: Vec<_> = installer::missing(&w.state, game, &w.game)
+        .unwrap()
+        .into_iter()
+        .map(|m| m.id)
+        .collect();
+    assert_eq!(missing.len(), 3);
+    assert_eq!(missing[0], LOADER);
+
+    for id in &missing {
+        installer::put_back(&mut w.state, game, &w.game, id).unwrap();
+    }
+    assert!(installer::missing(&w.state, game, &w.game).unwrap().is_empty());
+    assert_eq!(snapshot(&w.game), installed);
+}
+
+#[tokio::test]
+async fn forgetting_an_uninstalled_game_frees_its_storage() {
+    let mut w = World::new().await;
+    w.publish_knight().await;
+    w.install(KNIGHT).await.0.unwrap();
+    let game = "steam:1030300";
+    assert!(installer::storage_size(&w.paths, game) > 0);
+
+    fs::remove_dir_all(&w.game).unwrap();
+    assert_eq!(installer::forget(&mut w.state, &w.paths, game).unwrap(), 3);
+    assert!(w.state.games().unwrap().is_empty());
+    assert!(!w.paths.store.join("steam-1030300").exists());
+    assert_eq!(installer::storage_size(&w.paths, game), 0);
+    assert!(!names(&w.paths.downloads).iter().any(|n| n.ends_with(".zip")));
+}
+
+#[tokio::test]
 async fn refuses_to_install_over_a_manual_bepinex() {
     let mut w = World::new().await;
     w.publish_knight().await;
