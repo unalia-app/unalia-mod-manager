@@ -1,5 +1,6 @@
 import { isTauri } from "@tauri-apps/api/core";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
+import { currentMonitor } from "@tauri-apps/api/window";
 import { useSyncExternalStore } from "react";
 
 /**
@@ -13,8 +14,27 @@ export const SIZES: InterfaceSize[] = ["auto", 1, 1.1, 1.25, 1.5];
 
 const KEY = "modalia.interfaceSize";
 
-/** Facteur choisi pour cet écran. `screen.width` ne dépend pas du zoom de la page. */
-export function autoScale(screenWidth = typeof window === "undefined" ? 1920 : window.screen.width): number {
+/**
+ * Largeur de l'écran de la fenêtre, en pixels logiques. Lue auprès de Tauri :
+ * sous Windows, le `screen` de la WebView reste figé sur l'écran de création
+ * de la fenêtre (1920 sur un 2K, une fois la fenêtre passée d'un écran à
+ * l'autre).
+ */
+let monitorWidth: number | null = null;
+
+async function readMonitorWidth(): Promise<number | null> {
+	try {
+		const monitor = await currentMonitor();
+		return monitor ? Math.round(monitor.size.width / monitor.scaleFactor) : null;
+	} catch {
+		return null;
+	}
+}
+
+/** Facteur choisi pour cet écran. Sa largeur ne dépend pas du zoom de la page. */
+export function autoScale(
+	screenWidth = monitorWidth ?? (typeof window === "undefined" ? 1920 : window.screen.width),
+): number {
 	if (screenWidth >= 3000) return 1.5;
 	if (screenWidth >= 2200) return 1.2;
 	if (screenWidth >= 1900) return 1.1;
@@ -43,9 +63,10 @@ export function scaleOf(size: InterfaceSize): number {
 	return size === "auto" ? autoScale() : size;
 }
 
-/** Applique la taille à la fenêtre (zoom de la WebView). */
+/** Applique la taille à la fenêtre (zoom de la WebView), pour l'écran où elle se trouve. */
 export async function applyInterfaceSize(size = interfaceSize()) {
 	if (!isTauri()) return;
+	monitorWidth = (await readMonitorWidth()) ?? monitorWidth;
 	await getCurrentWebview().setZoom(scaleOf(size));
 }
 
