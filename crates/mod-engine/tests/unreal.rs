@@ -172,12 +172,16 @@ impl World {
     }
 
     async fn install(&mut self, mod_id: u32) -> Result<NexusInstall, InstallError> {
+        let github = GitHub::with_url(self.client.clone(), &self.server.url());
+        self.install_with(mod_id, &github).await
+    }
+
+    async fn install_with(&mut self, mod_id: u32, github: &GitHub) -> Result<NexusInstall, InstallError> {
         let link = NxmLink::parse(&format!(
             "nxm://phantombladezero/mods/{mod_id}/files/{}?key=k&expires=1",
             mod_id * 10
         ))
         .unwrap();
-        let github = GitHub::with_url(self.client.clone(), &self.server.url());
         let installer = Installer {
             source: &self.nexus,
             catalog: None,
@@ -195,7 +199,7 @@ impl World {
                 &mut self.state,
                 &target,
                 &self.profile,
-                &github,
+                github,
                 mod_id,
                 NexusFile::Link(&link),
                 None,
@@ -253,6 +257,33 @@ async fn a_lua_mod_brings_ue4ss_from_its_experimental_build() {
             ("nexus-8000", "1.0", true),
         ]
     );
+}
+
+/// La vraie build expérimentale d'UE4SS, depuis GitHub : sa disposition
+/// est toujours celle que l'installation attend. Hors de la suite normale
+/// (réseau) : `cargo test -p mod-engine --test unreal -- --ignored`.
+#[tokio::test]
+#[ignore]
+async fn the_real_ue4ss_build_lands_in_the_right_place() {
+    let mut w = World::new().await;
+    w.publish(8000, "No Stamina", &[("NoStamina/Scripts/main.lua", b"print('hi')")])
+        .await;
+
+    let github = GitHub::new(mod_engine::http_client());
+    let done = w.install_with(8000, &github).await.unwrap();
+
+    let win64 = w.game.join(PROJECT).join("Binaries/Win64");
+    for file in [
+        "dwmapi.dll",
+        "ue4ss/UE4SS.dll",
+        "ue4ss/UE4SS-settings.ini",
+        "ue4ss/Mods/mods.txt",
+        "ue4ss/Mods/NoStamina/Scripts/main.lua",
+    ] {
+        assert!(win64.join(file).is_file(), "{file}");
+    }
+    let ue4ss = done.mods.iter().find(|m| m.id == "github-ue4ss-re-re-ue4ss").unwrap();
+    assert!(ue4ss.version.starts_with("3."), "{}", ue4ss.version);
 }
 
 #[tokio::test]
