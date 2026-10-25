@@ -349,6 +349,11 @@ export function forgetGame(appId: number): Promise<void> {
 	return invoke("forget_game", { appId });
 }
 
+/** Retire un jeu ajouté à la main : ses mods quittent son dossier, le jeu reste installé. Renvoie le nombre de mods retirés. */
+export function removeManualGame(appId: number): Promise<number> {
+	return invoke("remove_manual_game", { appId });
+}
+
 export type ModUpdate = { modId: string; current: string; latest: string };
 
 export function checkUpdates(appId: number): Promise<ModUpdate[]> {

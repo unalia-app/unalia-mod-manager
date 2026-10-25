@@ -299,6 +299,14 @@ export async function restore(appId: number, modId: string) {
 	await refreshInstalled(appId);
 }
 
+/** Jeu retiré d'Unalia : ses mods et mises à jour en mémoire partent aussi. */
+export function forgetGameMods(appId: number) {
+	update((s) => {
+		s.installed.delete(appId);
+		s.updates.delete(appId);
+	});
+}
+
 /** Revient à une version précédente du mod, gardée dans le stockage. */
 export async function revert(appId: number, modId: string, pkg: string): Promise<InstalledMod> {
 	const reverted = await revertMod(appId, modId, pkg);

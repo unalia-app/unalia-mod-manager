@@ -317,7 +317,7 @@ async fn add_manual_game(
 }
 
 /// Réglage « Play passe par Steam » d'un jeu ajouté à la main.
-fn launch_setting(app_id: u32) -> String {
+pub(crate) fn launch_setting(app_id: u32) -> String {
     format!("launch_via_steam:{app_id}")
 }
 
@@ -353,7 +353,7 @@ async fn set_launch_via_steam(
 }
 
 /// Réglage « version du jeu » : celle sur laquelle l'utilisateur est resté.
-fn version_setting(app_id: u32) -> String {
+pub(crate) fn version_setting(app_id: u32) -> String {
     format!("game_version:{app_id}")
 }
 
@@ -813,6 +813,7 @@ pub fn run() {
             mods::put_back_mods,
             mods::forgotten_games,
             mods::forget_game,
+            mods::remove_manual_game,
             mods::cancel_pending,
             mods::check_updates,
             mods::game_status,

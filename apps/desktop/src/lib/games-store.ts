@@ -50,6 +50,15 @@ export function rememberGame(appId: number) {
 	}
 }
 
+/** Un jeu retiré d'Unalia quitte aussi les récents. */
+export function forgetRecentGame(appId: number) {
+	try {
+		localStorage.setItem(RECENTS_KEY, JSON.stringify(recentGameIds().filter((id) => id !== appId)));
+	} catch {
+		// Stockage bloqué : on s'en passe.
+	}
+}
+
 /** Jeux triés avec les récents en tête, dans l'ordre d'utilisation. */
 export function withRecentsFirst(games: SteamGame[]): SteamGame[] {
 	const recents = recentGameIds();

@@ -7,6 +7,7 @@ All notable changes to Unalia Mod Manager. The format follows [Keep a Changelog]
 ### Added
 
 - Go back to one of the last 3 versions of a mod in one click from My mods, without downloading it again.
+- Remove a game added by hand: its mods leave the game folder, the game itself stays installed.
 
 ### Changed
 

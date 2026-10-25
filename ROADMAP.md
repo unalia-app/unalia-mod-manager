@@ -10,7 +10,7 @@ What comes after the first release, in order of priority. Plans change with your
 - **More safety.** A warning when a placed file changes outside the app, trust signals for very new mods from unknown authors, and known anti-cheat games blocked or flagged.
 - **Conflicts by priority.** When two mods ship the same file, choose which one wins, without drivers or injection.
 - **Nexus Mods, continued.** "Log in with Nexus", API key in the system keychain, more games, collections, and never taking over `nxm://` links from Vortex or Mod Organizer 2 without asking.
-- **Remove a game added by hand.**
+- **Remove a game added by hand** (done).
 - **Signed installer and signed updates.**
 
 ## Loaders

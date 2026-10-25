@@ -1070,6 +1070,23 @@ pub fn forget(state: &mut State, paths: &Paths, game: &str) -> Result<usize, Ins
     Ok(mods.len())
 }
 
+/// Retire un jeu d'Unalia : ses mods quittent son dossier, qui retrouve
+/// son état d'origine (`game_dir` absent : le dossier n'existe plus), puis
+/// la base et le stockage. Le jeu lui-même n'est pas touché. Renvoie le
+/// nombre de mods retirés.
+pub fn remove_game(
+    state: &mut State,
+    paths: &Paths,
+    game: &str,
+    game_dir: Option<&Path>,
+) -> Result<usize, InstallError> {
+    let removed = match game_dir {
+        Some(dir) => uninstall_all(state, game, dir)?,
+        None => 0,
+    };
+    Ok(removed + forget(state, paths, game)?)
+}
+
 /// Place qu'occupe le stockage d'un jeu, en octets : chaque fichier compté
 /// une fois, versions précédentes comprises.
 pub fn storage_size(paths: &Paths, game: &str) -> u64 {

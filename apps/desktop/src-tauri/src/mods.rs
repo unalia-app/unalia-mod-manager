@@ -1148,6 +1148,42 @@ pub async fn forget_game(mods: State<'_, Mods>, app_id: u32) -> Result<(), Strin
     Ok(())
 }
 
+/// Retire un jeu ajouté à la main : ses mods quittent son dossier, qui
+/// retrouve son état d'origine, puis il disparaît d'Unalia avec ses
+/// réglages et son stockage. Le jeu lui-même reste installé. Renvoie le
+/// nombre de mods retirés.
+#[tauri::command]
+pub async fn remove_manual_game(
+    library: State<'_, Library>,
+    mods: State<'_, Mods>,
+    app_id: u32,
+) -> Result<usize, String> {
+    if let Some(game) = library.game(app_id)
+        && mods.is_running(&game)
+    {
+        return Err(close_first(&game));
+    }
+    let _fetching = mods.fetching.lock().await;
+    let mut state = mods.state.lock().await;
+    let manual = state.manual_games().map_err(crate::support::logged)?;
+    let game = manual
+        .iter()
+        .find(|g| g.app_id == app_id)
+        .ok_or("Only games added by picking their folder can be removed.")?;
+    let key = game_key(app_id);
+    let dir = PathBuf::from(&game.path);
+    let count = installer::remove_game(&mut state, &mods.paths, &key, dir.is_dir().then_some(dir.as_path()))
+        .map_err(|e| error_message(&e))?;
+    state.remove_manual_game(app_id).map_err(crate::support::logged)?;
+    for setting in [crate::launch_setting(app_id), crate::version_setting(app_id)] {
+        state.set_setting(&setting, None).map_err(crate::support::logged)?;
+    }
+    // Plus d'« Undo » possible pour les mods retirés juste avant.
+    mods.removed.lock().unwrap().retain(|(game, _), _| *game != key);
+    log::info!("removed {key} and its {count} mods");
+    Ok(count)
+}
+
 // ---------------------------------------------------------------- jeu
 
 /// Lance le jeu : par Steam, ou par son exécutable pour un jeu ajouté à la

@@ -17,6 +17,7 @@ import { MyMods } from "@/components/game/my-mods";
 import { NexusConnect } from "@/components/game/nexus-connect";
 import { PendingBanner } from "@/components/game/pending-banner";
 import { PlayButton } from "@/components/game/play-button";
+import { RemoveGame } from "@/components/game/remove-game";
 import { SteamLaunch } from "@/components/game/steam-launch";
 import { Notice } from "@/components/notice";
 import { useAccent } from "@/hooks/use-accent";
@@ -121,6 +122,7 @@ export function GameScreen() {
 								<PlayButton appId={game.appId} />
 								<SteamLaunch game={game} />
 								<GameVersion game={game} />
+								<RemoveGame game={game} />
 							</div>
 						</section>
 

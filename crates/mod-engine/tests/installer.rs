@@ -933,3 +933,27 @@ fn identical_files_are_stored_once_and_freed_when_unused() {
     assert_eq!(blobs(&store), 2);
     assert!(store.has("g/a/2") && !store.has("g/a/1"));
 }
+
+#[tokio::test]
+async fn removing_a_game_puts_its_folder_back_and_frees_everything() {
+    let mut w = World::new().await;
+    w.publish_knight().await;
+    let original = snapshot(&w.game);
+    w.install(KNIGHT).await.0.unwrap();
+    let game = "steam:1030300";
+    assert_ne!(snapshot(&w.game), original);
+
+    let removed = installer::remove_game(&mut w.state, &w.paths, game, Some(&w.game)).unwrap();
+    assert_eq!(removed, 3);
+    assert_eq!(snapshot(&w.game), original, "le dossier du jeu revient à l'identique");
+    assert!(w.state.list(game).unwrap().is_empty());
+    assert_eq!(installer::storage_size(&w.paths, game), 0);
+    assert!(names(&w.paths.store.join("files")).is_empty());
+
+    // Dossier déjà parti : seuls la base et le stockage sont nettoyés.
+    w.install(KNIGHT).await.0.unwrap();
+    fs::remove_dir_all(&w.game).unwrap();
+    assert_eq!(installer::remove_game(&mut w.state, &w.paths, game, None).unwrap(), 3);
+    assert!(w.state.games().unwrap().is_empty());
+    assert!(names(&w.paths.store.join("files")).is_empty());
+}
