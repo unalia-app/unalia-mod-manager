@@ -2,6 +2,7 @@
 //!
 //! Voir `SPEC.md` (section 6.3) pour le rôle de chaque brique.
 
+pub mod advice;
 pub mod archive;
 pub mod artwork;
 pub mod deploy;

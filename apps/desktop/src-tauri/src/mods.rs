@@ -1161,10 +1161,11 @@ async fn apply_pending(app: &AppHandle, app_id: u32, game: &KnownGame) {
     );
 }
 
-/// Message principal, puis la cause technique après un retour à la ligne :
-/// l'interface affiche la première ligne et replie le reste.
-fn error_message(error: &dyn std::error::Error) -> String {
-    let mut message = error.to_string();
+/// Message principal (ce qui bloque, puis quoi faire), puis la chaîne
+/// technique après un retour à la ligne : l'interface affiche la première
+/// ligne et replie le reste.
+fn error_message(error: &(dyn std::error::Error + 'static)) -> String {
+    let mut message = mod_engine::advice::explain(error);
     let mut source = error.source();
     let mut details = Vec::new();
     while let Some(cause) = source {
