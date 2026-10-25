@@ -54,7 +54,7 @@ impl Catalog {
                 .join("thunderstore-schema.json");
             match load_catalog(&self.client, SCHEMA_URL, &cache, SCHEMA_MAX_AGE).await {
                 Ok(catalog) => *games = Some(Arc::new(catalog)),
-                Err(error) => eprintln!("game catalog unavailable: {error}"),
+                Err(error) => log::warn!("game catalog unavailable: {error}"),
             }
         }
         games.clone()
@@ -84,13 +84,13 @@ pub async fn search_mods(
             .nexus
             .search(&community, &query)
             .await
-            .map_err(|e| e.to_string());
+            .map_err(crate::support::logged);
     }
     let (games, page) = tokio::join!(
         catalog.games(&app),
         catalog.thunderstore.search(&community, &query),
     );
-    let mut page = page.map_err(|e| e.to_string())?;
+    let mut page = page.map_err(crate::support::logged)?;
     page.items.retain(|m| {
         !MOD_MANAGERS.contains(&m.id.as_str())
             && games
@@ -141,7 +141,7 @@ pub async fn get_mod(
         catalog.games(&app),
         catalog.thunderstore.get(&community, &id),
     );
-    let found = found.map_err(|e| e.to_string())?;
+    let found = found.map_err(crate::support::logged)?;
     let dependencies = found
         .latest()
         .map(|v| v.dependencies.as_slice())
@@ -184,7 +184,7 @@ async fn nexus_mod(
         catalog.nexus.get(community, id),
         catalog.nexus.mod_info(domain, mod_id),
     );
-    let found = found.map_err(|e| e.to_string())?;
+    let found = found.map_err(crate::support::logged)?;
     let frameworks = games
         .as_ref()
         .and_then(|g| g.games().iter().find(|p| p.community == community))
@@ -230,5 +230,5 @@ pub async fn mod_description(
             .description(&community, &id, &version)
             .await
     };
-    result.map_err(|e| e.to_string())
+    result.map_err(crate::support::logged)
 }

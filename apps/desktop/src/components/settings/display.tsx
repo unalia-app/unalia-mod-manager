@@ -24,8 +24,7 @@ export function Display() {
 			<div className="rounded-xl border border-line bg-white/[0.03] p-5 sm:p-6">
 				<h3 className="text-sm font-semibold text-fg">Interface size</h3>
 				<p className="mt-0.5 text-xs text-fg-subtle">
-					Text, spacing and icons, all at once. Auto picks a size from your screen's resolution: larger on 2K and 4K
-					screens.
+					Text, spacing and icons, all at once. Auto picks a size from your screen's resolution: larger on 4K screens.
 				</p>
 				<div className="mt-4">
 					<Segmented

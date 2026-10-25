@@ -14,12 +14,15 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2.7", features = [] }
 
 [dependencies]
+log = { version = "0.4", default-features = false }
 mod-engine.workspace = true
+os_info = { version = "3", default-features = false }
 serde.workspace = true
 serde_json.workspace = true
 tauri = { version = "2.12", features = [] }
 tauri-plugin-deep-link = "2.6.2"
 tauri-plugin-dialog = "2.8"
+tauri-plugin-log = { version = "2", default-features = false }
 tauri-plugin-opener = "2.7"
 tauri-plugin-single-instance = { version = "2.5.4", features = ["deep-link"] }
 tokio = { version = "1", features = ["macros", "time"] }

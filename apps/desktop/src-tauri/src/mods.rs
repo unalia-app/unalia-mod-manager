@@ -188,7 +188,7 @@ pub(crate) fn adopt_old_dir(dir: &Path) {
         return;
     }
     if let Err(error) = std::fs::rename(&old, dir) {
-        eprintln!("couldn't move {} to {}: {error}", old.display(), dir.display());
+        log::warn!("couldn't move {} to {}: {error}", old.display(), dir.display());
     }
 }
 
@@ -208,7 +208,7 @@ fn migrate_from_roaming(roaming: &Path, local: &Path) {
         && (!old_store.exists() || std::fs::rename(&old_store, &new_store).is_ok())
         && std::fs::rename(&old_db, &new_db).is_ok();
     if !moved {
-        eprintln!("couldn't move Unalia's data out of the roaming profile");
+        log::warn!("couldn't move Unalia's data out of the roaming profile");
         return;
     }
     for suffix in ["-wal", "-shm"] {
@@ -327,8 +327,8 @@ async fn queue(app: &AppHandle, app_id: u32, op: PendingOp) -> Result<(), String
     let key = game_key(app_id);
     {
         let mut state = mods.state.lock().await;
-        let next = launch::enqueue(&state.pending(&key).map_err(|e| e.to_string())?, op);
-        state.set_pending(&key, &next).map_err(|e| e.to_string())?;
+        let next = launch::enqueue(&state.pending(&key).map_err(crate::support::logged)?, op);
+        state.set_pending(&key, &next).map_err(crate::support::logged)?;
     }
     // Le jeu tourne : la veille doit le savoir pour appliquer la file à sa
     // fermeture, même s'il a été lancé hors de Modalia.
@@ -346,11 +346,11 @@ pub async fn cancel_pending(app: AppHandle, app_id: u32, mod_id: String) -> Resu
         let mut state = mods.state.lock().await;
         let next: Vec<_> = state
             .pending(&key)
-            .map_err(|e| e.to_string())?
+            .map_err(crate::support::logged)?
             .into_iter()
             .filter(|op| op.mod_id() != mod_id)
             .collect();
-        state.set_pending(&key, &next).map_err(|e| e.to_string())?;
+        state.set_pending(&key, &next).map_err(crate::support::logged)?;
         mods.ready.lock().unwrap().remove(&(app_id, mod_id));
     }
     emit_status(&app, app_id).await;
@@ -368,7 +368,7 @@ pub async fn installed_mods(
         .lock()
         .await
         .list(&game_key(app_id))
-        .map_err(|e| e.to_string())
+        .map_err(crate::support::logged)
 }
 
 /// Mises à jour disponibles pour les mods du jeu. Rien n'est installé :
@@ -387,7 +387,7 @@ pub async fn check_updates(
         .lock()
         .await
         .list(&game_key(app_id))
-        .map_err(|e| e.to_string())?;
+        .map_err(crate::support::logged)?;
     if game.profile.nexus.is_some() {
         return Ok(installer::available_updates_nexus(
             &catalog.nexus,
@@ -924,7 +924,7 @@ async fn purge_later(app: AppHandle, key: String, mod_id: String, at: Instant) {
     let _fetching = mods.fetching.lock().await;
     let state = mods.state.lock().await;
     if let Err(error) = installer::purge(&state, &mods.paths, &entry.0, &entry.1) {
-        eprintln!("couldn't free the storage of {}: {error}", entry.1);
+        log::warn!("couldn't free the storage of {}: {error}", entry.1);
     }
 }
 
@@ -1175,6 +1175,8 @@ fn error_message(error: &dyn std::error::Error) -> String {
         message.push('\n');
         message.push_str(&details.join(": "));
     }
+    // Erreur montrée à l'utilisateur : notée aussi dans le journal.
+    log::warn!("{}", message.replace('\n', " | "));
     message
 }
 
@@ -1253,7 +1255,7 @@ pub fn dev_env(name: &str) -> Option<String> {
 fn register_nxm(app: &AppHandle) {
     #[cfg(any(windows, target_os = "linux"))]
     if let Err(error) = app.deep_link().register("nxm") {
-        eprintln!("couldn't register nxm:// links: {error}");
+        log::warn!("couldn't register nxm:// links: {error}");
     }
     #[cfg(not(any(windows, target_os = "linux")))]
     let _ = app;
@@ -1347,7 +1349,7 @@ async fn save_nexus_key(
         .lock()
         .await
         .set_setting(NEXUS_KEY, Some(&key))
-        .map_err(|e| e.to_string())?;
+        .map_err(crate::support::logged)?;
     remember_account(mods, Some(&account)).await;
     register_nxm(app);
     Ok(account)
@@ -1381,7 +1383,7 @@ pub async fn nexus_disconnect(
         .lock()
         .await
         .set_setting(NEXUS_KEY, Some(""))
-        .map_err(|e| e.to_string())
+        .map_err(crate::support::logged)
 }
 
 #[derive(Clone, Serialize)]

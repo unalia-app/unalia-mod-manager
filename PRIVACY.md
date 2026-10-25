@@ -8,8 +8,9 @@
 - The mods you installed, their files and their state, in a local database.
 - Your settings (interface size, recent games).
 - Your Nexus Mods API key, if you connect your account.
+- A log file of what the app did and the errors it met, kept small (`logs` folder).
 
-None of it is sent anywhere.
+None of it is sent anywhere. **Settings > Support > Copy report** puts a report in your clipboard for a bug report: your versions, games, mods and recent logs, without your account name, API key or Windows user name. You decide where to paste it.
 
 ## Who the app talks to
 

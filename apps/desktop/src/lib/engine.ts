@@ -433,3 +433,17 @@ export function nexusModUrl(domain: string, modId: string, tab?: "files"): strin
 	const id = modId.replace(/^nexus-/, "");
 	return `https://www.nexusmods.com/${domain}/mods/${id}${tab ? `?tab=${tab}` : ""}`;
 }
+
+// Support (moteur : support.rs).
+
+/** Système, et fin du journal de l'appli (chemins personnels et clés masqués). */
+export type Diagnostics = { os: string; arch: string; log: string };
+
+export function diagnostics(): Promise<Diagnostics> {
+	if (!isTauri()) return Promise.resolve({ os: navigator.userAgent, arch: "", log: "" });
+	return invoke("diagnostics");
+}
+
+export function openLogsFolder(): Promise<void> {
+	return invoke("open_logs_folder");
+}

@@ -1,5 +1,6 @@
 mod catalog;
 mod mods;
+mod support;
 
 use std::collections::HashMap;
 use std::fs;
@@ -126,8 +127,8 @@ async fn list_games(
     });
     let (scan, games_catalog) = tokio::join!(scan, catalog.games(&app));
     let steam = scan
-        .map_err(|e| e.to_string())?
-        .map_err(|e| e.to_string())?;
+        .map_err(crate::support::logged)?
+        .map_err(crate::support::logged)?;
     let steam_found = steam.is_some();
 
     let mut entries: Vec<GameEntry> = steam
@@ -311,7 +312,7 @@ async fn add_manual_game(
                 .map(|d| d.as_secs() as i64)
                 .unwrap_or_default(),
         })
-        .map_err(|e| e.to_string())?;
+        .map_err(crate::support::logged)?;
     Ok(app_id)
 }
 
@@ -335,7 +336,7 @@ async fn set_launch_via_steam(
             &launch_setting(app_id),
             Some(if enabled { "1" } else { "0" }),
         )
-        .map_err(|e| e.to_string())?;
+        .map_err(crate::support::logged)?;
     // Pris en compte tout de suite, sans attendre un nouveau scan.
     let root = library.steam_root();
     if let Some(game) = library.games.lock().unwrap().get_mut(&app_id) {
@@ -380,7 +381,7 @@ async fn set_game_version(
         .lock()
         .await
         .set_setting(&version_setting(app_id), version.as_deref())
-        .map_err(|e| e.to_string())?;
+        .map_err(crate::support::logged)?;
     if let Some(game) = library.games.lock().unwrap().get_mut(&app_id) {
         game.game_version = version;
     }
@@ -470,7 +471,7 @@ async fn add_to_steam(
         .lock()
         .await
         .set_setting(&launch_setting(app_id), Some("1"))
-        .map_err(|e| e.to_string())?;
+        .map_err(crate::support::logged)?;
     if let Some(known) = library.games.lock().unwrap().get_mut(&app_id) {
         known.steam_shortcut = Some(added.launch_url());
     }
@@ -503,7 +504,7 @@ async fn game_accent(
         root.and_then(|root| artwork::game_accent(&root, app_id).map(|a| a.css()))
     })
     .await
-    .map_err(|e| e.to_string())?;
+    .map_err(crate::support::logged)?;
     // Rien dans le cache de Steam : jaquette publiée par Thunderstore.
     if accent.is_none()
         && let Some(cover) = artwork_file(&app, app_id, ArtworkKind::Cover).await
@@ -512,7 +513,7 @@ async fn game_accent(
             artwork::accent_from_path(&cover).map(|a| a.css())
         })
         .await
-        .map_err(|e| e.to_string())?;
+        .map_err(crate::support::logged)?;
     }
 
     library
@@ -702,11 +703,14 @@ pub fn run() {
                 let _ = window.set_focus();
             }
         }))
+        .plugin(support::log_plugin())
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
         .manage(Library::default())
         .setup(|app| {
+            support::log_panics();
+            log::info!("Unalia Mod Manager {} started", app.package_info().version);
             app.manage(Catalog::new(&app.path().app_cache_dir()?));
             app.manage(mods::Mods::open(app.handle())?);
             mods::nexus_setup(app.handle());
@@ -741,6 +745,8 @@ pub fn run() {
             mods::nexus_login,
             mods::nexus_connect,
             mods::nexus_disconnect,
+            support::diagnostics,
+            support::open_logs_folder,
         ])
         .run(context)
         .expect("Unalia Mod Manager failed to start");
