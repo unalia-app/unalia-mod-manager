@@ -1,5 +1,5 @@
-//! Extraction sûre des archives de mods (SPEC §7). Formats : `.zip` et
-//! `.7z`, reconnus à leur signature et non à leur extension.
+//! Extraction sûre des archives de mods (SPEC §7). Formats : `.zip`, `.7z`
+//! et `.rar`, reconnus à leur signature et non à leur extension.
 //!
 //! Une archive téléchargée est une donnée hostile jusqu'à preuve du
 //! contraire. On refuse :
@@ -56,6 +56,8 @@ pub enum ArchiveError {
     Corrupt(#[from] zip::result::ZipError),
     #[error("the archive is damaged")]
     SevenZip(#[from] sevenz_rust2::Error),
+    #[error("the archive is damaged")]
+    Rar(#[from] unrar::error::UnrarError),
     #[error("{0} archives aren't supported yet")]
     Unsupported(&'static str),
     #[error("couldn't extract the archive")]
@@ -116,6 +118,7 @@ pub fn extract_cancellable(
 enum Format {
     Zip,
     SevenZip,
+    Rar,
 }
 
 /// Format d'après les premiers octets du fichier.
@@ -125,7 +128,7 @@ fn format(archive: &Path) -> Result<Format, ArchiveError> {
     match &magic[..read] {
         [b'P', b'K', ..] => Ok(Format::Zip),
         [b'7', b'z', 0xBC, 0xAF, 0x27, 0x1C] => Ok(Format::SevenZip),
-        [b'R', b'a', b'r', b'!', ..] => Err(ArchiveError::Unsupported("RAR")),
+        [b'R', b'a', b'r', b'!', ..] => Ok(Format::Rar),
         // Inconnu : on laisse le lecteur zip le refuser comme abîmé.
         _ => Ok(Format::Zip),
     }
@@ -141,6 +144,7 @@ fn extract_into(
     match format(archive)? {
         Format::Zip => extract_zip(archive, dir, limits, cancel, on_progress),
         Format::SevenZip => extract_7z(archive, dir, limits, cancel, on_progress),
+        Format::Rar => extract_rar(archive, dir, limits, cancel, on_progress),
     }
 }
 
@@ -285,6 +289,87 @@ fn extract_7z(
         return Err(error);
     }
     result?;
+    files.sort();
+    files.dedup();
+    Ok(files)
+}
+
+/// `.rar` par la bibliothèque UnRAR officielle. Elle écrit elle-même chaque
+/// fichier, au chemin choisi ici : la taille se vérifie avant (annoncée par
+/// l'en-tête, que le décompresseur ne dépasse pas) et après (sur le disque).
+/// Les tailles compressées n'étant pas exposées, le ratio se mesure sur
+/// l'archive entière, comme pour un `.7z`.
+fn extract_rar(
+    archive: &Path,
+    dir: &Path,
+    limits: Limits,
+    cancel: Option<&Cancel>,
+    on_progress: &mut impl FnMut(u64, u64),
+) -> Result<Vec<String>, ArchiveError> {
+    let compressed = fs::metadata(archive)?.len().max(1);
+    let mut entries = 0;
+    let mut announced: u64 = 0;
+    let listing = unrar::Archive::new(archive).open_for_listing()?;
+    if listing.volume_info() != unrar::VolumeInfo::None {
+        return Err(ArchiveError::Unsupported("Multi-part RAR"));
+    }
+    for entry in listing {
+        let entry = entry?;
+        if entry.is_encrypted() {
+            return Err(ArchiveError::Unsupported("Password-protected"));
+        }
+        entries += 1;
+        if entries > limits.max_entries {
+            return Err(ArchiveError::TooManyEntries);
+        }
+        announced = announced.saturating_add(entry.unpacked_size);
+    }
+
+    let mut files = Vec::new();
+    let mut total: u64 = 0;
+    let mut reader = unrar::Archive::new(archive).open_for_processing()?;
+    while let Some(header) = reader.read_header()? {
+        if cancelled(cancel) {
+            return Err(ArchiveError::Cancelled);
+        }
+        let entry = header.entry();
+        let raw = entry.filename.to_string_lossy().into_owned();
+        if entry.file_attr & REPARSE_POINT != 0 {
+            return Err(ArchiveError::Link(raw));
+        }
+        let Some(relative) = safe_relative_path(&raw) else {
+            return Err(ArchiveError::UnsafePath(raw));
+        };
+        let target = dir.join(&relative);
+        if entry.is_directory() {
+            fs::create_dir_all(&target)?;
+            reader = header.skip()?;
+            continue;
+        }
+        let remaining = limits.max_total_bytes.saturating_sub(total);
+        if entry.unpacked_size > remaining {
+            return Err(ArchiveError::TooLarge);
+        }
+        if let Some(parent) = target.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        reader = header.extract_to(&target)?;
+        // Un lien Unix (ou une jonction) ne porte pas l'attribut Windows : ce
+        // qui a été écrit fait foi.
+        let written = fs::symlink_metadata(&target)?;
+        if written.file_type().is_symlink() {
+            return Err(ArchiveError::Link(raw));
+        }
+        if written.len() > remaining {
+            return Err(ArchiveError::TooLarge);
+        }
+        total += written.len();
+        if total > 1024 * 1024 && total / compressed > limits.max_ratio {
+            return Err(ArchiveError::SuspiciousRatio(raw));
+        }
+        on_progress(total, announced.max(total));
+        files.push(to_slash(&relative));
+    }
     files.sort();
     files.dedup();
     Ok(files)

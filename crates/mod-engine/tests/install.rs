@@ -237,7 +237,7 @@ fn refuses_zip_bombs() {
 }
 
 #[test]
-fn extracts_7z_archives_and_refuses_rar() {
+fn extracts_7z_archives() {
     let tmp = tempfile::tempdir().unwrap();
     let src = tmp.path().join("src");
     fs::create_dir_all(src.join("archive/pc/mod")).unwrap();
@@ -253,12 +253,71 @@ fn extracts_7z_archives_and_refuses_rar() {
         fs::read(tmp.path().join("out/archive/pc/mod/cool.archive")).unwrap(),
         b"archive"
     );
+}
 
-    let rar = tmp.path().join("mod.rar");
-    fs::write(&rar, b"Rar!\x1a\x07\x00rest").unwrap();
-    let err = archive::extract(&rar, &tmp.path().join("rar"), Limits::default()).unwrap_err();
-    assert!(matches!(err, ArchiveError::Unsupported("RAR")), "{err:?}");
-    assert!(!tmp.path().join("rar").exists());
+fn rar_fixture(name: &str) -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../fixtures/rar")
+        .join(name)
+}
+
+#[test]
+fn extracts_rar_archives() {
+    let tmp = tempfile::tempdir().unwrap();
+    // Extension trompeuse : le format se lit dans le fichier.
+    let rar = tmp.path().join("mod.zip");
+    fs::copy(rar_fixture("version.rar"), &rar).unwrap();
+
+    let mut progress = Vec::new();
+    let files = archive::extract_with_progress(
+        &rar,
+        &tmp.path().join("out"),
+        Limits::default(),
+        |done, total| progress.push((done, total)),
+    )
+    .unwrap();
+    assert_eq!(files, ["VERSION"]);
+    assert_eq!(
+        fs::read(tmp.path().join("out/VERSION")).unwrap(),
+        b"unrar-0.4.0"
+    );
+    assert_eq!(progress, [(11, 11)]);
+}
+
+#[test]
+fn refuses_rar_archives_it_cannot_open_alone() {
+    let tmp = tempfile::tempdir().unwrap();
+    for (name, kind) in [
+        ("crypted.rar", "Password-protected"),
+        ("archive.part1.rar", "Multi-part RAR"),
+    ] {
+        let out = tmp.path().join(name).with_extension("out");
+        let err = archive::extract(&rar_fixture(name), &out, Limits::default()).unwrap_err();
+        assert!(
+            matches!(err, ArchiveError::Unsupported(k) if k == kind),
+            "{name}: {err:?}"
+        );
+        assert!(!out.exists());
+        assert!(!out.with_extension("partial").exists());
+    }
+}
+
+#[test]
+fn refuses_rar_archives_over_the_limits() {
+    let tmp = tempfile::tempdir().unwrap();
+    let limits = Limits {
+        max_total_bytes: 10,
+        ..Limits::default()
+    };
+    let err =
+        archive::extract(&rar_fixture("version.rar"), &tmp.path().join("out"), limits).unwrap_err();
+    assert!(matches!(err, ArchiveError::TooLarge), "{err:?}");
+    assert!(!tmp.path().join("out").exists());
+
+    let rar = tmp.path().join("bad.rar");
+    fs::write(&rar, b"Rar!\x1a\x07\x00 pas vraiment un rar").unwrap();
+    let err = archive::extract(&rar, &tmp.path().join("bad"), Limits::default()).unwrap_err();
+    assert!(matches!(err, ArchiveError::Rar(_)), "{err:?}");
 }
 
 #[test]
