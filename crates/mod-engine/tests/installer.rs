@@ -356,6 +356,22 @@ async fn toggling_and_uninstalling_everything_restores_the_game() {
 }
 
 #[tokio::test]
+async fn removing_every_mod_at_once_restores_the_game() {
+    let mut w = World::new().await;
+    w.publish_knight().await;
+    let original = snapshot(&w.game);
+    w.install(KNIGHT).await.0.unwrap();
+    let game = "steam:1030300";
+    installer::set_enabled(&mut w.state, game, &w.game, KNIGHT, false).unwrap();
+    fs::write(w.game.join("BepInEx/LogOutput.log"), "log").unwrap();
+    assert_eq!(w.state.games().unwrap(), [game]);
+
+    assert_eq!(installer::uninstall_all(&mut w.state, game, &w.game).unwrap(), 3);
+    assert_eq!(snapshot(&w.game), original);
+    assert!(w.state.games().unwrap().is_empty());
+}
+
+#[tokio::test]
 async fn refuses_to_install_over_a_manual_bepinex() {
     let mut w = World::new().await;
     w.publish_knight().await;

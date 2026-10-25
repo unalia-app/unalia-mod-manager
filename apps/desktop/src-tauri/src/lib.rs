@@ -638,6 +638,17 @@ fn steam_root() -> Option<PathBuf> {
     detect::find_steam_root()
 }
 
+/// Dossier de chaque jeu Steam installé.
+#[cfg(windows)]
+fn steam_dirs() -> HashMap<u32, PathBuf> {
+    steam_root()
+        .and_then(|root| detect::scan_steam(&root).ok())
+        .unwrap_or_default()
+        .into_iter()
+        .map(|game| (game.app_id, game.install_dir))
+        .collect()
+}
+
 /// Protocole `artwork://localhost/<appid>/<type>` (Windows :
 /// `http://artwork.localhost/...`). Ne sert que les images des jeux (cache de
 /// Steam ou repli Thunderstore) : l'interface ne manipule jamais de chemin.
@@ -693,6 +704,16 @@ pub fn run() {
         if let Some(base) = std::env::var_os(var) {
             mods::adopt_old_dir(&Path::new(&base).join(&context.config().identifier));
         }
+    }
+    // Lancé par le désinstalleur Windows, case « supprimer les données »
+    // cochée : les jeux retrouvent leur état d'origine avant que la base
+    // qui liste les mods ne disparaisse. Pas de fenêtre.
+    #[cfg(windows)]
+    if std::env::args().any(|arg| arg == "--remove-all-mods") {
+        if let Some(base) = std::env::var_os("LOCALAPPDATA") {
+            mods::remove_all(&Path::new(&base).join(&context.config().identifier), steam_dirs());
+        }
+        return;
     }
     tauri::Builder::default()
         // En premier : un lien `nxm://` ouvert pendant que Modalia tourne

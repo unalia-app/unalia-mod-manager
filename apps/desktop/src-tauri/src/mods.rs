@@ -6,7 +6,7 @@
 //! file et appliquée à sa fermeture (SPEC §3.6).
 
 use std::collections::{HashMap, HashSet};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::sync::Mutex as SyncMutex;
 use std::time::{Duration, Instant};
 
@@ -224,6 +224,38 @@ fn migrate_from_roaming(roaming: &Path, local: &Path) {
 
 fn game_key(app_id: u32) -> String {
     format!("steam:{app_id}")
+}
+
+/// Retire les mods de tous les jeux (désinstallation d'Unalia, données
+/// effacées). Un jeu introuvable est sauté : il n'a plus de fichiers à
+/// nettoyer.
+pub fn remove_all(data: &Path, steam_dirs: HashMap<u32, PathBuf>) {
+    let db = data.join("modalia.db");
+    if !db.is_file() {
+        return;
+    }
+    let Ok(mut state) = ModState::open(&db) else {
+        return;
+    };
+    // Comme la bibliothèque : Steam l'emporte sur un ajout à la main.
+    let mut game_dirs: HashMap<u32, PathBuf> = state
+        .manual_games()
+        .unwrap_or_default()
+        .into_iter()
+        .map(|game| (game.app_id, PathBuf::from(game.path)))
+        .collect();
+    game_dirs.extend(steam_dirs);
+    for key in state.games().unwrap_or_default() {
+        let dir = key
+            .strip_prefix("steam:")
+            .and_then(|id| id.parse::<u32>().ok())
+            .and_then(|id| game_dirs.get(&id));
+        if let Some(dir) = dir
+            && let Err(error) = installer::uninstall_all(&mut state, &key, dir)
+        {
+            eprintln!("couldn't remove the mods of {key}: {error}");
+        }
+    }
 }
 
 const UNKNOWN_GAME: &str = "This game isn't in your library anymore. Go back home to rescan it.";

@@ -155,6 +155,15 @@ impl State {
             .transpose()
     }
 
+    /// Jeux qui ont au moins un mod installé.
+    pub fn games(&self) -> Result<Vec<String>, StateError> {
+        let mut stmt = self
+            .conn
+            .prepare("SELECT DISTINCT game FROM installed_mods ORDER BY game")?;
+        let rows = stmt.query_map([], |r| r.get(0))?;
+        Ok(rows.collect::<Result<_, _>>()?)
+    }
+
     /// `id` est-il installé dans au moins un jeu ? Le cache des archives
     /// est commun à tous les jeux.
     pub fn installed_anywhere(&self, id: &str) -> Result<bool, StateError> {

@@ -29,4 +29,11 @@ Links you open (a mod page, a donation link) open in your browser.
 
 ## Uninstalling
 
-Your data lives in the app data folder (`%LOCALAPPDATA%\app.unalia.modmanager` on Windows). Delete it to remove everything the app stored.
+Your data lives in the app data folder (`%LOCALAPPDATA%\app.unalia.modmanager` on Windows).
+
+When you uninstall the app on Windows:
+
+- **"Delete the application data" checked:** the uninstaller first removes every mod from your games, so each game folder is back to how it was. Then it deletes the app data folder.
+- **Unchecked:** your mods stay in your games and keep working. Install the app again and it finds them.
+
+Delete the app data folder by hand only after removing your mods in the app: without it, the app can't tell which files it placed.

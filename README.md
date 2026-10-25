@@ -32,7 +32,7 @@ Archives can be `.zip`, `.7z` or `.rar`.
 
 - **Nothing is ever run.** The app copies and links files. It never launches an `.exe`, a script or an installer found in a mod.
 - **Your game files are never modified.** Mods are linked into the game folder, never written over original files. Your saves are never touched.
-- **Everything is reversible.** Every file placed is recorded. Remove all your mods and the game folder is back to how it was. An install either fully succeeds or rolls back.
+- **Everything is reversible.** Every file placed is recorded. Remove all your mods, or uninstall the app with its data, and the game folder is back to how it was. An install either fully succeeds or rolls back.
 - **Mods come from their official source.** Downloaded over HTTPS from Thunderstore, Nexus Mods or the author's GitHub, never re-hosted. Authors are credited and their page is one click away.
 - **Open source.** Read the code, build it yourself.
 

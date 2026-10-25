@@ -819,6 +819,19 @@ pub fn uninstall(
     Ok(m)
 }
 
+/// Retire tous les mods d'un jeu, loader en dernier : le jeu retrouve son
+/// état d'origine. Sert à la désinstallation d'Unalia, quand sa base va
+/// disparaître. Renvoie le nombre de mods retirés.
+pub fn uninstall_all(state: &mut State, game: &str, game_dir: &Path) -> Result<usize, InstallError> {
+    let (loaders, mods): (Vec<_>, Vec<_>) = state.list(game)?.into_iter().partition(InstalledMod::is_loader);
+    let count = loaders.len() + mods.len();
+    for m in mods.iter().chain(&loaders) {
+        deploy::undeploy(game_dir, &m.deployment, m.is_loader());
+        state.remove(game, &m.id)?;
+    }
+    Ok(count)
+}
+
 /// Libère le stockage d'un mod désinstallé, une fois l'annulation passée :
 /// ses dossiers extraits et, si aucun autre jeu ne l'a, ses archives en
 /// cache. Sans effet s'il a été réinstallé entre-temps.
