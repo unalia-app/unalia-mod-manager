@@ -85,3 +85,29 @@ fn accent_comes_from_the_cover_and_greys_give_none() {
     // Aucune image.
     assert_eq!(game_accent(&root, 2000002), None);
 }
+
+#[test]
+fn trims_the_transparent_margins_of_a_logo() {
+    use image::{Rgba, RgbaImage};
+    use mod_engine::artwork::trim_logo;
+
+    let dir = tempfile::tempdir().unwrap();
+    let source = dir.path().join("logo.png");
+    let target = dir.path().join("trimmed.png");
+    let mut logo = RgbaImage::new(64, 36);
+    for x in 20..30 {
+        for y in 10..14 {
+            logo.put_pixel(x, y, Rgba([255, 230, 0, 255]));
+        }
+    }
+    logo.save(&source).unwrap();
+    assert!(trim_logo(&source, &target).unwrap());
+    assert_eq!(image::open(&target).unwrap().into_rgba8().dimensions(), (10, 4));
+
+    // Déjà sans marge, ou entièrement vide : rien à écrire.
+    let full = RgbaImage::from_pixel(8, 8, Rgba([0, 0, 0, 255]));
+    full.save(&source).unwrap();
+    assert!(!trim_logo(&source, &target).unwrap());
+    RgbaImage::new(8, 8).save(&source).unwrap();
+    assert!(!trim_logo(&source, &target).unwrap());
+}

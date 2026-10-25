@@ -523,10 +523,41 @@ async fn game_accent(
     Ok(accent)
 }
 
+/// Image d'un jeu prête à afficher. Un logo perd ses marges transparentes
+/// (copie faite une fois dans le cache de l'appli), pour remplir sa place.
+async fn artwork_file(app: &AppHandle, app_id: u32, kind: ArtworkKind) -> Option<PathBuf> {
+    let file = source_artwork(app, app_id, kind).await?;
+    if kind != ArtworkKind::Logo {
+        return Some(file);
+    }
+    let trimmed = app
+        .path()
+        .app_cache_dir()
+        .ok()?
+        .join("artwork")
+        .join(format!("{app_id}-logo-trimmed.png"));
+    let fresh = |t: &Path| {
+        let modified = |p: &Path| fs::metadata(p).and_then(|m| m.modified()).ok();
+        modified(t).is_some_and(|t| modified(&file).is_none_or(|s| t >= s))
+    };
+    if fresh(&trimmed) {
+        return Some(trimmed);
+    }
+    let (source, target) = (file.clone(), trimmed.clone());
+    let done = tauri::async_runtime::spawn_blocking(move || {
+        fs::create_dir_all(target.parent()?).ok()?;
+        artwork::trim_logo(&source, &target).ok()
+    })
+    .await
+    .ok()
+    .flatten();
+    Some(if done == Some(true) { trimmed } else { file })
+}
+
 /// Image d'un jeu : cache de Steam d'abord, sinon l'image publiée par
 /// Thunderstore pour les gestionnaires de mods, téléchargée une fois dans
 /// le cache de l'appli.
-async fn artwork_file(app: &AppHandle, app_id: u32, kind: ArtworkKind) -> Option<PathBuf> {
+async fn source_artwork(app: &AppHandle, app_id: u32, kind: ArtworkKind) -> Option<PathBuf> {
     let library = app.state::<Library>();
     if let Some(root) = library.steam_root()
         && let Some(file) = artwork::find_artwork(&root, app_id, kind)

@@ -107,3 +107,27 @@ pub fn game_accent(steam_root: &Path, app_id: u32) -> Option<Accent> {
         .filter_map(|kind| find_artwork(steam_root, app_id, kind))
         .find_map(|path| accent_from_path(&path))
 }
+
+/// Copie d'un logo sans ses marges transparentes : les logos de Steam sont
+/// posés sur une toile fixe (640×360), parfois avec beaucoup de vide autour.
+/// `false` si rien n'est à retirer (le logo d'origine convient tel quel).
+pub fn trim_logo(source: &Path, target: &Path) -> image::ImageResult<bool> {
+    let image = image::open(source)?.into_rgba8();
+    let (width, height) = image.dimensions();
+    let (mut left, mut top, mut right, mut bottom) = (width, height, 0, 0);
+    for (x, y, pixel) in image.enumerate_pixels() {
+        // Un alpha presque nul compte comme vide (ombres très légères).
+        if pixel[3] > 8 {
+            left = left.min(x);
+            top = top.min(y);
+            right = right.max(x);
+            bottom = bottom.max(y);
+        }
+    }
+    if left > right || (left == 0 && top == 0 && right == width - 1 && bottom == height - 1) {
+        return Ok(false);
+    }
+    let cropped = image::imageops::crop_imm(&image, left, top, right - left + 1, bottom - top + 1);
+    cropped.to_image().save_with_format(target, image::ImageFormat::Png)?;
+    Ok(true)
+}
