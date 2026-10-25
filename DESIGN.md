@@ -9,7 +9,7 @@ Tokens : `packages/ui/src/styles.css`. Composants : `packages/ui/src/`.
 - **Unalia** est la marque mère. Cette appli s'appelle **Unalia Mod Manager** : titre de fenêtre, installeur, stores.
 - Logo : « UNALIA » en italique gras, puis « Mod manager » en petit (majuscules, `fg-subtle`). Même composition dans l'intro, sous le mot.
 - Dans les phrases de l'interface : « Unalia » seul (« Unalia installs it right after »).
-- « Modalia » reste le nom de code interne : dépôt, paquets, identifiant `app.modalia.desktop` (le changer déplacerait les données des utilisateurs).
+- « Modalia » reste le nom de code interne : dépôt, paquets, base `modalia.db`. L'identifiant de l'appli est `app.unalia.modmanager` (l'ancien dossier `app.modalia.desktop` est repris au démarrage).
 
 ## Principes
 

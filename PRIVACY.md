@@ -28,4 +28,4 @@ Links you open (a mod page, a donation link) open in your browser.
 
 ## Uninstalling
 
-Your data lives in the app data folder (`%LOCALAPPDATA%\app.modalia.desktop` on Windows). Delete it to remove everything the app stored.
+Your data lives in the app data folder (`%LOCALAPPDATA%\app.unalia.modmanager` on Windows). Delete it to remove everything the app stored.

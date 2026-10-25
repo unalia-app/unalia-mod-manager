@@ -652,6 +652,16 @@ fn mime(file: &std::path::Path) -> &'static str {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    let context = tauri::generate_context!();
+    // Sous Windows, la WebView crée son dossier dans les données locales dès
+    // l'ouverture de la fenêtre, avant `setup` : l'ancien dossier est repris
+    // avant (réglages de l'interface compris).
+    #[cfg(windows)]
+    for var in ["LOCALAPPDATA", "APPDATA"] {
+        if let Some(base) = std::env::var_os(var) {
+            mods::adopt_old_dir(&Path::new(&base).join(&context.config().identifier));
+        }
+    }
     tauri::Builder::default()
         // En premier : un lien `nxm://` ouvert pendant que Modalia tourne
         // relance l'appli, qui passe le lien à la fenêtre déjà ouverte.
@@ -701,7 +711,7 @@ pub fn run() {
             mods::nexus_connect,
             mods::nexus_disconnect,
         ])
-        .run(tauri::generate_context!())
+        .run(context)
         .expect("Unalia Mod Manager failed to start");
 }
 

@@ -77,11 +77,19 @@ impl Mods {
         // synchronisés entre machines.
         let data = app.path().app_local_data_dir()?;
         let cache = app.path().app_cache_dir()?;
+        let roaming = app.path().app_data_dir()?;
         // Avant toute ouverture : sous Windows, un fichier ouvert ne peut
         // pas être remplacé.
-        migrate_from_roaming(&app.path().app_data_dir()?, &data);
+        for dir in [&roaming, &data, &cache] {
+            adopt_old_dir(dir);
+        }
+        migrate_from_roaming(&roaming, &data);
+        let mut state = ModState::open(&data.join("modalia.db"))?;
+        if let Some(base) = data.parent() {
+            state.rebase_store(&base.join(OLD_IDENTIFIER).join("mods"), &data.join("mods"))?;
+        }
         Ok(Self {
-            state: Mutex::new(ModState::open(&data.join("modalia.db"))?),
+            state: Mutex::new(state),
             paths: Paths {
                 store: data.join("mods"),
                 downloads: cache.join("downloads"),
@@ -162,6 +170,25 @@ impl Starting {
         game_running
             || (self.saw_launcher && !self.launcher_open)
             || (!self.launcher_open && self.at.elapsed() >= STARTING_FOR)
+    }
+}
+
+/// Identifiant de l'appli avant son nom public, Unalia Mod Manager.
+const OLD_IDENTIFIER: &str = "app.modalia.desktop";
+
+/// Reprend le dossier de l'ancien identifiant, voisin de `dir`, tant que
+/// `dir` n'existe pas encore. Un simple renommage : les liens physiques vers
+/// les jeux restent valides, et les chemins enregistrés dans la base sont
+/// ensuite réécrits (`rebase_store`).
+pub(crate) fn adopt_old_dir(dir: &Path) {
+    let Some(old) = dir.parent().map(|base| base.join(OLD_IDENTIFIER)) else {
+        return;
+    };
+    if old == dir || !old.is_dir() || dir.exists() {
+        return;
+    }
+    if let Err(error) = std::fs::rename(&old, dir) {
+        eprintln!("couldn't move {} to {}: {error}", old.display(), dir.display());
     }
 }
 
