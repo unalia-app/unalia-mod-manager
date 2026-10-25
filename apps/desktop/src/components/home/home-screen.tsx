@@ -43,8 +43,12 @@ export function HomeScreen() {
 	const { featured, games, others } = useMemo(() => {
 		const all = state.status === "ready" ? state.scan.games : [];
 		const moddable = withRecentsFirst(all.filter(isModdable));
-		const last = recentGameIds()[0];
-		const featured = moddable.find((g) => g.appId === last) ?? null;
+		// Le plus récent encore installé : un jeu désinstallé ou sur un disque
+		// débranché ne fait pas disparaître la carte.
+		const featured =
+			recentGameIds()
+				.map((id) => moddable.find((g) => g.appId === id))
+				.find((g) => g !== undefined) ?? null;
 		return { featured, games: moddable, others: all.filter((g) => !isModdable(g)) };
 	}, [state]);
 
