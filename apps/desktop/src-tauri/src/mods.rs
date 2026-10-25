@@ -1183,6 +1183,14 @@ fn error_message(error: &dyn std::error::Error) -> String {
 /// Réglage où vit la clé API Nexus de l'utilisateur.
 const NEXUS_KEY: &str = "nexus_api_key";
 
+/// Dernier compte reconnu par Nexus : affiché tel quel hors ligne.
+const NEXUS_ACCOUNT: &str = "nexus_account";
+
+async fn remember_account(mods: &Mods, account: Option<&Account>) {
+    let value = account.and_then(|a| serde_json::to_string(a).ok());
+    let _ = mods.state.lock().await.set_setting(NEXUS_ACCOUNT, value.as_deref());
+}
+
 /// Au démarrage : clé Nexus enregistrée (en dev, repli sur `NEXUS_API_KEY`
 /// du `.env` à la racine du dépôt), et liens `nxm://`.
 pub fn nexus_setup(app: &AppHandle) {
@@ -1262,19 +1270,37 @@ pub struct NexusStatus {
     account: Option<Account>,
     /// Connexion en un clic disponible (Modalia approuvé par Nexus).
     sso: bool,
+    /// Clé enregistrée mais Nexus injoignable : `account` est le dernier
+    /// compte reconnu (absent s'il n'a jamais été vérifié).
+    offline: bool,
 }
 
 #[tauri::command]
-pub async fn nexus_status(catalog: State<'_, Catalog>) -> Result<NexusStatus, String> {
-    let account = if catalog.nexus.connected() {
-        Some(catalog.nexus.account().await.map_err(|e| e.to_string())?)
-    } else {
-        None
-    };
-    Ok(NexusStatus {
-        account,
+pub async fn nexus_status(
+    catalog: State<'_, Catalog>,
+    mods: State<'_, Mods>,
+) -> Result<NexusStatus, String> {
+    let mut status = NexusStatus {
+        account: None,
         sso: NEXUS_SSO_APP.is_some(),
-    })
+        offline: false,
+    };
+    if !catalog.nexus.connected() {
+        return Ok(status);
+    }
+    match catalog.nexus.account().await {
+        Ok(account) => {
+            remember_account(&mods, Some(&account)).await;
+            status.account = Some(account);
+        }
+        Err(SourceError::Network { .. }) => {
+            let saved = mods.state.lock().await.setting(NEXUS_ACCOUNT).ok().flatten();
+            status.account = saved.and_then(|s| serde_json::from_str(&s).ok());
+            status.offline = true;
+        }
+        Err(error) => return Err(error.to_string()),
+    }
+    Ok(status)
 }
 
 /// Connexion en un clic : la page d'autorisation de Nexus s'ouvre dans le
@@ -1322,6 +1348,7 @@ async fn save_nexus_key(
         .await
         .set_setting(NEXUS_KEY, Some(&key))
         .map_err(|e| e.to_string())?;
+    remember_account(mods, Some(&account)).await;
     register_nxm(app);
     Ok(account)
 }
@@ -1347,6 +1374,7 @@ pub async fn nexus_disconnect(
     mods: State<'_, Mods>,
 ) -> Result<(), String> {
     catalog.nexus.set_api_key(None);
+    remember_account(&mods, None).await;
     // Vide plutôt qu'absent : une déconnexion voulue tient, même en dev
     // avec une clé dans le `.env`.
     mods.state

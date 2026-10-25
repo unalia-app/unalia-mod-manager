@@ -383,8 +383,11 @@ export function onPendingApplied(handler: (event: PendingApplied) => void): Prom
 
 export type NexusAccount = { name: string; premium: boolean; avatarUrl: string | null };
 
-/** `sso` : connexion en un clic disponible (Modalia approuvé par Nexus). */
-export type NexusStatus = { account: NexusAccount | null; sso: boolean };
+/**
+ * `sso` : connexion en un clic disponible (Modalia approuvé par Nexus).
+ * `offline` : clé enregistrée mais Nexus injoignable, `account` est le dernier compte reconnu.
+ */
+export type NexusStatus = { account: NexusAccount | null; sso: boolean; offline: boolean };
 
 /** Prérequis Nexus que Modalia n'installe pas seul. */
 export type NexusRequirement = { modId: number | null; name: string; url: string | null };
@@ -403,7 +406,7 @@ export type NexusInstalled = {
 };
 
 export function nexusStatus(): Promise<NexusStatus> {
-	if (!isTauri()) return Promise.resolve({ account: null, sso: false });
+	if (!isTauri()) return Promise.resolve({ account: null, sso: false, offline: false });
 	return invoke("nexus_status");
 }
 

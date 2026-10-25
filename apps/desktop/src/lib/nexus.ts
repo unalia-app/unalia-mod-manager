@@ -17,28 +17,43 @@ function subscribe(listener: () => void) {
 	return () => listeners.delete(listener);
 }
 
+function load() {
+	if (loading) return;
+	// Clé refusée : on se comporte comme déconnecté.
+	loading = nexusStatus()
+		.then(set, () => set({ account: null, sso: false, offline: false }))
+		.finally(() => {
+			loading = null;
+		});
+}
+
+// Nexus injoignable au démarrage : on revérifie le compte au retour du réseau.
+if (typeof window !== "undefined") {
+	window.addEventListener("online", () => {
+		if (status?.offline) load();
+	});
+}
+
 export function useNexusStatus(): NexusStatus | undefined {
 	const value = useSyncExternalStore(subscribe, () => status, () => undefined);
 	useEffect(() => {
-		if (status !== undefined || loading) return;
-		// Clé refusée ou Nexus injoignable : on se comporte comme déconnecté.
-		loading = nexusStatus()
-			.then(set, () => set({ account: null, sso: false }))
-			.finally(() => {
-				loading = null;
-			});
+		if (status === undefined) load();
 	}, []);
 	return value;
 }
 
-/** Compte connecté : `null` sans compte, `undefined` tant qu'on ne sait pas. */
+/**
+ * Compte connecté : `null` sans compte, `undefined` tant qu'on ne sait pas.
+ * Hors ligne, le dernier compte reconnu ; jamais vérifié, `undefined`.
+ */
 export function useNexusAccount(): NexusAccount | null | undefined {
 	const value = useNexusStatus();
-	return value === undefined ? undefined : value.account;
+	if (value === undefined) return undefined;
+	return value.account ?? (value.offline ? undefined : null);
 }
 
 function connected(account: NexusAccount) {
-	set({ sso: status?.sso ?? false, account });
+	set({ sso: status?.sso ?? false, offline: false, account });
 	return account;
 }
 
@@ -52,5 +67,5 @@ export async function connectNexus(apiKey: string): Promise<NexusAccount> {
 
 export async function disconnectNexus() {
 	await nexusDisconnect();
-	set({ sso: status?.sso ?? false, account: null });
+	set({ sso: status?.sso ?? false, offline: false, account: null });
 }

@@ -46,7 +46,7 @@ pub fn domain_of(community: &str) -> Option<&str> {
         .filter(|d| !d.is_empty() && d.chars().all(|c| c.is_ascii_alphanumeric()))
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Account {
     pub name: String,

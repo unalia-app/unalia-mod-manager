@@ -53,7 +53,7 @@ export function Connections() {
 function NexusCard() {
 	const status = useNexusStatus();
 	const account = status?.account ?? null;
-	const linked = account !== null;
+	const linked = account !== null || status?.offline === true;
 	const [busy, setBusy] = useState(false);
 	const [keyForm, setKeyForm] = useState(false);
 	const [confirmDisconnect, setConfirmDisconnect] = useState(false);
@@ -104,9 +104,11 @@ function NexusCard() {
 							{linked && <ConnectedPill />}
 						</div>
 						<p className="mt-0.5 text-xs text-fg-subtle">
-							{account
-								? `${account.name} · ${account.premium ? "Premium: downloads start right in Unalia" : "Free account: you confirm each download on Nexus"}`
-								: "The largest mod library, with Cyberpunk 2077"}
+							{status?.offline
+								? `${account ? `${account.name} · ` : ""}Nexus Mods can't be reached right now`
+								: account
+									? `${account.name} · ${account.premium ? "Premium: downloads start right in Unalia" : "Free account: you confirm each download on Nexus"}`
+									: "The largest mod library, with Cyberpunk 2077"}
 						</p>
 					</div>
 				</div>
