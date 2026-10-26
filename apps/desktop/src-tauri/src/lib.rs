@@ -814,6 +814,8 @@ pub fn run() {
             mods::forgotten_games,
             mods::forget_game,
             mods::remove_manual_game,
+            mods::reset_preview,
+            mods::reset_game,
             mods::cancel_pending,
             mods::check_updates,
             mods::game_status,

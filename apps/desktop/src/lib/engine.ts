@@ -354,6 +354,30 @@ export function removeManualGame(appId: number): Promise<number> {
 	return invoke("remove_manual_game", { appId });
 }
 
+/** Emplacement de mods posé dans le jeu par un autre outil (à la main, Vortex…). */
+export type ForeignFiles = {
+	/** Relatif au dossier du jeu, avec des `/`. */
+	path: string;
+	dir: boolean;
+	/** Fichiers qui ne viennent pas d'Unalia (0 : dossier vide laissé là). */
+	files: number;
+	bytes: number;
+};
+
+export type ResetPreview = { mods: number; foreign: ForeignFiles[] };
+
+export type ResetResult = { mods: number; foreign: number; left: string[] };
+
+/** Ce qu'une remise à zéro retirerait du jeu. */
+export function resetPreview(appId: number): Promise<ResetPreview> {
+	return invoke("reset_preview", { appId });
+}
+
+/** Retire les mods d'Unalia et envoie à la corbeille ceux d'autres outils. Les fichiers du jeu restent. */
+export function resetGame(appId: number): Promise<ResetResult> {
+	return invoke("reset_game", { appId });
+}
+
 export type ModUpdate = { modId: string; current: string; latest: string };
 
 export function checkUpdates(appId: number): Promise<ModUpdate[]> {

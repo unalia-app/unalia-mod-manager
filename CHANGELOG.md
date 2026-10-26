@@ -8,6 +8,7 @@ All notable changes to Unalia Mod Manager. The format follows [Keep a Changelog]
 
 - Go back to one of the last 3 versions of a mod in one click from My mods, without downloading it again.
 - Remove a game added by hand: its mods leave the game folder, the game itself stays installed.
+- Reset mods for a game: Unalia takes out its mods and sends mod files left by other tools (added by hand, Vortex…) to the Recycle Bin, so you can start clean.
 
 ### Changed
 

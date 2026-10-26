@@ -957,3 +957,52 @@ async fn removing_a_game_puts_its_folder_back_and_frees_everything() {
     assert!(w.state.games().unwrap().is_empty());
     assert!(names(&w.paths.store.join("files")).is_empty());
 }
+
+#[tokio::test]
+async fn resetting_a_game_clears_mods_from_unalia_and_other_tools() {
+    let mut w = World::new().await;
+    w.publish_knight().await;
+    // `Plugins/` plein, sans MelonLoader : peut être au jeu, il reste.
+    fs::create_dir_all(w.game.join("Plugins")).unwrap();
+    fs::write(w.game.join("Plugins/native.dll"), "game").unwrap();
+    let original = snapshot(&w.game);
+    w.install(KNIGHT).await.0.unwrap();
+    let game = "steam:1030300";
+
+    // Restes d'autres outils, comme dans un vrai Silksong passé par Vortex.
+    fs::create_dir_all(w.game.join("BepInEx/plugins/OldMod")).unwrap();
+    fs::write(w.game.join("BepInEx/plugins/OldMod/Old.dll"), "old").unwrap();
+    fs::write(w.game.join("version.dll"), "melon").unwrap();
+    fs::create_dir(w.game.join("UserData")).unwrap();
+    fs::write(w.game.join("vortex.deployment.hollowknightsilksong-bepinex.json"), "{}").unwrap();
+
+    let found = installer::foreign_files(&w.state, game, &w.game, "bepinex").unwrap();
+    let found: Vec<(&str, usize)> = found.iter().map(|f| (f.path.as_str(), f.files)).collect();
+    assert_eq!(
+        found,
+        [
+            ("BepInEx", 1),
+            ("version.dll", 1),
+            ("UserData", 0),
+            ("vortex.deployment.hollowknightsilksong-bepinex.json", 1),
+        ],
+        "les fichiers d'Unalia ne comptent pas"
+    );
+
+    let trashed = std::cell::RefCell::new(Vec::new());
+    let discard = |path: &Path| {
+        trashed.borrow_mut().push(path.to_path_buf());
+        if path.is_dir() {
+            fs::remove_dir_all(path)
+        } else {
+            fs::remove_file(path)
+        }
+    };
+    let reset = installer::reset(&mut w.state, &w.paths, game, &w.game, "bepinex", discard).unwrap();
+    assert_eq!((reset.mods, reset.foreign), (3, 4));
+    assert!(reset.left.is_empty());
+    assert!(trashed.borrow().contains(&w.game.join("BepInEx")), "le plugin glissé à la main part à la corbeille");
+    assert_eq!(snapshot(&w.game), original, "le jeu revient à l'identique");
+    assert!(w.state.list(game).unwrap().is_empty());
+    assert_eq!(installer::storage_size(&w.paths, game), 0);
+}

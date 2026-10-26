@@ -109,7 +109,7 @@ fn install(e: &InstallError) -> Advice {
         InstallError::NoReleaseFile { .. } => advice(true, "The author may still be uploading it: try again later."),
         InstallError::LoaderPresent => advice(
             true,
-            "Remove the BepInEx folder from the game folder, then install again: Unalia will manage it.",
+            "Click Reset mods under Play to clear it, then install again: Unalia will manage it.",
         ),
         InstallError::Io(_) => advice(true, DISK),
         _ => Advice::default(),
@@ -177,7 +177,7 @@ fn deploy(e: &DeployError) -> Advice {
     match e {
         DeployError::Conflict(_) => advice(
             true,
-            "Another program put this file there: move it out of the game folder, then try again.",
+            "Another program put this file there: click Reset mods under Play, then try again.",
         ),
         DeployError::UnsafeTarget(_) => advice(true, BLOCKED),
         DeployError::MissingSource(_) => advice(true, "Remove the mod, then install it again."),

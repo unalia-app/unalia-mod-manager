@@ -11,6 +11,7 @@ use std::sync::Mutex as SyncMutex;
 use std::time::{Duration, Instant};
 
 use mod_engine::download::Cancel;
+use mod_engine::foreign::{self, Foreign};
 use mod_engine::installer::{
     self, InstallError, Installer, NexusFile, NexusInstall, Paths, Progress, Target, Update,
 };
@@ -1182,6 +1183,67 @@ pub async fn remove_manual_game(
     mods.removed.lock().unwrap().retain(|(game, _), _| *game != key);
     log::info!("removed {key} and its {count} mods");
     Ok(count)
+}
+
+/// Ce qu'une remise à zéro retirerait du jeu.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ResetPreview {
+    /// Mods installés par Unalia.
+    mods: usize,
+    /// Fichiers de mods posés par d'autres outils.
+    foreign: Vec<Foreign>,
+}
+
+#[tauri::command]
+pub async fn reset_preview(
+    library: State<'_, Library>,
+    mods: State<'_, Mods>,
+    app_id: u32,
+) -> Result<ResetPreview, String> {
+    let game = library.game(app_id).ok_or(UNKNOWN_GAME)?;
+    let key = game_key(app_id);
+    let state = mods.state.lock().await;
+    let foreign =
+        installer::foreign_files(&state, &key, &game.dir, &game.profile.loader).map_err(|e| error_message(&e))?;
+    let count = state.list(&key).map_err(crate::support::logged)?.len();
+    Ok(ResetPreview { mods: count, foreign })
+}
+
+/// Remet le jeu à zéro côté mods : ceux d'Unalia le quittent, ce que
+/// d'autres outils ont laissé part à la corbeille. Les fichiers du jeu et
+/// les sauvegardes ne sont pas touchés.
+#[tauri::command]
+pub async fn reset_game(
+    library: State<'_, Library>,
+    mods: State<'_, Mods>,
+    app_id: u32,
+) -> Result<installer::Reset, String> {
+    let game = library.game(app_id).ok_or(UNKNOWN_GAME)?;
+    if mods.is_running(&game) {
+        return Err(close_first(&game));
+    }
+    let _fetching = mods.fetching.lock().await;
+    let mut state = mods.state.lock().await;
+    let key = game_key(app_id);
+    let reset = installer::reset(
+        &mut state,
+        &mods.paths,
+        &key,
+        &game.dir,
+        &game.profile.loader,
+        foreign::to_recycle_bin,
+    )
+    .map_err(|e| error_message(&e))?;
+    // Plus d'« Undo » possible pour les mods retirés juste avant.
+    mods.removed.lock().unwrap().retain(|(game, _), _| *game != key);
+    log::info!(
+        "reset {key}: {} mods, {} leftovers from other tools, {} left",
+        reset.mods,
+        reset.foreign,
+        reset.left.len()
+    );
+    Ok(reset)
 }
 
 // ---------------------------------------------------------------- jeu

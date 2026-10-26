@@ -24,6 +24,7 @@ uuid = { version = "1.28.0", features = ["v4"] }
 futures-util = { version = "0.3.34", default-features = false, features = ["sink"] }
 md-5 = "0.11.0"
 unrar = "0.5.8"
+trash = "5.2.9"
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.56"

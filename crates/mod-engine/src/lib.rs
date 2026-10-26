@@ -8,6 +8,7 @@ pub mod artwork;
 pub mod deploy;
 pub mod detect;
 pub mod download;
+pub mod foreign;
 pub mod games;
 pub mod installer;
 pub mod launch;

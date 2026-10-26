@@ -18,6 +18,7 @@ import { NexusConnect } from "@/components/game/nexus-connect";
 import { PendingBanner } from "@/components/game/pending-banner";
 import { PlayButton } from "@/components/game/play-button";
 import { RemoveGame } from "@/components/game/remove-game";
+import { ResetGame } from "@/components/game/reset-game";
 import { SteamLaunch } from "@/components/game/steam-launch";
 import { Notice } from "@/components/notice";
 import { useAccent } from "@/hooks/use-accent";
@@ -122,7 +123,10 @@ export function GameScreen() {
 								<PlayButton appId={game.appId} />
 								<SteamLaunch game={game} />
 								<GameVersion game={game} />
-								<RemoveGame game={game} />
+								<div className="mt-3 flex items-center gap-2">
+									<ResetGame game={game} />
+									<RemoveGame game={game} />
+								</div>
 							</div>
 						</section>
 

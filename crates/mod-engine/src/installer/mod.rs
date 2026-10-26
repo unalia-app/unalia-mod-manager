@@ -9,7 +9,9 @@ mod nexus;
 
 pub use nexus::{NexusFile, NexusInstall, available_updates_nexus};
 
+use std::collections::HashSet;
 use std::fs;
+use std::io;
 use std::path::{Component, Path, PathBuf};
 use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -19,6 +21,7 @@ use crate::HttpClient;
 use crate::archive::{self, ArchiveError, Limits};
 use crate::deploy::{self, DeployError, Deployment, Source};
 use crate::download::{self, Cancel, DownloadError};
+use crate::foreign::{self, Foreign};
 use crate::games::GameCatalog;
 use crate::loaders::bepinex::BepInEx;
 use crate::loaders::rules::RulesLoader;
@@ -1085,6 +1088,64 @@ pub fn remove_game(
         None => 0,
     };
     Ok(removed + forget(state, paths, game)?)
+}
+
+/// Fichiers de mods posés dans le jeu hors d'Unalia (voir `foreign`).
+/// `loader` : celui du profil du jeu.
+pub fn foreign_files(state: &State, game: &str, game_dir: &Path, loader: &str) -> Result<Vec<Foreign>, InstallError> {
+    let (mut files, mut dirs) = (HashSet::new(), HashSet::new());
+    for m in state.list(game)? {
+        files.extend(m.deployment.files);
+        dirs.extend(m.deployment.created_dirs);
+    }
+    Ok(foreign::scan(loader, game_dir, &files, &dirs))
+}
+
+/// Bilan d'une remise à zéro.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Reset {
+    /// Mods d'Unalia retirés.
+    pub mods: usize,
+    /// Emplacements laissés par d'autres outils, retirés.
+    pub foreign: usize,
+    /// Ceux qui n'ont pas pu partir.
+    pub left: Vec<String>,
+}
+
+/// Remet le jeu à zéro côté mods : ceux d'Unalia le quittent et leur
+/// stockage est libéré, puis ce que d'autres outils ont laissé passe par
+/// `discard` (la corbeille). Les fichiers du jeu ne sont pas touchés.
+pub fn reset(
+    state: &mut State,
+    paths: &Paths,
+    game: &str,
+    game_dir: &Path,
+    loader: &str,
+    discard: impl Fn(&Path) -> io::Result<()>,
+) -> Result<Reset, InstallError> {
+    let before = foreign_files(state, game, game_dir, loader)?;
+    // Comme `uninstall_all`, mais les dossiers du loader ne sont pas vidés
+    // de force : ce qu'on y avait glissé à la main (un plugin dans
+    // `BepInEx/`) part à la corbeille avec le reste, pas pour de bon.
+    let (loaders, others): (Vec<_>, Vec<_>) = state.list(game)?.into_iter().partition(InstalledMod::is_loader);
+    for m in others.iter().chain(&loaders) {
+        deploy::undeploy(game_dir, &m.deployment, false);
+        state.remove(game, &m.id)?;
+    }
+    let mods = loaders.len() + others.len();
+    forget(state, paths, game)?;
+    // Plus rien d'Unalia dans le jeu : tout ce qui reste vient d'ailleurs.
+    let found = foreign::scan(loader, game_dir, &HashSet::new(), &HashSet::new());
+    let left = foreign::remove(game_dir, &found, discard);
+    Ok(Reset {
+        mods,
+        foreign: before
+            .iter()
+            .filter(|f| fs::symlink_metadata(game_dir.join(&f.path)).is_err())
+            .count(),
+        left,
+    })
 }
 
 /// Place qu'occupe le stockage d'un jeu, en octets : chaque fichier compté
