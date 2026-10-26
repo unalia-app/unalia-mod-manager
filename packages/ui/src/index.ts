@@ -1,6 +1,7 @@
 export { Badge, type BadgeProps, badgeVariants } from "./badge";
 export { Button, type ButtonProps, buttonVariants } from "./button";
 export { cn } from "./cn";
+export { Dialog, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "./dialog";
 export { Kbd } from "./kbd";
 export { SearchField, type SearchFieldProps } from "./search-field";
 export { Segmented, type SegmentedItem } from "./segmented";

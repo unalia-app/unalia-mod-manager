@@ -1,6 +1,7 @@
 "use client";
 
-import { Button, Spinner } from "@modalia/ui";
+import { Button, Dialog, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@modalia/ui";
+import { LogOut } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
@@ -16,7 +17,7 @@ import { forgetGameMods, useInstalled } from "@/lib/installs";
 export function RemoveGame({ game }: { game: SteamGame }) {
 	const router = useRouter();
 	const mods = useInstalled(game.appId)?.length ?? 0;
-	const [confirming, setConfirming] = useState(false);
+	const [open, setOpen] = useState(false);
 	const [removing, setRemoving] = useState(false);
 	if (game.source !== "manual") return null;
 
@@ -39,52 +40,41 @@ export function RemoveGame({ game }: { game: SteamGame }) {
 			const { message, details } = splitError(error);
 			toast({ title: message, details: details ?? undefined, tone: "error" });
 			setRemoving(false);
-			setConfirming(false);
+			setOpen(false);
 		}
 	};
 
-	if (removing) {
-		return (
-			<p className="mt-2.5 flex items-center justify-end gap-1.5 text-[11px] text-fg-subtle">
-				<Spinner className="size-3" />
-				Removing…
-			</p>
-		);
-	}
+	return (
+		<>
+			<Button
+				variant="outline"
+				size="sm"
+				leftIcon={<LogOut className="size-3.5" />}
+				title="Take its mods out of the game folder and remove it from Unalia"
+				onClick={() => setOpen(true)}
+			>
+				Remove from Unalia
+			</Button>
 
-	if (confirming) {
-		return (
-			<div className="mt-2.5 flex max-w-64 flex-col items-end gap-1.5 text-right">
-				<p className="text-[11px] leading-snug text-fg-subtle">
-					{mods > 0
-						? `Unalia takes its ${mods} mod${mods > 1 ? "s" : ""} out of the game folder and forgets the game. The game itself stays installed.`
-						: "Unalia forgets the game. The game itself stays installed."}
-				</p>
-				<div className="flex gap-1.5">
-					<Button size="sm" variant="secondary" onClick={() => setConfirming(false)}>
+			<Dialog open={open} onClose={removing ? undefined : () => setOpen(false)}>
+				<DialogHeader>
+					<DialogTitle>Remove {game.name} from Unalia?</DialogTitle>
+					<DialogDescription>
+						{mods > 0
+							? `Unalia takes its ${mods} mod${mods > 1 ? "s" : ""} out of the game folder and forgets the game.`
+							: "Unalia forgets the game."}{" "}
+						The game itself stays installed, with your saves. You can add it again any time.
+					</DialogDescription>
+				</DialogHeader>
+				<DialogFooter>
+					<Button variant="secondary" disabled={removing} onClick={() => setOpen(false)}>
 						Cancel
 					</Button>
-					<Button
-						size="sm"
-						variant="outline"
-						className="text-danger hover:bg-danger/10"
-						onClick={() => void remove()}
-					>
+					<Button variant="danger" isLoading={removing} onClick={() => void remove()}>
 						Remove
 					</Button>
-				</div>
-			</div>
-		);
-	}
-
-	return (
-		<button
-			type="button"
-			onClick={() => setConfirming(true)}
-			title="Take its mods out of the game folder and remove it from Unalia"
-			className="mt-1.5 ml-auto flex cursor-pointer items-center gap-1 text-[11px] text-fg-subtle underline-offset-2 transition-colors hover:text-danger hover:underline"
-		>
-			Remove from Unalia
-		</button>
+				</DialogFooter>
+			</Dialog>
+		</>
 	);
 }

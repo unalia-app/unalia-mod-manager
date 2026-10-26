@@ -14,6 +14,8 @@ const buttonVariants = cva(
 				secondary: "text-fg hover:bg-surface-strong",
 				outline:
 					"border border-line-strong bg-surface text-fg hover:bg-surface-hover",
+				// Action qui retire quelque chose : couleur d'état, jamais en aplat.
+				danger: "border border-danger/30 bg-danger/10 text-danger hover:bg-danger/20",
 			},
 			size: {
 				sm: "h-8 gap-1.5 px-3 text-xs",

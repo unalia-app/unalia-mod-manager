@@ -79,7 +79,8 @@ Une couleur d'état s'emploie toujours en **contour 20 % + fond 10 % + texte ple
 
 | Composant | Usage |
 |---|---|
-| `Button` | `primary` (blanc, une seule action principale), `secondary` (texte), `outline` (verre). Tailles `sm` `md` `lg` `icon`. `isLoading` remplace le contenu par un `Spinner`. |
+| `Button` | `primary` (blanc, une seule action principale), `secondary` (texte), `outline` (verre), `danger` (action qui retire quelque chose, dans une confirmation). Tailles `sm` `md` `lg` `icon`. `isLoading` remplace le contenu par un `Spinner`. |
+| `Dialog` | Fenêtre de confirmation, reprise de l'`AlertDialog` d'Unalia : `DialogHeader` (`DialogTitle`, `DialogDescription`), contenu, `DialogFooter` (Cancel en `secondary`, l'action à droite). Échap et un clic à côté ferment, sauf pendant l'action (`onClose` absent). |
 | `Badge` | Étiquette en pilule : `neutral`, `accent` ou un état. |
 | `SearchField` | Champ de recherche en verre clair, avec un élément optionnel à droite. |
 | `Segmented` | Choix exclusif à indicateur glissant : `tabs` (onglets d'écran, soulignés à l'accent) ou `pills` (tri, filtres ; hauteur h-10 comme un `SearchField` compact, pour s'aligner dans une barre d'outils). |
