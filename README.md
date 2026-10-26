@@ -66,4 +66,4 @@ The app is built on [Tauri](https://tauri.app), [Next.js](https://nextjs.org), [
 
 ## License
 
-The code is under the [GNU GPL v3](LICENSE). The Unalia names and logos are not: see [TRADEMARKS.md](TRADEMARKS.md).
+The code is under the [GNU GPL v3](LICENSE), with an [additional permission](LICENSE-EXCEPTION.md) to combine it with UnRAR. The Unalia names and logos are not: see [TRADEMARKS.md](TRADEMARKS.md).

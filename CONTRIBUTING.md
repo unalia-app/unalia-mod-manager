@@ -70,6 +70,10 @@ One line, in English:
 
 Example: `✨ feat(mods) install mods shipped as rar archives`
 
+## License of your contributions
+
+By opening a merge request, you agree that your contribution is licensed under the GNU GPL v3 with the [additional permission for UnRAR](LICENSE-EXCEPTION.md), like the rest of the code.
+
 ## Code of conduct
 
 Everyone taking part follows the [code of conduct](CODE_OF_CONDUCT.md).
