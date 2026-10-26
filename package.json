@@ -9,7 +9,8 @@
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
     "desktop": "pnpm --filter @modalia/desktop tauri dev",
-    "demo": "node scripts/demo.mjs"
+    "demo": "node scripts/demo.mjs",
+    "licenses:update": "node scripts/licenses.mjs"
   },
   "devDependencies": {
     "turbo": "^2.11.9"

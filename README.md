@@ -58,6 +58,12 @@ Bug reports, game profiles and fixes are welcome. Read [CONTRIBUTING.md](CONTRIB
 
 Unalia Mod Manager is a sibling of [Unalia](https://unalia.app), the game backlog. Same visual DNA, separate apps.
 
+## Credits
+
+Mods and their metadata come from [Thunderstore](https://thunderstore.io), [Nexus Mods](https://www.nexusmods.com) and the authors' GitHub releases. Each mod belongs to its author, credited in the app with a link to its page. Game artwork comes from Steam and belongs to the games' publishers.
+
+The app is built on [Tauri](https://tauri.app), [Next.js](https://nextjs.org), [React](https://react.dev) and many other open source projects. `.rar` archives are read with UnRAR by Alexander Roshal. Every license is in [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md), also shipped with the app (Settings > Support).
+
 ## License
 
 The code is under the [GNU GPL v3](LICENSE). The Unalia names and logos are not: see [TRADEMARKS.md](TRADEMARKS.md).

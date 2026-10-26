@@ -516,6 +516,11 @@ export function openLogsFolder(): Promise<void> {
 	return invoke("open_logs_folder");
 }
 
+/** `app` : la GPL v3 de l'appli. `thirdParty` : celles des dépendances. */
+export function openLicense(license: "app" | "thirdParty"): Promise<void> {
+	return invoke("open_license", { license });
+}
+
 // Mises à jour de l'appli (moteur : app_update).
 
 export type AvailableUpdate = { version: string; notes: string | null };

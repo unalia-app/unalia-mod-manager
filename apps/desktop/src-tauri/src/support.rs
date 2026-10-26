@@ -4,7 +4,7 @@
 use std::fs;
 use std::path::PathBuf;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager};
 use tauri_plugin_log::{RotationStrategy, Target, TargetKind};
 use tauri_plugin_opener::OpenerExt;
@@ -88,6 +88,30 @@ pub fn open_logs_folder(app: AppHandle) -> Result<(), String> {
     fs::create_dir_all(&dir).map_err(logged)?;
     app.opener()
         .open_path(dir.to_string_lossy(), None::<&str>)
+        .map_err(logged)
+}
+
+/// Textes de licence livrés avec l'appli (`bundle.resources` de
+/// `tauri.conf.json`). En `.txt` : le Bloc-notes les ouvre sur tous les PC.
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum License {
+    /// GPL v3, celle de l'appli.
+    App,
+    /// Celles des dépendances, et d'UnRAR.
+    ThirdParty,
+}
+
+/// Ouvre un texte de licence dans l'éditeur de texte du système.
+#[tauri::command]
+pub fn open_license(app: AppHandle, license: License) -> Result<(), String> {
+    let name = match license {
+        License::App => "LICENSE.txt",
+        License::ThirdParty => "THIRD_PARTY_LICENSES.txt",
+    };
+    let file = app.path().resource_dir().map_err(logged)?.join(name);
+    app.opener()
+        .open_path(file.to_string_lossy(), None::<&str>)
         .map_err(logged)
 }
 

@@ -830,6 +830,7 @@ pub fn run() {
             mods::nexus_disconnect,
             support::diagnostics,
             support::open_logs_folder,
+            support::open_license,
             app_update::check_app_update,
             app_update::install_app_update,
         ])

@@ -5,6 +5,7 @@ import { Check, ClipboardCopy, FolderOpen } from "lucide-react";
 import { useEffect, useState } from "react";
 
 import { AppVersion } from "@/components/settings/app-version";
+import { Licenses } from "@/components/settings/licenses";
 import { toast } from "@/components/toaster";
 import { openLogsFolder, splitError } from "@/lib/engine";
 import { buildReport } from "@/lib/report";
@@ -89,6 +90,8 @@ export function Support() {
 					</details>
 				)}
 			</div>
+
+			<Licenses />
 		</>
 	);
 }
