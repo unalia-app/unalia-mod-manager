@@ -515,3 +515,25 @@ export function diagnostics(): Promise<Diagnostics> {
 export function openLogsFolder(): Promise<void> {
 	return invoke("open_logs_folder");
 }
+
+// Mises à jour de l'appli (moteur : app_update).
+
+export type AvailableUpdate = { version: string; notes: string | null };
+
+export type UpdateProgress = { downloaded: number; total: number | null };
+
+/** Une version plus récente de l'appli, ou `null` : elle est à jour. */
+export function checkAppUpdate(): Promise<AvailableUpdate | null> {
+	if (!isTauri()) return Promise.resolve(null);
+	return invoke("check_app_update");
+}
+
+/** Installe la mise à jour trouvée : l'appli se ferme et se relance. */
+export function installAppUpdate(): Promise<void> {
+	return invoke("install_app_update");
+}
+
+export function onUpdateProgress(handler: (progress: UpdateProgress) => void): Promise<UnlistenFn> {
+	if (!isTauri()) return Promise.resolve(() => {});
+	return listen<UpdateProgress>("app-update-progress", (e) => handler(e.payload));
+}

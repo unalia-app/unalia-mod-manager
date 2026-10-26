@@ -42,6 +42,7 @@
   },
   "bundle": {
     "active": true,
+    "createUpdaterArtifacts": true,
     "targets": "all",
     "icon": [
       "icons/32x32.png",
@@ -52,6 +53,15 @@
     ]
   },
   "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IEM3NTA5NzlERUNEMTRFQTEKUldTaFR0SHNuWmRReDhiSDJyT0VJQkNnampqRVphV21xd1dMUkFIcENSTk1kb2p6K28wK09iU3cK",
+      "endpoints": [
+        "https://gitlab.com/reverss/modalia/-/releases/permalink/latest/downloads/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    },
     "deep-link": {
       "desktop": {
         "schemes": [

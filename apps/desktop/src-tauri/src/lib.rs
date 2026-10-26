@@ -1,3 +1,4 @@
+mod app_update;
 mod catalog;
 mod mods;
 mod support;
@@ -778,7 +779,9 @@ pub fn run() {
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(Library::default())
+        .manage(app_update::AppUpdate::default())
         .setup(|app| {
             support::log_panics();
             log::info!("Unalia Mod Manager {} started", app.package_info().version);
@@ -827,6 +830,8 @@ pub fn run() {
             mods::nexus_disconnect,
             support::diagnostics,
             support::open_logs_folder,
+            app_update::check_app_update,
+            app_update::install_app_update,
         ])
         .run(context)
         .expect("Unalia Mod Manager failed to start");

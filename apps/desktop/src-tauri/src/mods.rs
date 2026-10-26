@@ -136,6 +136,18 @@ impl Mods {
             .remove(&(app_id, mod_id.to_owned()));
     }
 
+    /// Pourquoi l'appli ne doit pas se fermer maintenant (mise à jour) :
+    /// une installation en cours ou en file, ou un jeu qui tourne.
+    pub fn busy(&self) -> Option<&'static str> {
+        if !self.cancels.lock().unwrap().is_empty() {
+            Some("wait for your mods to finish installing, then try again")
+        } else if !self.running.lock().unwrap().is_empty() {
+            Some("close your game first, then try again")
+        } else {
+            None
+        }
+    }
+
     fn is_starting(&self, app_id: u32) -> bool {
         self.starting
             .lock()

@@ -40,3 +40,6 @@ Thumbs.db
 
 # Steam de démo (pnpm demo), contient des assets officiels
 .demo/
+
+# Clés privées (signature des mises à jour)
+*.key

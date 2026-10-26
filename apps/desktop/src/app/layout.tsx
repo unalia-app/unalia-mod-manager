@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
 
+import { AppUpdateCheck } from "@/components/app-update-check";
 import { DevShortcuts } from "@/components/dev-shortcuts";
 import { DisplayScale } from "@/components/display-scale";
 import { BetaBubble } from "@/components/feedback/beta-bubble";
@@ -30,6 +31,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
 				<FeedbackDialog />
 				<FilePicker />
 				<InstallErrorDialog />
+				<AppUpdateCheck />
 			</body>
 		</html>
 	);

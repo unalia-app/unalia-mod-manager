@@ -4,6 +4,7 @@ import { Button } from "@modalia/ui";
 import { Check, ClipboardCopy, FolderOpen } from "lucide-react";
 import { useEffect, useState } from "react";
 
+import { AppVersion } from "@/components/settings/app-version";
 import { toast } from "@/components/toaster";
 import { openLogsFolder, splitError } from "@/lib/engine";
 import { buildReport } from "@/lib/report";
@@ -55,6 +56,8 @@ export function Support() {
 				<h1 className="text-2xl font-semibold tracking-tight">Support</h1>
 				<p className="text-sm text-fg-subtle">Something went wrong? A report helps fix it fast.</p>
 			</div>
+
+			<AppVersion />
 
 			<div className="rounded-xl border border-line bg-white/[0.03] p-5 sm:p-6">
 				<h3 className="text-sm font-semibold text-fg">Report a problem</h3>

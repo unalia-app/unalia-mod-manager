@@ -25,4 +25,5 @@ tauri-plugin-dialog = "2.8"
 tauri-plugin-log = { version = "2", default-features = false }
 tauri-plugin-opener = "2.7"
 tauri-plugin-single-instance = { version = "2.5.4", features = ["deep-link"] }
+tauri-plugin-updater = "2.14"
 tokio = { version = "1", features = ["macros", "time"] }
