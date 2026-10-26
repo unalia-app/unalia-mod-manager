@@ -39,15 +39,19 @@ export type ActiveInstall = { name?: string } & (
 /** Mod Nexus à plusieurs fichiers : le choix demandé à l'utilisateur. */
 export type FileChoice = { appId: number; modId: string; name?: string; files: NexusModFile[] };
 
+/** Installation qui vient d'échouer : montrée dans une fenêtre, pas seulement sur sa carte. */
+export type InstallFailure = { appId: number; modId: string; name?: string; message: string; details: string | null };
+
 type Snapshot = {
 	installed: Map<number, InstalledMod[]>;
 	active: Map<string, ActiveInstall>;
 	/** Mises à jour disponibles par jeu (vérifiées une fois par session). */
 	updates: Map<number, ModUpdate[]>;
 	choice: FileChoice | null;
+	failure: InstallFailure | null;
 };
 
-let snapshot: Snapshot = { installed: new Map(), active: new Map(), updates: new Map(), choice: null };
+let snapshot: Snapshot = { installed: new Map(), active: new Map(), updates: new Map(), choice: null, failure: null };
 const listeners = new Set<() => void>();
 
 function update(change: (draft: Snapshot) => void) {
@@ -56,6 +60,7 @@ function update(change: (draft: Snapshot) => void) {
 		active: new Map(snapshot.active),
 		updates: new Map(snapshot.updates),
 		choice: snapshot.choice,
+		failure: snapshot.failure,
 	};
 	change(draft);
 	snapshot = draft;
@@ -114,9 +119,9 @@ function listenOnce() {
 		if (error) {
 			const { message, details } = splitError(error);
 			update((s) => {
-				s.active.set(k, { status: "error", message, details });
+				s.active.set(k, { status: "error", message, details, name: name ?? s.active.get(k)?.name });
+				s.failure = { appId, modId, name: name ?? s.active.get(k)?.name, message, details };
 			});
-			toast({ title: message, details: details ?? undefined, tone: "error" });
 			return;
 		}
 		void refreshInstalled(appId).then(() =>
@@ -214,7 +219,9 @@ export function install(appId: number, modId: string, name?: string, files?: num
 				}),
 			(error: unknown) =>
 				update((s) => {
-					s.active.set(k, { status: "error", name, ...splitError(error) });
+					const { message, details } = splitError(error);
+					s.active.set(k, { status: "error", name, message, details });
+					s.failure = { appId, modId, name, message, details };
 				}),
 		);
 }
@@ -259,6 +266,17 @@ export function settleFileChoice(files: number[] | null) {
 		s.choice = null;
 	});
 	if (choice && files?.length) void install(choice.appId, choice.modId, choice.name, files);
+}
+
+export function useInstallFailure(): InstallFailure | null {
+	return useSyncExternalStore(subscribe, () => snapshot.failure, () => null);
+}
+
+/** Ferme la fenêtre d'échec. L'erreur reste sur la carte du mod. */
+export function dismissFailure() {
+	update((s) => {
+		s.failure = null;
+	});
 }
 
 export function clearError(appId: number, modId: string) {

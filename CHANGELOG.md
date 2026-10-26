@@ -14,6 +14,7 @@ All notable changes to Unalia Mod Manager. The format follows [Keep a Changelog]
 
 - Mod files are stored once, by their fingerprint: versions, mods and games share identical files, and downloaded archives are removed once unpacked. Existing mods move to the new storage on first launch, along with a clean-up of leftovers.
 - Config files are copied into the game instead of linked, and your changes to them are kept when a mod is turned off and on.
+- A failed install opens a window with the reason and what to do (try again, or reset the game's mods), instead of a small line on the page.
 
 ## [0.1.0] - not released yet
 

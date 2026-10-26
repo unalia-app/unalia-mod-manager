@@ -2,12 +2,22 @@
 
 import { Button, Dialog, DialogDescription, DialogFooter, DialogHeader, DialogTitle, Skeleton } from "@modalia/ui";
 import { Folder, FileText, RotateCcw } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
 import { toast } from "@/components/toaster";
 import { type ResetPreview, type SteamGame, resetGame, resetPreview, splitError } from "@/lib/engine";
 import { bytes } from "@/lib/format";
 import { forgetGameMods, recheckUpdates, refreshInstalled } from "@/lib/installs";
+
+/** Jeu dont la remise à zéro est demandée d'ailleurs (fenêtre d'échec d'une installation). */
+let requested: number | null = null;
+const listeners = new Set<() => void>();
+
+/** Ouvre « Reset mods » du jeu dès que sa page l'affiche. */
+export function requestReset(appId: number) {
+	requested = appId;
+	for (const listener of listeners) listener();
+}
 
 /**
  * Remet le jeu à zéro côté mods : ceux d'Unalia le quittent, et ce que
@@ -54,6 +64,20 @@ export function ResetGame({ game }: { game: SteamGame }) {
 			setResetting(false);
 		}
 	};
+
+	// Demande venue d'ailleurs : la fenêtre s'ouvre ici, une seule fois.
+	useEffect(() => {
+		const check = () => {
+			if (requested !== game.appId) return;
+			requested = null;
+			show();
+		};
+		check();
+		listeners.add(check);
+		return () => {
+			listeners.delete(check);
+		};
+	}, [game.appId]);
 
 	const empty = preview !== null && preview.mods === 0 && preview.foreign.length === 0;
 

@@ -6,6 +6,7 @@ import { DisplayScale } from "@/components/display-scale";
 import { BetaBubble } from "@/components/feedback/beta-bubble";
 import { FeedbackDialog } from "@/components/feedback/feedback-dialog";
 import { FilePicker } from "@/components/game/file-picker";
+import { InstallErrorDialog } from "@/components/game/install-error-dialog";
 import { OverlayScrollbar } from "@/components/overlay-scrollbar";
 import { Toaster } from "@/components/toaster";
 
@@ -28,6 +29,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
 				<BetaBubble />
 				<FeedbackDialog />
 				<FilePicker />
+				<InstallErrorDialog />
 			</body>
 		</html>
 	);
