@@ -4,21 +4,7 @@ All notable changes to Unalia Mod Manager. The format follows [Keep a Changelog]
 
 ## [Unreleased]
 
-### Added
-
-- Go back to one of the last 3 versions of a mod in one click from My mods, without downloading it again.
-- Remove a game added by hand: its mods leave the game folder, the game itself stays installed.
-- Reset mods for a game: Unalia takes out its mods and sends mod files left by other tools (added by hand, Vortex…) to the Recycle Bin, so you can start clean.
-- The app updates itself: a new version is announced when the app opens and in Settings > Support, and installs only when you click Update. Each update is signed and checked before it runs.
-- Settings > Support lists the licenses of the open source projects the app is built on, and its own GNU GPL v3.
-
-### Changed
-
-- Mod files are stored once, by their fingerprint: versions, mods and games share identical files, and downloaded archives are removed once unpacked. Existing mods move to the new storage on first launch, along with a clean-up of leftovers.
-- Config files are copied into the game instead of linked, and your changes to them are kept when a mod is turned off and on.
-- A failed install opens a window with the reason and what to do (try again, or reset the game's mods), instead of a small line on the page.
-
-## [0.1.0] - not released yet
+## [0.1.0] - 2026-10-27
 
 First public beta, Windows only.
 
@@ -34,3 +20,8 @@ First public beta, Windows only.
 - Accent color and ambience taken from each game's cover.
 - `.zip`, `.7z` and `.rar` archives.
 - Links to support mod authors.
+- Go back to one of the last 3 versions of a mod in one click from My mods, without downloading it again.
+- Remove a game added by hand: its mods leave the game folder, the game itself stays installed.
+- Reset mods for a game: Unalia takes out its mods and sends mod files left by other tools (added by hand, Vortex…) to the Recycle Bin, so you can start clean.
+- The app updates itself: a new version is announced when the app opens and in Settings > Support, and installs only when you click Update. Each update is signed and checked before it runs.
+- Settings > Support lists the licenses of the open source projects the app is built on, and its own GNU GPL v3.
