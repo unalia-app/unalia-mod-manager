@@ -49,3 +49,6 @@ apps/video/public/clips/*
 !apps/video/public/clips/.gitkeep
 apps/video/public/proxies/
 apps/video/out/
+
+# Site vitrine : son propre dépôt git, dans le workspace pnpm pour @modalia/ui
+apps/site/
