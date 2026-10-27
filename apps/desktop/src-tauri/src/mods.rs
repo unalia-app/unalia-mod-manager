@@ -1223,13 +1223,15 @@ pub async fn reset_preview(
 }
 
 /// Remet le jeu à zéro côté mods : ceux d'Unalia le quittent, ce que
-/// d'autres outils ont laissé part à la corbeille. Les fichiers du jeu et
-/// les sauvegardes ne sont pas touchés.
+/// d'autres outils ont laissé part à la corbeille s'il est dans `foreign`
+/// (cochés dans la fenêtre). Les fichiers du jeu et les sauvegardes ne
+/// sont pas touchés.
 #[tauri::command]
 pub async fn reset_game(
     library: State<'_, Library>,
     mods: State<'_, Mods>,
     app_id: u32,
+    foreign: Vec<String>,
 ) -> Result<installer::Reset, String> {
     let game = library.game(app_id).ok_or(UNKNOWN_GAME)?;
     if mods.is_running(&game) {
@@ -1244,6 +1246,7 @@ pub async fn reset_game(
         &key,
         &game.dir,
         &game.profile.loader,
+        &foreign.into_iter().collect(),
         foreign::to_recycle_bin,
     )
     .map_err(|e| error_message(&e))?;

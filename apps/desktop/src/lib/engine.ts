@@ -362,6 +362,11 @@ export type ForeignFiles = {
 	/** Fichiers qui ne viennent pas d'Unalia (0 : dossier vide laissé là). */
 	files: number;
 	bytes: number;
+	/**
+	 * Reste d'un loader à coup sûr : coché d'office. Sinon (DLL au nom
+	 * commun sans son loader), il peut servir au jeu : décoché.
+	 */
+	sure: boolean;
 };
 
 export type ResetPreview = { mods: number; foreign: ForeignFiles[] };
@@ -373,9 +378,12 @@ export function resetPreview(appId: number): Promise<ResetPreview> {
 	return invoke("reset_preview", { appId });
 }
 
-/** Retire les mods d'Unalia et envoie à la corbeille ceux d'autres outils. Les fichiers du jeu restent. */
-export function resetGame(appId: number): Promise<ResetResult> {
-	return invoke("reset_game", { appId });
+/**
+ * Retire les mods d'Unalia et envoie à la corbeille les emplacements
+ * `foreign` (cochés) laissés par d'autres outils. Les fichiers du jeu restent.
+ */
+export function resetGame(appId: number, foreign: string[]): Promise<ResetResult> {
+	return invoke("reset_game", { appId, foreign });
 }
 
 export type ModUpdate = { modId: string; current: string; latest: string };

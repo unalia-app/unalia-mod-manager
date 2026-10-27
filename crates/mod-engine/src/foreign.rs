@@ -6,7 +6,11 @@
 //! On ne devine pas : seuls les emplacements connus des loaders du jeu sont
 //! regardés (son « empreinte »), jamais les fichiers du jeu lui-même. Ce qui
 //! s'y trouve sans venir d'Unalia part à la corbeille, d'où l'on peut le
-//! récupérer.
+//! récupérer, et seulement ce que l'utilisateur a coché.
+//!
+//! Un nom de DLL commun (`winhttp.dll`, `version.dll`…) peut aussi venir du
+//! jeu ou d'un programme dont il a besoin : il n'est `sure` qu'à côté du
+//! loader qui l'utilise, sinon sa case reste décochée.
 
 use std::collections::HashSet;
 use std::fs;
@@ -28,7 +32,30 @@ pub struct Foreign {
     /// Fichiers qui ne viennent pas d'Unalia (0 : dossier vide laissé là).
     pub files: usize,
     pub bytes: u64,
+    /// Reste d'un loader à coup sûr : coché d'office dans « Reset mods ».
+    pub sure: bool,
 }
+
+/// Emplacement de l'empreinte. `proof` : chemins dont un seul suffit à
+/// prouver le loader quand le nom ne le prouve pas (vide : le nom suffit).
+struct Spot {
+    path: String,
+    proof: Vec<String>,
+}
+
+fn spots(list: &[(&str, &[&str])], prefix: &str) -> Vec<Spot> {
+    list.iter()
+        .map(|(path, proof)| Spot {
+            path: format!("{prefix}{path}"),
+            proof: proof.iter().map(|p| format!("{prefix}{p}")).collect(),
+        })
+        .collect()
+}
+
+/// Posés par Doorstop (BepInEx) à côté de son `winhttp.dll`.
+const DOORSTOP: &[&str] = &["doorstop_config.ini", ".doorstop_version"];
+const CET: &[&str] = &["bin/x64/plugins/cyber_engine_tweaks"];
+const UE4SS: &[&str] = &["Binaries/Win64/ue4ss", "Binaries/Win64/UE4SS.dll"];
 
 /// Dossiers de MelonLoader aux noms trop communs pour être retirés sans
 /// preuve : seulement vides, ou à côté de `MelonLoader/`.
@@ -36,56 +63,58 @@ const MELON_DIRS: [&str; 4] = ["Mods", "Plugins", "UserData", "UserLibs"];
 
 /// Emplacements où les loaders de ce jeu (`loader` du profil) posent leurs
 /// fichiers et ceux de leurs mods, relatifs au jeu.
-pub fn footprint(loader: &str, game_dir: &Path) -> Vec<String> {
-    let mut paths: Vec<String> = match loader {
+fn footprint(loader: &str, game_dir: &Path) -> Vec<Spot> {
+    let mut paths: Vec<Spot> = match loader {
         // BepInEx et MelonLoader : un reste de l'un bloque aussi l'autre.
-        "bepinex" | "bepisloader" | "melonloader" | "recursive-melonloader" => [
-            "BepInEx",
-            "winhttp.dll",
-            "doorstop_config.ini",
-            ".doorstop_version",
-            "doorstop_libs",
-            "dotnet",
-            "MelonLoader",
-            "version.dll",
-        ]
-        .iter()
-        .map(|p| p.to_string())
+        "bepinex" | "bepisloader" | "melonloader" | "recursive-melonloader" => spots(
+            &[
+                ("BepInEx", &[]),
+                ("winhttp.dll", DOORSTOP),
+                ("doorstop_config.ini", &[]),
+                (".doorstop_version", &[]),
+                ("doorstop_libs", &[]),
+                ("dotnet", DOORSTOP),
+                ("MelonLoader", &[]),
+                ("version.dll", &["MelonLoader"]),
+            ],
+            "",
+        )
+        .into_iter()
         .chain(
             MELON_DIRS
                 .iter()
                 .filter(|d| game_dir.join("MelonLoader").is_dir() || is_empty_dir(&game_dir.join(d)))
-                .map(|d| d.to_string()),
+                .map(|d| Spot { path: d.to_string(), proof: Vec::new() }),
         )
         .collect(),
-        "redengine" => [
-            "archive/pc/mod",
-            "bin/x64/plugins",
-            "bin/x64/version.dll",
-            "bin/x64/winmm.dll",
-            "bin/x64/global.ini",
-            "mods",
-            "r6/scripts",
-            "r6/tweaks",
-            "r6/cache/modded",
-            "red4ext",
-        ]
-        .iter()
-        .map(|p| p.to_string())
-        .collect(),
+        "redengine" => spots(
+            &[
+                ("archive/pc/mod", &[]),
+                ("bin/x64/plugins", &[]),
+                ("bin/x64/version.dll", CET),
+                ("bin/x64/winmm.dll", &["red4ext"]),
+                ("bin/x64/global.ini", CET),
+                ("mods", &[]),
+                ("r6/scripts", &[]),
+                ("r6/tweaks", &[]),
+                ("r6/cache/modded", &[]),
+                ("red4ext", &[]),
+            ],
+            "",
+        ),
         "unreal" => match find_project(game_dir) {
-            Some(project) => [
-                "Binaries/Win64/ue4ss",
-                "Binaries/Win64/Mods",
-                "Binaries/Win64/dwmapi.dll",
-                "Binaries/Win64/UE4SS.dll",
-                "Binaries/Win64/UE4SS-settings.ini",
-                "Content/Paks/~mods",
-                "Content/Paks/LogicMods",
-            ]
-            .iter()
-            .map(|p| format!("{project}/{p}"))
-            .collect(),
+            Some(project) => spots(
+                &[
+                    ("Binaries/Win64/ue4ss", &[]),
+                    ("Binaries/Win64/Mods", &[]),
+                    ("Binaries/Win64/dwmapi.dll", UE4SS),
+                    ("Binaries/Win64/UE4SS.dll", &[]),
+                    ("Binaries/Win64/UE4SS-settings.ini", &[]),
+                    ("Content/Paks/~mods", &[]),
+                    ("Content/Paks/LogicMods", &[]),
+                ],
+                &format!("{project}/"),
+            ),
             None => Vec::new(),
         },
         _ => Vec::new(),
@@ -99,7 +128,7 @@ pub fn footprint(loader: &str, game_dir: &Path) -> Vec<String> {
             if (lower.starts_with("vortex.deployment") && lower.ends_with(".json"))
                 || lower == "__folder_managed_by_vortex"
             {
-                paths.push(name);
+                paths.push(Spot { path: name, proof: Vec::new() });
             }
         }
     }
@@ -118,15 +147,24 @@ pub fn scan(
     let our_dirs: HashSet<String> = our_dirs.iter().map(|p| p.to_ascii_lowercase()).collect();
     footprint(loader, game_dir)
         .into_iter()
-        .filter_map(|path| {
+        .filter_map(|Spot { path, proof }| {
             let full = game_dir.join(&path);
             let meta = fs::symlink_metadata(&full).ok()?;
+            // Une preuve posée par Unalia ne prouve pas l'autre outil.
+            let sure = proof.is_empty()
+                || proof.iter().any(|p| {
+                    let lower = p.to_ascii_lowercase();
+                    !ours.contains(&lower)
+                        && !our_dirs.contains(&lower)
+                        && fs::symlink_metadata(game_dir.join(p)).is_ok()
+                });
             if !meta.is_dir() {
                 return (!ours.contains(&path.to_ascii_lowercase())).then_some(Foreign {
                     path,
                     dir: false,
                     files: 1,
                     bytes: meta.len(),
+                    sure,
                 });
             }
             let (mut files, mut bytes, mut any) = (0, 0, false);
@@ -144,6 +182,7 @@ pub fn scan(
                 dir: true,
                 files,
                 bytes,
+                sure,
             })
         })
         .collect()

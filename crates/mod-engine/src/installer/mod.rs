@@ -1115,13 +1115,16 @@ pub struct Reset {
 
 /// Remet le jeu à zéro côté mods : ceux d'Unalia le quittent et leur
 /// stockage est libéré, puis ce que d'autres outils ont laissé passe par
-/// `discard` (la corbeille). Les fichiers du jeu ne sont pas touchés.
+/// `discard` (la corbeille), mais seulement les emplacements de `remove`,
+/// cochés par l'utilisateur (voir [`Foreign::sure`]). Le reste et les
+/// fichiers du jeu ne sont pas touchés.
 pub fn reset(
     state: &mut State,
     paths: &Paths,
     game: &str,
     game_dir: &Path,
     loader: &str,
+    remove: &HashSet<String>,
     discard: impl Fn(&Path) -> io::Result<()>,
 ) -> Result<Reset, InstallError> {
     let before = foreign_files(state, game, game_dir, loader)?;
@@ -1136,13 +1139,16 @@ pub fn reset(
     let mods = loaders.len() + others.len();
     forget(state, paths, game)?;
     // Plus rien d'Unalia dans le jeu : tout ce qui reste vient d'ailleurs.
-    let found = foreign::scan(loader, game_dir, &HashSet::new(), &HashSet::new());
+    let found: Vec<Foreign> = foreign::scan(loader, game_dir, &HashSet::new(), &HashSet::new())
+        .into_iter()
+        .filter(|f| remove.contains(&f.path))
+        .collect();
     let left = foreign::remove(game_dir, &found, discard);
     Ok(Reset {
         mods,
         foreign: before
             .iter()
-            .filter(|f| fs::symlink_metadata(game_dir.join(&f.path)).is_err())
+            .filter(|f| remove.contains(&f.path) && fs::symlink_metadata(game_dir.join(&f.path)).is_err())
             .count(),
         left,
     })

@@ -972,22 +972,34 @@ async fn resetting_a_game_clears_mods_from_unalia_and_other_tools() {
     // Restes d'autres outils, comme dans un vrai Silksong passé par Vortex.
     fs::create_dir_all(w.game.join("BepInEx/plugins/OldMod")).unwrap();
     fs::write(w.game.join("BepInEx/plugins/OldMod/Old.dll"), "old").unwrap();
-    fs::write(w.game.join("version.dll"), "melon").unwrap();
     fs::create_dir(w.game.join("UserData")).unwrap();
     fs::write(w.game.join("vortex.deployment.hollowknightsilksong-bepinex.json"), "{}").unwrap();
+    // Noms communs sans leur loader : peuvent servir au jeu (une DLL qu'il
+    // lui faut, un runtime à lui), même à côté du BepInEx d'Unalia.
+    fs::write(w.game.join("version.dll"), "game needs it").unwrap();
+    fs::create_dir(w.game.join("dotnet")).unwrap();
+    fs::write(w.game.join("dotnet/runtime.dll"), "game").unwrap();
 
     let found = installer::foreign_files(&w.state, game, &w.game, "bepinex").unwrap();
-    let found: Vec<(&str, usize)> = found.iter().map(|f| (f.path.as_str(), f.files)).collect();
+    let listed: Vec<(&str, usize, bool)> = found.iter().map(|f| (f.path.as_str(), f.files, f.sure)).collect();
     assert_eq!(
-        found,
+        listed,
         [
-            ("BepInEx", 1),
-            ("version.dll", 1),
-            ("UserData", 0),
-            ("vortex.deployment.hollowknightsilksong-bepinex.json", 1),
+            ("BepInEx", 1, true),
+            ("dotnet", 1, false),
+            ("version.dll", 1, false),
+            ("UserData", 0, true),
+            ("vortex.deployment.hollowknightsilksong-bepinex.json", 1, true),
         ],
-        "les fichiers d'Unalia ne comptent pas"
+        "les fichiers d'Unalia ne comptent pas, ni comme restes ni comme preuves"
     );
+    let mut original = original;
+    original.insert("dotnet".into(), None);
+    for kept in ["dotnet/runtime.dll", "version.dll"] {
+        original.insert(kept.into(), Some(fs::read(w.game.join(kept)).unwrap()));
+    }
+    // Ce qui est coché d'office, comme la fenêtre « Reset mods ».
+    let remove = found.iter().filter(|f| f.sure).map(|f| f.path.clone()).collect();
 
     let trashed = std::cell::RefCell::new(Vec::new());
     let discard = |path: &Path| {
@@ -998,11 +1010,11 @@ async fn resetting_a_game_clears_mods_from_unalia_and_other_tools() {
             fs::remove_file(path)
         }
     };
-    let reset = installer::reset(&mut w.state, &w.paths, game, &w.game, "bepinex", discard).unwrap();
-    assert_eq!((reset.mods, reset.foreign), (3, 4));
+    let reset = installer::reset(&mut w.state, &w.paths, game, &w.game, "bepinex", &remove, discard).unwrap();
+    assert_eq!((reset.mods, reset.foreign), (3, 3));
     assert!(reset.left.is_empty());
     assert!(trashed.borrow().contains(&w.game.join("BepInEx")), "le plugin glissé à la main part à la corbeille");
-    assert_eq!(snapshot(&w.game), original, "le jeu revient à l'identique");
+    assert_eq!(snapshot(&w.game), original, "le jeu revient à l'identique, avec ce qui n'était pas coché");
     assert!(w.state.list(game).unwrap().is_empty());
     assert_eq!(installer::storage_size(&w.paths, game), 0);
 }

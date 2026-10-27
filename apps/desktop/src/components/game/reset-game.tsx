@@ -1,6 +1,6 @@
 "use client";
 
-import { Button, Dialog, DialogDescription, DialogFooter, DialogHeader, DialogTitle, Skeleton } from "@modalia/ui";
+import { Button, Dialog, DialogDescription, DialogFooter, DialogHeader, DialogTitle, Skeleton, Switch } from "@modalia/ui";
 import { Folder, FileText, RotateCcw } from "lucide-react";
 import { useEffect, useState } from "react";
 
@@ -22,18 +22,25 @@ export function requestReset(appId: number) {
 /**
  * Remet le jeu à zéro côté mods : ceux d'Unalia le quittent, et ce que
  * d'autres outils ont laissé (à la main, Vortex…) part à la corbeille.
- * Pour repartir propre quand on ne sait plus quoi effacer.
+ * Pour repartir propre quand on ne sait plus quoi effacer. Chaque reste a
+ * sa case : décochée quand il pourrait servir au jeu (une DLL au nom
+ * commun que le jeu ou un autre programme demande).
  */
 export function ResetGame({ game }: { game: SteamGame }) {
 	const [open, setOpen] = useState(false);
 	// `null` : chargement.
 	const [preview, setPreview] = useState<ResetPreview | null>(null);
+	// Restes cochés : partiront à la corbeille.
+	const [picked, setPicked] = useState<Set<string>>(new Set());
 	const [resetting, setResetting] = useState(false);
 
 	const show = () => {
 		setPreview(null);
 		setOpen(true);
-		resetPreview(game.appId).then(setPreview, (error: unknown) => {
+		resetPreview(game.appId).then((found) => {
+			setPicked(new Set(found.foreign.filter((f) => f.sure).map((f) => f.path)));
+			setPreview(found);
+		}, (error: unknown) => {
 			setOpen(false);
 			const { message, details } = splitError(error);
 			toast({ title: message, details: details ?? undefined, tone: "error" });
@@ -43,7 +50,7 @@ export function ResetGame({ game }: { game: SteamGame }) {
 	const reset = async () => {
 		setResetting(true);
 		try {
-			const done = await resetGame(game.appId);
+			const done = await resetGame(game.appId, [...picked]);
 			forgetGameMods(game.appId);
 			await refreshInstalled(game.appId);
 			recheckUpdates(game.appId);
@@ -80,6 +87,15 @@ export function ResetGame({ game }: { game: SteamGame }) {
 	}, [game.appId]);
 
 	const empty = preview !== null && preview.mods === 0 && preview.foreign.length === 0;
+	// Rien d'Unalia et rien de coché : le bouton n'aurait rien à faire.
+	const idle = preview !== null && preview.mods === 0 && picked.size === 0;
+	const toggle = (path: string, on: boolean) =>
+		setPicked((current) => {
+			const next = new Set(current);
+			if (on) next.add(path);
+			else next.delete(path);
+			return next;
+		});
 
 	return (
 		<>
@@ -97,7 +113,7 @@ export function ResetGame({ game }: { game: SteamGame }) {
 				<DialogHeader>
 					<DialogTitle>Reset mods for {game.name}?</DialogTitle>
 					<DialogDescription>
-						Unalia takes out every mod it installed, and sends mod files left by other tools (added by hand, Vortex…) to
+						Unalia takes out every mod it installed, and sends the mod files you pick below (added by hand, Vortex…) to
 						the Recycle Bin. The game itself and your saves aren't touched.
 					</DialogDescription>
 				</DialogHeader>
@@ -133,11 +149,22 @@ export function ResetGame({ game }: { game: SteamGame }) {
 											) : (
 												<FileText className="size-3.5 shrink-0 text-fg-faint" />
 											)}
-											<span className="min-w-0 flex-1 truncate font-tight text-fg-muted" title={f.path}>
-												{f.path}
-												{f.dir && "/"}
+											<span className="min-w-0 flex-1">
+												<span className="block truncate font-tight text-fg-muted" title={f.path}>
+													{f.path}
+													{f.dir && "/"}
+												</span>
+												{!f.sure && (
+													<span className="block text-fg-faint">May be needed by the game or another program</span>
+												)}
 											</span>
 											<span className="shrink-0 font-tight text-fg-faint tabular-nums">{describe(f.dir, f.files, f.bytes)}</span>
+											<Switch
+												checked={picked.has(f.path)}
+												onChange={(on) => toggle(f.path, on)}
+												disabled={resetting}
+												label={`Send ${f.path} to the Recycle Bin`}
+											/>
 										</li>
 									))}
 								</ul>
@@ -150,7 +177,7 @@ export function ResetGame({ game }: { game: SteamGame }) {
 					<Button variant="secondary" disabled={resetting} onClick={() => setOpen(false)}>
 						Cancel
 					</Button>
-					<Button variant="danger" isLoading={resetting} disabled={preview === null || empty} onClick={() => void reset()}>
+					<Button variant="danger" isLoading={resetting} disabled={preview === null || empty || idle} onClick={() => void reset()}>
 						Reset mods
 					</Button>
 				</DialogFooter>
