@@ -4,7 +4,7 @@ members = ["crates/mod-engine", "apps/desktop/src-tauri"]
 
 [workspace.package]
 edition = "2024"
-repository = "https://gitlab.com/unalia/mod-manager"
+repository = "https://github.com/unalia-app/unalia-mod-manager"
 
 [workspace.dependencies]
 mod-engine = { path = "crates/mod-engine" }

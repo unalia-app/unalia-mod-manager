@@ -27,7 +27,7 @@ pub fn http_client() -> HttpClient {
         .user_agent(concat!(
             "UnaliaModManager/",
             env!("CARGO_PKG_VERSION"),
-            " (+https://gitlab.com/unalia/mod-manager)"
+            " (+https://github.com/unalia-app/unalia-mod-manager)"
         ))
         // Pas de délai total : un gros mod met des minutes à arriver. On
         // coupe seulement une connexion qui ne répond plus.
