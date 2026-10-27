@@ -50,18 +50,23 @@ export function AppHeader({
 				scrolled ? "border-line bg-bg/75 backdrop-blur-xl" : "border-transparent",
 			)}
 		>
-			<Link href="/" className="flex shrink-0 items-center gap-2 text-lg font-bold tracking-tight" aria-label="Unalia Mod Manager, home">
-				<span ref={brandRef} className={cn("text-xl italic", brandHidden && "opacity-0")}>
-					UNALIA
-				</span>
-				{/* Unalia est la marque mère : ici, son gestionnaire de mods. */}
-				<span
-					className={cn(
-						"font-tight text-[11px] font-medium tracking-wide text-fg-subtle uppercase transition-[opacity,translate] duration-500 ease-out",
-						brandHidden ? "translate-x-1 opacity-0" : "opacity-100",
-					)}
-				>
-					Mod manager
+			<Link href="/" className="flex shrink-0 items-center gap-2.5" aria-label="Unalia Mod Manager, home">
+				{/* Même composition que le logo du site (apps/site, components/logo.tsx) :
+				    UNALIA en italique gras, « Mod manager » en petites capitales dessous. */}
+				<span className="flex flex-col items-start leading-none">
+					<span ref={brandRef} className={cn("text-xl leading-[0.9] font-bold tracking-tight italic", brandHidden && "opacity-0")}>
+						UNALIA
+					</span>
+					{/* Unalia est la marque mère : ici, son gestionnaire de mods. Collé
+					    au mot, et décalé de l'inclinaison de l'italique. */}
+					<span
+						className={cn(
+							"mt-px pl-[2px] font-tight text-[9px] leading-none font-semibold tracking-[0.3em] text-fg-subtle uppercase transition-[opacity,translate] duration-500 ease-out",
+							brandHidden ? "translate-x-1 opacity-0" : "opacity-100",
+						)}
+					>
+						Mod manager
+					</span>
 				</span>
 				<Badge
 					className={cn(
@@ -69,7 +74,7 @@ export function AppHeader({
 						brandHidden ? "translate-x-1 opacity-0" : "opacity-100",
 					)}
 				>
-					ALPHA
+					BETA
 				</Badge>
 			</Link>
 			{children}
