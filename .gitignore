@@ -43,3 +43,9 @@ Thumbs.db
 
 # Clés privées (signature des mises à jour)
 *.key
+
+# Vidéos : enregistrements OBS et rendus, trop lourds pour le dépôt
+apps/video/public/clips/*
+!apps/video/public/clips/.gitkeep
+apps/video/public/proxies/
+apps/video/out/

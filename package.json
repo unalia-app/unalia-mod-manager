@@ -9,6 +9,7 @@
     "lint": "turbo run lint",
     "typecheck": "turbo run typecheck",
     "desktop": "pnpm --filter @modalia/desktop tauri dev",
+    "video": "pnpm --filter @modalia/video studio",
     "demo": "node scripts/demo.mjs",
     "licenses:update": "node scripts/licenses.mjs"
   },
