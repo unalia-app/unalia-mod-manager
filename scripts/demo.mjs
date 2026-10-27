@@ -11,16 +11,18 @@
 
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, readdir, rm, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const root = join(repo, ".demo", "steam");
 
-/** [appid, nom, moteur] */
+/**
+ * [appid, nom, moteur]. Pas de Silksong ni de Cyberpunk 2077 : ils sont
+ * ajoutés à la main depuis leur vrai dossier, pour les vidéos.
+ */
 const GAMES = [
-	[1030300, "Hollow Knight: Silksong", "unity"],
 	[367520, "Hollow Knight", "unity"],
 	[1966720, "Lethal Company", "unity"],
 	[3241660, "R.E.P.O.", "unity"],
@@ -93,6 +95,12 @@ async function setup() {
 		join(steamapps, "libraryfolders.vdf"),
 		`"libraryfolders"\n{\n\t"0"\n\t{\n\t\t"path"\t\t${vdfString(root)}\n\t}\n}\n`,
 	);
+
+	// Un jeu retiré de la liste quitte aussi la bibliothèque de démo.
+	const kept = new Set(GAMES.map(([appId]) => `appmanifest_${appId}.acf`));
+	for (const file of await readdir(steamapps)) {
+		if (file.startsWith("appmanifest_") && !kept.has(file)) await rm(join(steamapps, file));
+	}
 
 	for (const [appId, name, engine] of GAMES) {
 		const dir = installDir(name);
