@@ -42,7 +42,7 @@ export function AppHeader({
 		<header
 			data-tauri-drag-region
 			className={cn(
-				"sticky top-0 z-20 flex h-14 items-center gap-5 border-b transition-[background-color,border-color] duration-300",
+				"sticky top-0 z-20 flex h-15 items-center gap-5 border-b pt-1 transition-[background-color,border-color] duration-300",
 				// macOS : les feux tricolores occupent la gauche.
 				// Windows : l'icône de fermeture (14 px au centre d'un bouton de
 				// 44 px) à 24 px du bord, comme le logo à gauche.
@@ -52,16 +52,17 @@ export function AppHeader({
 		>
 			<Link href="/" className="flex shrink-0 items-center gap-2.5" aria-label="Unalia Mod Manager, home">
 				{/* Même composition que le logo du site (apps/site, components/logo.tsx) :
-				    UNALIA en italique gras, « Mod manager » en petites capitales dessous. */}
+				    UNALIA en italique gras, « Mod manager » en petites capitales dessous.
+				    27 px : UNALIA finit au même endroit que « Mod manager ». */}
 				<span className="flex flex-col items-start leading-none">
-					<span ref={brandRef} className={cn("text-xl leading-[0.9] font-bold tracking-tight italic", brandHidden && "opacity-0")}>
+					<span ref={brandRef} className={cn("text-[27px] leading-[0.9] font-bold tracking-tight italic", brandHidden && "opacity-0")}>
 						UNALIA
 					</span>
 					{/* Unalia est la marque mère : ici, son gestionnaire de mods. Collé
 					    au mot, et décalé de l'inclinaison de l'italique. */}
 					<span
 						className={cn(
-							"mt-px pl-[2px] font-tight text-[9px] leading-none font-semibold tracking-[0.3em] text-fg-subtle uppercase transition-[opacity,translate] duration-500 ease-out",
+							"mt-px pl-[3px] font-tight text-[9px] leading-none font-semibold tracking-[0.3em] text-fg-subtle uppercase transition-[opacity,translate] duration-500 ease-out",
 							brandHidden ? "translate-x-1 opacity-0" : "opacity-100",
 						)}
 					>
@@ -78,7 +79,9 @@ export function AppHeader({
 				</Badge>
 			</Link>
 			{children}
-			<div className="ml-auto flex items-center gap-2">
+			{/* Centré sur le mot UNALIA plutôt que sur tout le logo (« Mod manager »
+			    dessous le rend plus haut que les boutons). */}
+			<div className="ml-auto flex -translate-y-[6px] items-center gap-2">
 				{actions}
 				<button
 					type="button"

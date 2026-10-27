@@ -162,10 +162,10 @@ function useVisible(ref: RefObject<HTMLElement | null>, trigger: unknown): boole
 	useEffect(() => {
 		const node = ref.current;
 		if (!node) return;
-		// La marge du haut compte l'en-tête collé (h-14) : sous lui, le bouton
+		// La marge du haut compte l'en-tête collé (h-15) : sous lui, le bouton
 		// n'est plus visible.
 		const observer = new IntersectionObserver(([entry]) => setVisible(entry?.isIntersecting ?? true), {
-			rootMargin: "-56px 0px 0px 0px",
+			rootMargin: "-60px 0px 0px 0px",
 		});
 		observer.observe(node);
 		return () => observer.disconnect();
