@@ -11,7 +11,7 @@
 //
 // Les notes de version viennent de la section de `CHANGELOG.md` qui porte
 // le numéro de la version. `--notes` les écrit aussi à part, pour la
-// description de la release GitLab.
+// description de la release GitHub.
 
 import { createHash, createPublicKey, verify } from "node:crypto";
 import { readdir, readFile, writeFile } from "node:fs/promises";
