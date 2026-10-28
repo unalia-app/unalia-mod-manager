@@ -10,7 +10,7 @@ use std::sync::Mutex;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use mod_engine::artwork::{self, ArtworkKind};
-use mod_engine::detect::{self, Engine, SteamGame, detect_engine, shortcuts};
+use mod_engine::detect::{self, Engine, SteamGame, detect_anti_cheat, detect_engine, shortcuts};
 use mod_engine::download;
 use mod_engine::games::{GameProfile, auto, manual_app_id};
 use mod_engine::launch::{self, LaunchTarget};
@@ -110,6 +110,9 @@ struct GameEntry {
     /// Ancienne version du jeu sur laquelle l'utilisateur est resté (une
     /// des `versions` du profil) ; `None` : la plus récente.
     game_version: Option<String>,
+    /// Anti-triche trouvé dans le jeu (ex. `Easy Anti-Cheat`) : les mods
+    /// restent permis, l'interface prévient du risque de bannissement.
+    anti_cheat: Option<&'static str>,
 }
 
 #[tauri::command]
@@ -155,6 +158,7 @@ async fn list_games(
                 steam_shortcut: false,
                 launch_via_steam: false,
                 game_version: None,
+                anti_cheat: None,
             }
         })
         .collect();
@@ -231,8 +235,12 @@ async fn list_games(
             steam_shortcut: has_shortcut,
             launch_via_steam: has_shortcut && launch_settings.get(&app_id).copied().unwrap_or(true),
             game_version: None,
+            anti_cheat: None,
             profile: Some(profile),
         });
+    }
+    for entry in entries.iter_mut().filter(|e| e.moddable) {
+        entry.anti_cheat = detect_anti_cheat(&entry.game.install_dir);
     }
     entries.sort_by_cached_key(|e| (e.game.name.to_lowercase(), e.game.app_id));
     {

@@ -40,6 +40,8 @@ export type SteamGame = {
 	launchViaSteam: boolean;
 	/** Ancienne version du jeu sur laquelle l'utilisateur est resté ; `null` : la plus récente. */
 	gameVersion: string | null;
+	/** Anti-triche trouvé dans le jeu (ex. `Easy Anti-Cheat`) : mods permis, bannissement possible en ligne. */
+	antiCheat: string | null;
 };
 
 export type GameScan = {

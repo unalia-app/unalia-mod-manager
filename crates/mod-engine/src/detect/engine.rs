@@ -75,6 +75,27 @@ fn is_unreal(root: &[Entry]) -> bool {
         })
 }
 
+/// Anti-triche du jeu, d'après ses fichiers : à la racine, ou à côté de
+/// l'exécutable d'un jeu Unreal (`<Projet>/Binaries/Win64`). Les mods
+/// restent permis, mais le joueur risque un bannissement en ligne.
+pub fn detect_anti_cheat(game_dir: &Path) -> Option<&'static str> {
+    let root = entries(game_dir);
+    let binaries = root
+        .iter()
+        .filter(|e| e.is_dir)
+        .filter_map(|e| find(&e.path, &["binaries", "win64"]))
+        .flat_map(|dir| entries(&dir));
+    root.iter()
+        .chain(binaries.collect::<Vec<_>>().iter())
+        .find_map(|e| match (e.is_dir, e.name.as_str()) {
+            (true, "easyanticheat" | "easyanticheat_eos") | (false, "start_protected_game.exe") => {
+                Some("Easy Anti-Cheat")
+            }
+            (true, "battleye") => Some("BattlEye"),
+            _ => None,
+        })
+}
+
 struct Entry {
     /// Nom en minuscules : les systèmes de fichiers Windows ignorent la casse,
     /// les jeux ne sont donc pas cohérents d'une version à l'autre.
@@ -127,6 +148,17 @@ mod tests {
             }
         }
         dir
+    }
+
+    #[test]
+    fn anti_cheats_are_found_at_the_root_or_next_to_the_exe() {
+        let eac = game(&["Game.exe", "EasyAntiCheat/Settings.json"]);
+        assert_eq!(detect_anti_cheat(eac.path()), Some("Easy Anti-Cheat"));
+        let battleye = game(&["Engine/", "Proj/Binaries/Win64/BattlEye/BEClient_x64.dll"]);
+        assert_eq!(detect_anti_cheat(battleye.path()), Some("BattlEye"));
+        let protected = game(&["start_protected_game.exe"]);
+        assert_eq!(detect_anti_cheat(protected.path()), Some("Easy Anti-Cheat"));
+        assert_eq!(detect_anti_cheat(game(&["Game.exe", "Data/"]).path()), None);
     }
 
     #[test]

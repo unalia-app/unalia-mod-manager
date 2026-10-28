@@ -7,7 +7,8 @@ All notable changes to Unalia Mod Manager. The format follows [Keep a Changelog]
 ### Added
 
 - Skyrim Special Edition and Fallout 4 (Steam), with mods from Nexus Mods: plugins, archives and loose files go to `Data/`, and the game's `plugins.txt` follows the mods you turn on. Script extenders and mods with an installer that asks for options (FOMOD) come next.
-- Unreal Engine games with a Nexus Mods page are recognized on their own, from Steam or added by hand, with UE4SS when a mod needs it. Games with an anti-cheat are left out.
+- Unreal Engine games with a Nexus Mods page are recognized on their own, from Steam or added by hand, with UE4SS when a mod needs it.
+- Games with an anti-cheat (Easy Anti-Cheat, BattlEye) warn that mods can get you banned online, on their page and once before you start.
 - Uninstall a mod from its page or its card, with Undo.
 - Uninstall the app from Settings > Support.
 - Refresh button in the game library, and a refresh when the window comes back: a game installed while the app is open shows up.

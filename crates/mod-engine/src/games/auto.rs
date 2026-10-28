@@ -5,9 +5,7 @@
 //!
 //! Aujourd'hui : Unreal Engine (dossier de projet trouvé par `find_project`).
 //! Le nom doit correspondre exactement (casse, ™ et ® mis à part) : on ne
-//! devine pas. Un profil écrit à la main reste prioritaire. Un jeu protégé
-//! par un anti-triche (Easy Anti-Cheat, BattlEye) n'est jamais reconnu
-//! ainsi : injecter UE4SS peut valoir un bannissement.
+//! devine pas. Un profil écrit à la main reste prioritaire.
 //!
 //! Les réponses de Nexus sont gardées sur disque (`NexusGames`) : le scan des
 //! jeux ne refait pas la requête à chaque fois.
@@ -56,12 +54,9 @@ struct Template {
 }
 
 /// Profil d'un jeu Unreal trouvé sur Nexus. `None` si le dossier n'a pas
-/// un projet Unreal unique, ou si le jeu a un anti-triche.
+/// un projet Unreal unique.
 pub fn unreal_profile(found: &FoundGame, game_dir: &Path) -> Option<GameProfile> {
     let project = find_project(game_dir)?;
-    if has_anti_cheat(game_dir, &project) {
-        return None;
-    }
     // Embarqué et testé : une erreur ici est un bug de Modalia.
     let template: Template = toml::from_str(include_str!("../../../../games/auto/unreal.toml"))
         .expect("invalid Unreal template");
@@ -86,21 +81,6 @@ pub fn unreal_profile(found: &FoundGame, game_dir: &Path) -> Option<GameProfile>
         launchers: Vec::new(),
         versions: Vec::new(),
         plugins: None,
-    })
-}
-
-/// Dossiers d'anti-triche à la racine du jeu ou à côté de son exécutable.
-fn has_anti_cheat(game_dir: &Path, project: &str) -> bool {
-    const ANTI_CHEATS: [&str; 2] = ["easyanticheat", "battleye"];
-    [
-        game_dir.to_path_buf(),
-        game_dir.join(project).join("Binaries/Win64"),
-    ]
-    .iter()
-    .flat_map(|dir| fs::read_dir(dir).into_iter().flatten().flatten())
-    .any(|e| {
-        let name = e.file_name().to_string_lossy().to_lowercase();
-        e.file_type().is_ok_and(|t| t.is_dir()) && ANTI_CHEATS.contains(&name.as_str())
     })
 }
 
@@ -308,8 +288,5 @@ mod tests {
 
         // Pas de projet Unreal : pas de profil.
         assert!(unreal_profile(&hogwarts(), dir.path()).is_none());
-        // Anti-triche : jamais reconnu automatiquement.
-        fs::create_dir_all(game.join("EasyAntiCheat")).unwrap();
-        assert!(unreal_profile(&hogwarts(), &game).is_none());
     }
 }

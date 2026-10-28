@@ -8,6 +8,7 @@ import { type CSSProperties, type ReactNode, type RefObject, useEffect, useRef, 
 import { Ambience } from "@/components/ambience";
 import { AppHeader } from "@/components/app-header";
 import { GameCover } from "@/components/game-cover";
+import { AntiCheatBanner } from "@/components/game/anti-cheat-banner";
 import { Discover } from "@/components/game/discover";
 import { GameUpdatedBanner } from "@/components/game/game-updated-banner";
 import { GameVersion } from "@/components/game/game-version";
@@ -130,6 +131,7 @@ export function GameScreen() {
 							</div>
 						</section>
 
+						<AntiCheatBanner game={game} />
 						<PendingBanner appId={game.appId} />
 						<MissingModsBanner game={game} />
 						<GameUpdatedBanner game={game} />
@@ -209,7 +211,7 @@ function NotModdable({ game }: { game: SteamGame }) {
 	return (
 		<div className="glass mt-16 max-w-xl">
 			<Notice icon={<Gamepad2 className="size-5 text-fg-muted" />} title={`${game.name} isn't supported yet`} action={<BackHome />}>
-				Unalia supports BepInEx, MelonLoader and Shimloader games, Unreal Engine games on Nexus Mods (without anti-cheat),
+				Unalia supports BepInEx, MelonLoader and Shimloader games, Unreal Engine games on Nexus Mods,
 				Cyberpunk 2077, Skyrim Special Edition and Fallout 4, for now. More are coming soon.
 			</Notice>
 		</div>

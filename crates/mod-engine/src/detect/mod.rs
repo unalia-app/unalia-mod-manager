@@ -17,7 +17,7 @@ use std::path::{Path, PathBuf};
 
 use serde::Serialize;
 
-pub use engine::{Engine, detect_engine};
+pub use engine::{Engine, detect_anti_cheat, detect_engine};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
