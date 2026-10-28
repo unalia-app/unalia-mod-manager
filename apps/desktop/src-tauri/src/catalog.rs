@@ -2,13 +2,15 @@
 //! main) et commandes de mods. Chaque commande s'adresse à la source du jeu :
 //! Thunderstore, ou Nexus Mods pour les communautés `nexus:<domaine>`.
 
-use std::sync::Arc;
-use std::time::Duration;
+use std::path::Path;
+use std::sync::{Arc, Mutex as SyncMutex};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use mod_engine::HttpClient;
-use mod_engine::games::{GameCatalog, SCHEMA_URL, load_catalog};
+use mod_engine::games::auto::{self, NexusGames};
+use mod_engine::games::{GameCatalog, GameProfile, SCHEMA_URL, load_catalog};
 use mod_engine::sources::github::GitHub;
-use mod_engine::sources::nexus::{self, Nexus, mod_key};
+use mod_engine::sources::nexus::{self, FoundGame, Nexus, mod_key};
 use mod_engine::sources::thunderstore::{MOD_MANAGERS, Thunderstore};
 use mod_engine::sources::{Mod, ModSource, ModSummary, Page, SearchQuery, Sort};
 use serde::Serialize;
@@ -24,6 +26,8 @@ pub struct Catalog {
     pub(crate) nexus: Nexus,
     pub(crate) github: GitHub,
     games: Mutex<Option<Arc<GameCatalog>>>,
+    /// Jeux reconnus automatiquement : réponses de Nexus, gardées sur disque.
+    nexus_games: SyncMutex<NexusGames>,
 }
 
 impl Catalog {
@@ -38,7 +42,56 @@ impl Catalog {
                 .with_token(crate::mods::dev_env("GITHUB_TOKEN")),
             client,
             games: Mutex::new(None),
+            nexus_games: SyncMutex::new(NexusGames::load(&cache_dir.join("nexus-games.json"))),
         }
+    }
+
+    /// Jeux Nexus de ces noms (`games::auto`) : la réponse gardée si elle
+    /// est encore valable, sinon une requête pour tous les autres. Nexus
+    /// injoignable : la dernière réponse connue.
+    pub async fn find_nexus_games(&self, names: &[String]) -> Vec<Option<FoundGame>> {
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_secs() as i64)
+            .unwrap_or_default();
+        let ask: Vec<String> = {
+            let known = self.nexus_games.lock().unwrap();
+            names
+                .iter()
+                .filter(|n| known.fresh(n, now).is_none())
+                .cloned()
+                .collect()
+        };
+        if !ask.is_empty() {
+            match self.nexus.find_games(&ask).await {
+                Ok(found) => {
+                    let mut known = self.nexus_games.lock().unwrap();
+                    for (name, game) in ask.iter().zip(found) {
+                        known.record(name, game, now);
+                    }
+                    if let Err(error) = known.save() {
+                        log::warn!("couldn't save the Nexus game list: {error}");
+                    }
+                }
+                Err(error) => log::warn!("couldn't look up games on Nexus: {error}"),
+            }
+        }
+        let known = self.nexus_games.lock().unwrap();
+        names
+            .iter()
+            .map(|n| match known.fresh(n, now) {
+                Some(found) => found.cloned(),
+                None => known.last_known(n).cloned(),
+            })
+            .collect()
+    }
+
+    /// Profil automatique d'un jeu ajouté à la main (`auto-<domaine>`),
+    /// d'après le jeu Nexus déjà trouvé.
+    pub fn auto_profile(&self, profile_id: &str, game_dir: &Path) -> Option<GameProfile> {
+        let domain = auto::domain_of(profile_id)?;
+        let found = self.nexus_games.lock().unwrap().by_domain(domain).cloned()?;
+        auto::unreal_profile(&found, game_dir)
     }
 
     /// Catalogue chargé une fois par session (cache disque, sinon réseau).

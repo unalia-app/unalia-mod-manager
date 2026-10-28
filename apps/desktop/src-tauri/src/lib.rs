@@ -12,7 +12,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use mod_engine::artwork::{self, ArtworkKind};
 use mod_engine::detect::{self, Engine, SteamGame, detect_engine, shortcuts};
 use mod_engine::download;
-use mod_engine::games::{GameProfile, manual_app_id};
+use mod_engine::games::{GameProfile, auto, manual_app_id};
 use mod_engine::launch::{self, LaunchTarget};
 use mod_engine::state::ManualGame;
 use serde::Serialize;
@@ -159,6 +159,22 @@ async fn list_games(
         })
         .collect();
 
+    // Jeux Unreal sans profil : reconnus d'après leur nom sur Nexus.
+    let unknown: Vec<usize> = entries
+        .iter()
+        .enumerate()
+        .filter(|(_, e)| e.profile.is_none() && e.game.engine == Engine::Unreal)
+        .map(|(i, _)| i)
+        .collect();
+    let names: Vec<String> = unknown.iter().map(|&i| entries[i].game.name.clone()).collect();
+    for (i, found) in unknown.into_iter().zip(catalog.find_nexus_games(&names).await) {
+        let entry = &mut entries[i];
+        if let Some(profile) = found.and_then(|f| auto::unreal_profile(&f, &entry.game.install_dir)) {
+            entry.moddable = true;
+            entry.profile = Some(profile);
+        }
+    }
+
     // Jeux ajoutés à la main, sauf ceux que Steam connaît déjà. S'ils ont
     // été ajoutés à Steam comme jeux non-Steam, Play peut passer par Steam.
     let shortcuts = library
@@ -188,14 +204,15 @@ async fn list_games(
         ..
     } in manual
     {
+        let dir = PathBuf::from(&path);
         let Some(profile) = games_catalog
             .as_ref()
             .and_then(|c| c.by_id(&profile_id))
             .cloned()
+            .or_else(|| catalog.auto_profile(&profile_id, &dir))
         else {
             continue;
         };
-        let dir = PathBuf::from(&path);
         if entries.iter().any(|e| e.game.app_id == app_id) || !dir.is_dir() {
             continue;
         }
@@ -275,7 +292,8 @@ async fn list_games(
 
 /// Ajoute un jeu installé hors de Steam, à partir du dossier choisi par
 /// l'utilisateur. Le jeu est reconnu par ses fichiers grâce au catalogue de
-/// Thunderstore. Renvoie l'identifiant du jeu.
+/// Thunderstore et aux profils écrits à la main, sinon d'après son moteur et
+/// son nom sur Nexus (`games::auto`). Renvoie l'identifiant du jeu.
 #[tauri::command]
 async fn add_manual_game(
     app: AppHandle,
@@ -287,12 +305,22 @@ async fn add_manual_game(
     if !dir.is_dir() {
         return Err("This folder doesn't exist anymore.".into());
     }
-    let games = catalog.games(&app).await.ok_or(
-        "Unalia needs to be online once to recognize games.\nThe Thunderstore game list couldn't be downloaded.",
-    )?;
-    let (profile, game_dir) = games.locate_game(&dir).ok_or(
-        "Unalia doesn't recognize this game.\nPick the folder that contains the game's .exe. Unalia knows the games listed on Thunderstore, Cyberpunk 2077 and Phantom Blade Zero.",
-    )?;
+    let games = catalog.games(&app).await;
+    let located = games
+        .as_ref()
+        .and_then(|g| g.locate_game(&dir))
+        .map(|(profile, game_dir)| (profile.clone(), game_dir));
+    let (profile, game_dir) = match located {
+        Some(found) => found,
+        None => find_auto_game(&catalog, &dir).await.map_err(|unreal| match (unreal, &games) {
+            (Some(name), _) => format!(
+                "Unalia found an Unreal Engine game, but no Nexus Mods page named \"{name}\".\nRename the folder to the game's exact name, then try again."
+            ),
+            (None, None) => "Unalia needs to be online once to recognize games.\nThe Thunderstore game list couldn't be downloaded.".to_owned(),
+            (None, Some(_)) => "Unalia doesn't recognize this game.\nPick the folder that contains the game's .exe. Unalia knows the games listed on Thunderstore, Unreal Engine games on Nexus Mods, Cyberpunk 2077, Skyrim Special Edition and Fallout 4.".to_owned(),
+        })?,
+    };
+    let profile = &profile;
     if !profile.supported {
         return Err(format!(
             "{} uses {}, which Unalia doesn't support yet.",
@@ -315,6 +343,33 @@ async fn add_manual_game(
         })
         .map_err(crate::support::logged)?;
     Ok(app_id)
+}
+
+/// Jeu Unreal sans profil, dans `dir` ou un de ses dossiers (on choisit
+/// souvent le dossier parent), trouvé sur Nexus d'après le nom de son
+/// dossier ou de son exécutable. Échec : le nom cherché si c'était bien un
+/// jeu Unreal.
+async fn find_auto_game(catalog: &Catalog, dir: &Path) -> Result<(GameProfile, PathBuf), Option<String>> {
+    let mut dirs = vec![dir.to_path_buf()];
+    dirs.extend(
+        fs::read_dir(dir)
+            .into_iter()
+            .flatten()
+            .flatten()
+            .filter(|e| e.file_type().is_ok_and(|t| t.is_dir()))
+            .map(|e| e.path()),
+    );
+    let Some(game_dir) = dirs.into_iter().find(|d| detect_engine(d) == Engine::Unreal) else {
+        return Err(None);
+    };
+    let names = auto::candidate_names(&game_dir);
+    let found = catalog.find_nexus_games(&names).await;
+    found
+        .into_iter()
+        .flatten()
+        .find_map(|f| auto::unreal_profile(&f, &game_dir))
+        .map(|profile| (profile, game_dir.clone()))
+        .ok_or_else(|| names.first().cloned())
 }
 
 /// Réglage « Play passe par Steam » d'un jeu ajouté à la main.

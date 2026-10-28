@@ -54,6 +54,14 @@ pub struct Account {
     pub avatar_url: Option<String>,
 }
 
+/// Jeu trouvé sur Nexus d'après son nom (`Nexus::find_games`).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct FoundGame {
+    pub name: String,
+    pub domain: String,
+    pub game_id: u32,
+}
+
 /// Lien `nxm://<domaine>/mods/<mod>/files/<fichier>?key=…&expires=…`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NxmLink {
@@ -307,6 +315,48 @@ impl Nexus {
             premium: user.is_premium,
             avatar_url: user.profile_url.filter(|u| u.starts_with("https://")),
         })
+    }
+
+    /// Jeux Nexus de ces noms, en une requête. Nom exact sans tenir compte
+    /// de la casse ni des ™ et ® (`games::auto::normalize`) : pas de
+    /// correspondance approchée, un nom ambigu ne renvoie rien.
+    pub async fn find_games(&self, names: &[String]) -> Result<Vec<Option<FoundGame>>, SourceError> {
+        if names.is_empty() {
+            return Ok(Vec::new());
+        }
+        let wanted: Vec<String> = names.iter().map(|n| crate::games::auto::normalize(n)).collect();
+        let params: Vec<String> = (0..names.len()).map(|i| format!("$n{i}: String!")).collect();
+        let fields: Vec<String> = (0..names.len())
+            .map(|i| {
+                format!(
+                    "g{i}: games(filter: {{name: [{{value: $n{i}, op: MATCHES}}]}}, count: 5) \
+                     {{ nodes {{ id name domainName }} }}"
+                )
+            })
+            .collect();
+        let query = format!("query({}) {{ {} }}", params.join(", "), fields.join(" "));
+        let variables: serde_json::Map<String, serde_json::Value> = wanted
+            .iter()
+            .enumerate()
+            .map(|(i, n)| (format!("n{i}"), json!(n)))
+            .collect();
+        let mut data: HashMap<String, GameNodes> = self.graphql(&query, variables.into()).await?;
+        Ok(wanted
+            .iter()
+            .enumerate()
+            .map(|(i, name)| {
+                let nodes = data.remove(&format!("g{i}"))?.nodes;
+                let mut exact = nodes
+                    .into_iter()
+                    .filter(|g| crate::games::auto::normalize(&g.name) == *name);
+                let first = exact.next()?;
+                exact.next().is_none().then_some(FoundGame {
+                    name: first.name,
+                    domain: first.domain_name,
+                    game_id: first.id,
+                })
+            })
+            .collect())
     }
 
     /// Fiche d'installation d'un mod : nom, version, fichiers, prérequis.
@@ -851,6 +901,19 @@ struct GraphqlResponse<T> {
 #[derive(Deserialize)]
 struct GraphqlError {
     message: String,
+}
+
+#[derive(Deserialize)]
+struct GameNodes {
+    nodes: Vec<GameNode>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct GameNode {
+    id: u32,
+    name: String,
+    domain_name: String,
 }
 
 #[derive(Deserialize)]

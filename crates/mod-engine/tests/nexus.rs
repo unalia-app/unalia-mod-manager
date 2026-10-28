@@ -879,3 +879,43 @@ async fn a_color_variant_goes_on_top_of_the_main_file() {
         b"black yellow"
     );
 }
+
+/// Jeux reconnus automatiquement : une requête pour tous les noms, nom
+/// exact seulement.
+#[tokio::test]
+async fn games_are_found_by_their_exact_name() {
+    let mut server = mockito::Server::new_async().await;
+    let nexus = Nexus::with_urls(
+        reqwest::Client::new(),
+        &format!("{}/graphql", server.url()),
+        &format!("{}/v1", server.url()),
+    );
+    let mock = server
+        .mock("POST", "/graphql")
+        .match_body(Matcher::PartialJson(json!({
+            "variables": { "n0": "hogwarts legacy", "n1": "nothing here", "n2": "skyrim" }
+        })))
+        .with_body(
+            json!({ "data": {
+                "g0": { "nodes": [{ "id": 5113, "name": "Hogwarts Legacy", "domainName": "hogwartslegacy" }] },
+                "g1": { "nodes": [] },
+                // Nom proche mais pas identique : refusé.
+                "g2": { "nodes": [{ "id": 1704, "name": "Skyrim Special Edition", "domainName": "skyrimspecialedition" }] }
+            }})
+            .to_string(),
+        )
+        .expect(1)
+        .create_async()
+        .await;
+
+    let found = nexus
+        .find_games(&["Hogwarts Legacy™".into(), "Nothing Here".into(), "Skyrim".into()])
+        .await
+        .unwrap();
+    mock.assert_async().await;
+    assert_eq!(found.len(), 3);
+    let hogwarts = found[0].as_ref().unwrap();
+    assert_eq!((hogwarts.domain.as_str(), hogwarts.game_id), ("hogwartslegacy", 5113));
+    assert!(found[1].is_none());
+    assert!(found[2].is_none());
+}

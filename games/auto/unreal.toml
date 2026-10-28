@@ -1,0 +1,18 @@
+# Modèle des jeux Unreal reconnus automatiquement : un jeu Unreal (dossier
+# de projet trouvé sur le disque) dont le nom existe sur Nexus Mods, sans
+# profil écrit à la main dans `games/`. Seuls les frameworks viennent d'ici,
+# le reste est déduit du jeu (`crates/mod-engine/src/games/auto.rs`).
+#
+# UE4SS : mods en Lua et mods Blueprint (LogicMods). La build expérimentale,
+# publiée en continu, gère aussi les Unreal 5 récents.
+
+[[frameworks]]
+name = "UE4SS"
+github = "UE4SS-RE/RE-UE4SS"
+release = "experimental-latest"
+asset = "UE4SS_v*.zip"
+marker = "{project}/Binaries/Win64/ue4ss/UE4SS.dll"
+needed_by_prefix = [
+    "{project}/Binaries/Win64/ue4ss/Mods/",
+    "{project}/Content/Paks/LogicMods/",
+]

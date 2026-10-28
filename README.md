@@ -22,7 +22,7 @@
 |---|---|---|
 | [Thunderstore](https://thunderstore.io) | Every game listed there (Hollow Knight: Silksong, Lethal Company, Valheim…) | BepInEx, MelonLoader, Shimloader, UMM, Northstar… |
 | [Nexus Mods](https://www.nexusmods.com) | Cyberpunk 2077 | Cyber Engine Tweaks, RED4ext, redscript, ArchiveXL, TweakXL, Codeware |
-| Nexus Mods | Unreal Engine games with a profile (Phantom Blade Zero) | `.pak` mods, UE4SS |
+| Nexus Mods | Unreal Engine games, recognized on their own by their name on Nexus (Phantom Blade Zero, Hogwarts Legacy…), except games with an anti-cheat | `.pak` mods, UE4SS |
 | Nexus Mods | Skyrim Special Edition, Fallout 4 | Plugins, archives and loose files, `plugins.txt` kept in sync |
 
 Next on the list: script extenders and FOMOD installers for Bethesda games, more loaders (RE Engine, Godot) and more sources. See the [roadmap](ROADMAP.md).

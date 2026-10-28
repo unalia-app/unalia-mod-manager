@@ -7,6 +7,7 @@
 //! Le schéma est mis en cache sur disque : l'appli démarre hors ligne avec la
 //! dernière version connue.
 
+pub mod auto;
 mod builtin;
 mod schema;
 

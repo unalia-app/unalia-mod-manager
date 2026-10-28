@@ -209,8 +209,8 @@ function NotModdable({ game }: { game: SteamGame }) {
 	return (
 		<div className="glass mt-16 max-w-xl">
 			<Notice icon={<Gamepad2 className="size-5 text-fg-muted" />} title={`${game.name} isn't supported yet`} action={<BackHome />}>
-				Unalia supports BepInEx, MelonLoader and Shimloader games, Cyberpunk 2077 and Phantom Blade Zero, for now. More are
-				coming soon.
+				Unalia supports BepInEx, MelonLoader and Shimloader games, Unreal Engine games on Nexus Mods (without anti-cheat),
+				Cyberpunk 2077, Skyrim Special Edition and Fallout 4, for now. More are coming soon.
 			</Notice>
 		</div>
 	);
