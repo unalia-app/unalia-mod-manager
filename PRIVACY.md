@@ -20,7 +20,7 @@ Only the services that host the games' mods and images, to do what you ask:
 |---|---|
 | Thunderstore | Browse and download mods |
 | Nexus Mods | Browse and download mods, with your API key if you connected it. Recognize Unreal games by their name |
-| GitHub | Download frameworks and mods published there by their authors |
+| GitHub | Download frameworks and mods published there by their authors. Check for a new version of the app at startup |
 | Steam (CDN) | Game covers that are not in your local Steam cache |
 
 Each request identifies the app (`UnaliaModManager/<version>`), as these services ask. They see your IP address, like any website you visit, and apply their own privacy policies.
