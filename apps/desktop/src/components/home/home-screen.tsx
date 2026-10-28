@@ -6,7 +6,6 @@ import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState }
 import { Ambience } from "@/components/ambience";
 import { AppHeader } from "@/components/app-header";
 import { ContinueCard } from "@/components/home/continue-card";
-import { Credits } from "@/components/home/credits";
 import { GameLibrary, type LibraryState } from "@/components/home/game-library";
 import { Intro, introPlayed } from "@/components/intro";
 import { useAccent } from "@/hooks/use-accent";
@@ -123,8 +122,6 @@ export function HomeScreen() {
 					onFocusChange={setFocused}
 				/>
 			</div>
-
-			{intro === "done" && <Credits className="animate-fade-in" />}
 		</main>
 	);
 }

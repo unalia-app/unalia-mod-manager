@@ -5,6 +5,7 @@ import { AppUpdateCheck } from "@/components/app-update-check";
 import { WhatsNew } from "@/components/app-update/whats-new";
 import { DevShortcuts } from "@/components/dev-shortcuts";
 import { DisplayScale } from "@/components/display-scale";
+import { Credits } from "@/components/credits";
 import { BetaBubble } from "@/components/feedback/beta-bubble";
 import { FeedbackDialog } from "@/components/feedback/feedback-dialog";
 import { FilePicker } from "@/components/game/file-picker";
@@ -28,6 +29,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
 				<OverlayScrollbar />
 				<DevShortcuts />
 				<DisplayScale />
+				<Credits />
 				<BetaBubble />
 				<FeedbackDialog />
 				<FilePicker />
