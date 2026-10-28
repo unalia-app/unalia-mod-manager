@@ -28,6 +28,8 @@ export function GameLibrary({
 	games,
 	others,
 	onRetry,
+	onRefresh,
+	refreshing,
 	onFocusChange,
 }: {
 	state: LibraryState;
@@ -36,6 +38,9 @@ export function GameLibrary({
 	/** Jeux que Unalia ne sait pas encore modder. */
 	others: SteamGame[];
 	onRetry: () => void;
+	/** Relit la bibliothèque sans vider la grille. */
+	onRefresh: () => void;
+	refreshing: boolean;
 	/** Jeu survolé, pour l'ambiance (`null` en sortant de la grille). */
 	onFocusChange: (game: SteamGame | null) => void;
 }) {
@@ -84,6 +89,17 @@ export function GameLibrary({
 						aria-label="Search your games"
 						className="h-10 w-64"
 					/>
+					<Button
+						variant="outline"
+						size="icon"
+						className="size-10"
+						aria-label="Refresh your games"
+						title="Look again for games installed since Unalia opened"
+						disabled={state.status !== "ready" || refreshing}
+						onClick={onRefresh}
+					>
+						<RotateCw className={cn("size-4", refreshing && "animate-spin")} />
+					</Button>
 					<Button
 						variant="outline"
 						size="lg"

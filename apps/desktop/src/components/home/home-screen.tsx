@@ -12,6 +12,8 @@ import { useAccent } from "@/hooks/use-accent";
 import { type SteamGame, isModdable } from "@/lib/engine";
 import { loadGames, recentGameIds, withRecentsFirst } from "@/lib/games-store";
 
+const REFRESH_EVERY_MS = 5_000;
+
 /**
  * Accueil en tableau de bord : le dernier jeu moddé en grand, puis la
  * bibliothèque. Au tout premier lancement (aucun jeu récent), la question
@@ -39,6 +41,33 @@ export function HomeScreen() {
 	}, []);
 
 	useEffect(() => scan(), [scan]);
+
+	// Nouveau scan sans vider la grille : un jeu installé par Steam pendant
+	// que l'appli tourne apparaît sans la relancer. Un échec garde la liste
+	// affichée.
+	const [refreshing, setRefreshing] = useState(false);
+	const lastRefresh = useRef(0);
+	const refresh = useCallback(() => {
+		lastRefresh.current = Date.now();
+		setRefreshing(true);
+		loadGames({ fresh: true })
+			.then(
+				(result) => setState({ status: "ready", scan: result }),
+				() => {},
+			)
+			.finally(() => setRefreshing(false));
+	}, []);
+
+	// Retour dans la fenêtre (depuis Steam, souvent) : on relit la
+	// bibliothèque, au plus une fois toutes les 5 secondes.
+	useEffect(() => {
+		const onFocus = () => {
+			const due = Date.now() - lastRefresh.current > REFRESH_EVERY_MS;
+			if (state.status === "ready" && !refreshing && due) refresh();
+		};
+		window.addEventListener("focus", onFocus);
+		return () => window.removeEventListener("focus", onFocus);
+	}, [state.status, refreshing, refresh]);
 
 	const { featured, games, others } = useMemo(() => {
 		const all = state.status === "ready" ? state.scan.games : [];
@@ -88,6 +117,8 @@ export function HomeScreen() {
 					games={games}
 					others={others}
 					onRetry={() => scan(true)}
+					onRefresh={refresh}
+					refreshing={refreshing}
 					onFocusChange={setFocused}
 				/>
 			</div>
