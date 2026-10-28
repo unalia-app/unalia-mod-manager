@@ -4,10 +4,6 @@ All notable changes to Unalia Mod Manager. The format follows [Keep a Changelog]
 
 ## [Unreleased]
 
-## [0.1.1] - 2026-10-28
-
-No user-facing changes. This release checks that the in-app updater delivers new versions.
-
 ## [0.1.0] - 2026-10-27
 
 First public beta, Windows only.
