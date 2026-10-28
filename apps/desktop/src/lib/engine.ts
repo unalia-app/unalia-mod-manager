@@ -99,6 +99,7 @@ const LOADER_LABEL: Record<string, string> = {
 	"recursive-melonloader": "MelonLoader",
 	shimloader: "Shimloader",
 	godotml: "GodotML",
+	bethesda: "Creation Engine",
 	redengine: "REDengine",
 	unreal: "Paks & UE4SS",
 	bepisloader: "BepisLoader",
@@ -110,7 +111,7 @@ const LOADER_LABEL: Record<string, string> = {
 export function gameSubtitle(game: SteamGame): string {
 	const loader = game.profile && game.profile.loader !== "none" ? (LOADER_LABEL[game.profile.loader] ?? game.profile.loader) : null;
 	if (!loader) return ENGINE_LABEL[game.engine];
-	// Moteur maison (REDengine…) : le loader suffit.
+	// Moteur maison (REDengine, Creation Engine…) : le loader suffit.
 	return game.engine === "unknown" ? loader : `${ENGINE_LABEL[game.engine]} · ${loader}`;
 }
 

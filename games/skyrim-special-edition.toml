@@ -1,0 +1,20 @@
+# The Elder Scrolls V: Skyrim Special Edition (Creation Engine) : mods sur
+# Nexus Mods, placés par l'adaptateur Bethesda
+# (`crates/mod-engine/src/loaders/bethesda.rs`). Tout va dans `Data/`.
+#
+# Le jeu ne charge que les plugins listés dans
+# `%LOCALAPPDATA%\<plugins>\plugins.txt` : Modalia y ajoute ceux qu'il pose.
+# Version Steam seulement (GOG et Epic ont leur propre dossier).
+
+id = "skyrim-special-edition"
+name = "The Elder Scrolls V: Skyrim Special Edition"
+steam_app_ids = [489830]
+exe_names = ["SkyrimSE.exe"]
+loader = "bethesda"
+plugins = "Skyrim Special Edition"
+# Launcher de Bethesda : s'ouvre avant le jeu.
+launchers = ["SkyrimSELauncher.exe"]
+
+[nexus]
+domain = "skyrimspecialedition"
+game_id = 1704

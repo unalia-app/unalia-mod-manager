@@ -110,6 +110,9 @@ pub enum InstallError {
     Conflict { path: String, other: String },
     #[error("Unalia can't tell where the files of {0} go")]
     NothingToInstall(String),
+    /// Installateur FOMOD : des options à choisir, pas encore proposées.
+    #[error("{0} comes with an installer that asks you to pick options, which Unalia doesn't support yet")]
+    Fomod(String),
     #[error("{0} has no file to install")]
     NoFile(String),
     #[error("Unalia can't find the game's files: is it fully installed?")]
@@ -955,6 +958,18 @@ pub fn uninstall_all(state: &mut State, game: &str, game_dir: &Path) -> Result<u
         state.remove(game, &m.id)?;
     }
     Ok(count)
+}
+
+/// Jeux Bethesda : `plugins.txt` (`list`) suit les plugins des mods actifs,
+/// après chaque changement. Renvoie `true` s'il a changé.
+pub fn sync_plugins(state: &State, game: &str, game_dir: &Path, list: &Path) -> Result<bool, InstallError> {
+    let deployed: Vec<String> = state
+        .list(game)?
+        .into_iter()
+        .filter(|m| m.enabled)
+        .flat_map(|m| m.deployment.files)
+        .collect();
+    Ok(crate::loaders::bethesda::sync_plugins(game_dir, list, &deployed)?)
 }
 
 /// Mods actifs dont au moins un fichier a quitté le jeu : jeu réinstallé,

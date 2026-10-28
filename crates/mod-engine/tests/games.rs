@@ -89,9 +89,9 @@ fn games_whose_mods_ship_as_archives_are_not_supported_yet() {
 fn games_without_an_installable_entry_are_skipped() {
     let catalog = catalog();
     assert!(catalog.by_id("107zxz-inscryption-multiplayer").is_none());
-    // 7 jeux du schéma, plus Cyberpunk 2077 et Phantom Blade Zero (profils
-    // écrits à la main).
-    assert_eq!(catalog.games().len(), 9);
+    // 7 jeux du schéma, plus Cyberpunk 2077, Phantom Blade Zero, Skyrim SE
+    // et Fallout 4 (profils écrits à la main).
+    assert_eq!(catalog.games().len(), 11);
 }
 
 #[test]
@@ -445,4 +445,20 @@ fn phantom_blade_zero_is_ready_for_launch() {
         ue4ss.resolve(Some("PBZ")).marker,
         "PBZ/Binaries/Win64/ue4ss/UE4SS.dll"
     );
+}
+
+#[test]
+fn bethesda_games_come_from_their_handwritten_profiles() {
+    let catalog = catalog();
+    for (app_id, id, domain, plugins) in [
+        (489830, "skyrim-special-edition", "skyrimspecialedition", "Skyrim Special Edition"),
+        (377160, "fallout-4", "fallout4", "Fallout4"),
+    ] {
+        let game = catalog.by_steam_app_id(app_id).unwrap();
+        assert_eq!(game.id, id);
+        assert_eq!(game.loader, "bethesda");
+        assert!(game.supported);
+        assert_eq!(game.community, format!("nexus:{domain}"));
+        assert_eq!(game.plugins.as_deref(), Some(plugins));
+    }
 }

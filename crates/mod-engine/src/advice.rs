@@ -102,6 +102,7 @@ fn install(e: &InstallError) -> Advice {
             true,
             "This mod's layout isn't supported yet: copy a report from Settings > Support so it can be.",
         ),
+        InstallError::Fomod(_) => advice(true, "Pick another file of this mod if it has one, or check back soon."),
         InstallError::NoGameFiles => advice(
             true,
             "In Steam, verify the game's files (Properties > Installed Files), then try again.",

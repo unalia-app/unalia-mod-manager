@@ -30,6 +30,7 @@ use super::{
 };
 use crate::download;
 use crate::games::GameProfile;
+use crate::loaders::bethesda::{self, Bethesda};
 use crate::loaders::framework::{Framework, needed_frameworks};
 use crate::loaders::redengine::RedEngine;
 use crate::loaders::unreal::{Unreal, find_project};
@@ -469,13 +470,7 @@ impl Installer<'_, Nexus> {
             let (_, manifest) = self
                 .fetch_package(target, part, index, total, on_progress)
                 .await?;
-            let placements =
-                adapter
-                    .loader()
-                    .place(&part.name, &PackageKind::Mod, &files_of(&manifest));
-            if placements.is_empty() {
-                return Err(InstallError::NothingToInstall(part.name.clone()));
-            }
+            let placements = adapter.place(&part.name, &files_of(&manifest))?;
             placed.push((manifest, placements));
         }
         let ids: Vec<String> = parts
@@ -521,13 +516,7 @@ impl Installer<'_, Nexus> {
         let (key, manifest) = self
             .fetch_package(target, &package, index, total, on_progress)
             .await?;
-        let placements =
-            adapter
-                .loader()
-                .place(&package.name, &PackageKind::Mod, &files_of(&manifest));
-        if placements.is_empty() {
-            return Err(InstallError::NothingToInstall(package.name));
-        }
+        let placements = adapter.place(&package.name, &files_of(&manifest))?;
         Ok(Fetched {
             package,
             key,
@@ -591,6 +580,7 @@ fn file_version(info: &ModInfo, file: &ModFile, before: Option<&str>) -> String 
 
 /// Adaptateur d'un jeu Nexus, d'après son profil.
 enum Adapter {
+    Bethesda(Bethesda),
     RedEngine(RedEngine),
     Unreal(Unreal),
 }
@@ -602,12 +592,14 @@ impl Adapter {
                 let project = find_project(game_dir).ok_or(InstallError::NoGameFiles)?;
                 Ok(Self::Unreal(Unreal { project }))
             }
+            "bethesda" => Ok(Self::Bethesda(Bethesda)),
             _ => Ok(Self::RedEngine(RedEngine)),
         }
     }
 
     fn loader(&self) -> &dyn Loader {
         match self {
+            Self::Bethesda(loader) => loader,
             Self::RedEngine(loader) => loader,
             Self::Unreal(loader) => loader,
         }
@@ -616,7 +608,20 @@ impl Adapter {
     fn project(&self) -> Option<&str> {
         match self {
             Self::Unreal(loader) => Some(&loader.project),
-            Self::RedEngine(_) => None,
+            Self::Bethesda(_) | Self::RedEngine(_) => None,
+        }
+    }
+
+    /// Destination des fichiers du mod `name`. Rien à poser : une erreur
+    /// qui dit pourquoi.
+    fn place(&self, name: &str, files: &[String]) -> Result<Vec<Placement>, InstallError> {
+        let placements = self.loader().place(name, &PackageKind::Mod, files);
+        if !placements.is_empty() {
+            Ok(placements)
+        } else if matches!(self, Self::Bethesda(_)) && bethesda::has_fomod(files) {
+            Err(InstallError::Fomod(name.to_owned()))
+        } else {
+            Err(InstallError::NothingToInstall(name.to_owned()))
         }
     }
 }

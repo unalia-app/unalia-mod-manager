@@ -800,6 +800,19 @@ fn close_first(game: &KnownGame) -> String {
     )
 }
 
+/// Jeux Bethesda : `plugins.txt` suit les mods posés. Un échec n'annule
+/// pas le changement : il est journalisé, le suivant réessaie.
+fn sync_plugins(state: &ModState, app_id: u32, game: &KnownGame) {
+    let Some(list) = game.profile.plugins_file() else {
+        return;
+    };
+    match installer::sync_plugins(state, &game_key(app_id), &game.dir, &list) {
+        Ok(true) => log::info!("updated {}", list.display()),
+        Ok(false) => {}
+        Err(error) => log::warn!("couldn't update {}: {error}", list.display()),
+    }
+}
+
 /// Installe un mod Nexus (et ses frameworks, depuis GitHub).
 async fn run_nexus_install(
     app: &AppHandle,
@@ -829,7 +842,7 @@ async fn run_nexus_install(
     let result = {
         let _fetching = mods.fetching.lock().await;
         let mut state = mods.state.lock().await;
-        installer
+        let result = installer
             .install_nexus(
                 &mut state,
                 &target,
@@ -840,7 +853,9 @@ async fn run_nexus_install(
                 game.mods_before(),
                 progress_emitter(app, app_id, mod_id),
             )
-            .await
+            .await;
+        sync_plugins(&state, app_id, game);
+        result
     };
     mods.end(app_id, mod_id);
     settle_download(&mods, app_id, mod_id, result.as_ref().err());
@@ -924,6 +939,7 @@ pub async fn set_mod_enabled(
     let mut state = mods.state.lock().await;
     let value = installer::set_enabled(&mut state, &mods.paths, &game_key(app_id), &game.dir, &mod_id, enabled)
         .map_err(|e| error_message(&e))?;
+    sync_plugins(&state, app_id, &game);
     Ok(Outcome::Done { value })
 }
 
@@ -944,6 +960,7 @@ pub async fn uninstall_mod(
     let mut state = mods.state.lock().await;
     let removed = installer::uninstall(&mut state, &mods.paths, &key, &game.dir, &mod_id)
         .map_err(|e| error_message(&e))?;
+    sync_plugins(&state, app_id, &game);
     let at = Instant::now();
     mods.removed
         .lock()
@@ -993,7 +1010,9 @@ pub async fn restore_mod(
         .remove(&(key, mod_id))
         .ok_or("This mod can't be restored anymore.")?;
     let mut state = mods.state.lock().await;
-    installer::restore(&mut state, &mods.paths, &game.dir, removed).map_err(|e| error_message(&e))
+    let restored = installer::restore(&mut state, &mods.paths, &game.dir, removed).map_err(|e| error_message(&e))?;
+    sync_plugins(&state, app_id, &game);
+    Ok(restored)
 }
 
 /// Revient à une version précédente d'un mod (`package`, l'une de ses
@@ -1011,8 +1030,10 @@ pub async fn revert_mod(
         return Err("Close the game first, then try again.".into());
     }
     let mut state = mods.state.lock().await;
-    installer::revert(&mut state, &mods.paths, &game_key(app_id), &game.dir, &mod_id, &package)
-        .map_err(|e| error_message(&e))
+    let reverted = installer::revert(&mut state, &mods.paths, &game_key(app_id), &game.dir, &mod_id, &package)
+        .map_err(|e| error_message(&e))?;
+    sync_plugins(&state, app_id, &game);
+    Ok(reverted)
 }
 
 /// Au démarrage : passe l'ancien stockage au stockage par empreinte (une
@@ -1074,6 +1095,7 @@ pub async fn put_back_mods(
     for m in &missing {
         installer::put_back(&mut state, &mods.paths, &key, &game.dir, &m.id).map_err(|e| error_message(&e))?;
     }
+    sync_plugins(&state, app_id, &game);
     log::info!("put back {} mods in {key}", missing.len());
     Ok(missing.len())
 }
@@ -1250,6 +1272,7 @@ pub async fn reset_game(
         foreign::to_recycle_bin,
     )
     .map_err(|e| error_message(&e))?;
+    sync_plugins(&state, app_id, &game);
     // Plus d'« Undo » possible pour les mods retirés juste avant.
     mods.removed.lock().unwrap().retain(|(game, _), _| *game != key);
     log::info!(
@@ -1276,6 +1299,8 @@ pub async fn play_game(
     if mods.is_running(&game) {
         return Ok(());
     }
+    // Un plugin retiré à la main depuis : la liste est remise d'accord.
+    sync_plugins(&*mods.state.lock().await, app_id, &game);
     let target = if let Some(url) = &game.steam_shortcut {
         // Jeu hors Steam ajouté à Steam : par Steam, pour son overlay.
         LaunchTarget::Steam(url.clone())
@@ -1461,6 +1486,7 @@ async fn apply_pending(app: &AppHandle, app_id: u32, game: &KnownGame) {
             }),
         }
     }
+    sync_plugins(&*mods.state.lock().await, app_id, game);
     let _ = app.emit(
         "pending-applied",
         AppliedEvent {

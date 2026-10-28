@@ -76,6 +76,10 @@ pub struct GameProfile {
     /// l'utilisateur resté sur une ancienne version reçoit les mods publiés
     /// avant la suivante.
     pub versions: Vec<GameVersion>,
+    /// Jeux Bethesda : dossier de `%LOCALAPPDATA%` où le jeu lit son
+    /// `plugins.txt`, ex. `Skyrim Special Edition`.
+    #[serde(skip)]
+    pub plugins: Option<String>,
 }
 
 /// Version du jeu et sa date de sortie (ISO, `2026-10-22`).
@@ -93,6 +97,13 @@ impl GameProfile {
     pub fn mods_before(&self, name: &str) -> Option<&str> {
         let at = self.versions.iter().position(|v| v.name == name)?;
         self.versions.get(at + 1).map(|v| v.released.as_str())
+    }
+
+    /// `plugins.txt` d'un jeu Bethesda (`loaders::bethesda::sync_plugins`).
+    pub fn plugins_file(&self) -> Option<PathBuf> {
+        let folder = self.plugins.as_deref()?;
+        let local = std::env::var_os("LOCALAPPDATA")?;
+        Some(PathBuf::from(local).join(folder).join("plugins.txt"))
     }
 }
 

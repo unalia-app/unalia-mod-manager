@@ -187,6 +187,7 @@ fn profile(game: Game, communities: &HashMap<String, Community>) -> Option<GameP
         mirrors: Vec::new(),
         launchers: Vec::new(),
         versions: Vec::new(),
+        plugins: None,
         name: game.meta.display_name,
         community,
         id: game.label,

@@ -7,13 +7,15 @@ use serde::Deserialize;
 use super::{GameProfile, GameVersion, Mirror, NexusGame};
 use crate::loaders::rules::InstallRules;
 
-const PROFILES: [&str; 2] = [
+const PROFILES: [&str; 4] = [
     include_str!("../../../../games/cyberpunk-2077.toml"),
+    include_str!("../../../../games/fallout-4.toml"),
     include_str!("../../../../games/phantom-blade-zero.toml"),
+    include_str!("../../../../games/skyrim-special-edition.toml"),
 ];
 
 /// Loaders des profils écrits à la main, que Modalia sait installer.
-pub const BUILTIN_LOADERS: [&str; 2] = ["redengine", "unreal"];
+pub const BUILTIN_LOADERS: [&str; 3] = ["bethesda", "redengine", "unreal"];
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -34,6 +36,7 @@ struct RawProfile {
     launchers: Vec<String>,
     #[serde(default)]
     versions: Vec<GameVersion>,
+    plugins: Option<String>,
 }
 
 pub fn profiles() -> Vec<GameProfile> {
@@ -63,6 +66,7 @@ pub fn profiles() -> Vec<GameProfile> {
                 mirrors: raw.mirrors,
                 launchers: raw.launchers,
                 versions: raw.versions,
+                plugins: raw.plugins,
             }
         })
         .collect()

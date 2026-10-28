@@ -4,6 +4,18 @@ All notable changes to Unalia Mod Manager. The format follows [Keep a Changelog]
 
 ## [Unreleased]
 
+### Added
+
+- Skyrim Special Edition and Fallout 4 (Steam), with mods from Nexus Mods: plugins, archives and loose files go to `Data/`, and the game's `plugins.txt` follows the mods you turn on. Script extenders and mods with an installer that asks for options (FOMOD) come next.
+- Uninstall a mod from its page or its card, with Undo.
+- Uninstall the app from Settings > Support.
+- Refresh button in the game library, and a refresh when the window comes back: a game installed while the app is open shows up.
+- A new version announces itself in a window with its notes, and "What's new" opens after the update.
+
+### Changed
+
+- New notifications, stacked at the bottom of the window: hover to keep them, swipe to dismiss.
+
 ## [0.1.0] - 2026-10-27
 
 First public beta, Windows only.
