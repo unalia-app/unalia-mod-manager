@@ -19,19 +19,18 @@ const CATEGORY: Record<string, string> = {
 };
 
 /**
- * Choix des fichiers d'un mod Nexus qui en a plusieurs (versions, options).
- * Plusieurs fichiers principaux sont des versions du même mod : un seul se
- * choisit (le moteur met en tête celui qui marche avec ce qu'Unalia
- * installe). Les options s'y ajoutent. Le fichier conseillé est coché
- * d'office ; les fichiers se posent dans l'ordre de la liste, chacun
- * par-dessus le précédent. Dans un portail : `fixed` ne doit dépendre
- * d'aucun parent transformé.
+ * File picker for a Nexus mod that has several (versions, options).
+ * Several main files are versions of the same mod: only one can be picked
+ * (the engine puts first the one that works with what Unalia installs).
+ * Options add on top. The advised file is ticked by default; files are
+ * placed in list order, each over the previous one. In a portal: `fixed`
+ * must not depend on any transformed parent.
  */
 export function FilePicker() {
 	const choice = useFileChoice();
 	const [picked, setPicked] = useState<number[]>([]);
 
-	// Nouveau choix : le fichier conseillé (en tête) coché d'office.
+	// New choice: the advised file (first) ticked by default.
 	useEffect(() => {
 		setPicked(choice?.files[0] ? [choice.files[0].fileId] : []);
 	}, [choice]);
@@ -54,11 +53,11 @@ export function FilePicker() {
 	const versions = mains.length > 1;
 	const toggle = (id: number) =>
 		setPicked((current) => {
-			// Une seule version : en choisir une remplace l'autre.
+			// A single version: picking one replaces the other.
 			if (versions && mains.includes(id)) return [id, ...current.filter((f) => !mains.includes(f))];
 			return current.includes(id) ? current.filter((f) => f !== id) : [...current, id];
 		});
-	// L'ordre de pose est celui de la liste, pas celui des clics.
+	// The placing order is the list's, not the clicks'.
 	const ordered = choice.files.map((f) => f.fileId).filter((id) => picked.includes(id));
 
 	return createPortal(
@@ -131,11 +130,11 @@ function FileRow({
 	onToggle,
 }: {
 	file: NexusModFile;
-	/** Une version parmi d'autres : choix unique (bouton radio). */
+	/** One version among others: single choice (radio button). */
 	single: boolean;
 	recommended: boolean;
 	checked: boolean;
-	/** Rang de pose quand plusieurs fichiers sont cochés, sinon 0. */
+	/** Placing rank when several files are ticked, else 0. */
 	order: number;
 	onToggle: () => void;
 }) {

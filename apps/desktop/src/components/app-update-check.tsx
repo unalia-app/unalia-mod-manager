@@ -7,15 +7,14 @@ import { useEffect, useState } from "react";
 import { ReleaseNotesList } from "@/components/app-update/release-notes";
 import { type AppUpdateState, checkForUpdate, installUpdate, previewUpdate, useAppUpdate } from "@/lib/app-update";
 
-/** Laisse l'accueil se charger avant d'interroger le serveur des releases. */
+/** Lets the home screen load before asking the release server. */
 const CHECK_AFTER_MS = 5_000;
 
 /**
- * Au démarrage, une nouvelle version de l'appli s'annonce dans une fenêtre,
- * avec ses notes : un toast passait inaperçu. « Later » la ferme jusqu'au
- * prochain lancement (Settings > Support la propose toujours). Pas d'erreur
- * si la recherche échoue (hors ligne) : Settings > Support permet de
- * réessayer.
+ * At startup, a new app version announces itself in a dialog, with its
+ * notes: a toast went unnoticed. "Later" closes it until the next launch
+ * (Settings > Support always offers it). No error if the check fails
+ * (offline): Settings > Support lets you try again.
  */
 export function AppUpdateCheck() {
 	const update = useAppUpdate();
@@ -23,7 +22,7 @@ export function AppUpdateCheck() {
 
 	useEffect(() => {
 		if (process.env.NODE_ENV === "development") {
-			// Aperçu en dev : Ctrl+Maj+U (`DevShortcuts`).
+			// Dev preview: Ctrl+Shift+U (`DevShortcuts`).
 			const preview = () => {
 				previewUpdate();
 				setOpen(true);
@@ -94,7 +93,7 @@ export function AppUpdateCheck() {
 	);
 }
 
-/** Lueur de la couleur du dialog en haut, sur le grain. */
+/** Glow of the dialog color at the top, over the grain. */
 export function Glow({ className }: { className: string }) {
 	return (
 		<div
@@ -107,7 +106,7 @@ export function Glow({ className }: { className: string }) {
 	);
 }
 
-/** Avancement du téléchargement ; taille inconnue : barre animée. */
+/** Download progress; unknown size: animated bar. */
 function Progress({ value }: { value: Extract<AppUpdateState, { status: "installing" }>["progress"] }) {
 	return (
 		<div className="flex flex-col gap-2">

@@ -7,8 +7,8 @@ import { type PendingOp, cancelPending, splitError } from "@/lib/engine";
 import { useGameStatus } from "@/lib/game-status";
 
 /**
- * Changements demandés pendant une partie (SPEC §3.6) : appliqués
- * automatiquement à la fermeture du jeu, annulables un par un.
+ * Changes requested during a session: applied automatically when the game
+ * closes, cancelable one by one.
  */
 export function PendingBanner({ appId }: { appId: number }) {
 	const status = useGameStatus(appId);

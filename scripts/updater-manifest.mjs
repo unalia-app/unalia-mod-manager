@@ -1,17 +1,17 @@
 #!/usr/bin/env node
-// Manifeste lu par l'updater de l'appli (`latest.json`), à joindre à chaque
-// release sous ce nom : l'appli le cherche au lien permanent de la dernière
-// release (`plugins.updater.endpoints` dans `tauri.conf.json`).
+// Manifest read by the app updater (`latest.json`), to attach to each
+// release under this name: the app looks for it at the permanent link of
+// the latest release (`plugins.updater.endpoints` in `tauri.conf.json`).
 //
-// À lancer après `tauri build`, avec la clé privée dans
-// `TAURI_SIGNING_PRIVATE_KEY` (sinon pas de `.sig`) :
+// Run it after `tauri build`, with the private key in
+// `TAURI_SIGNING_PRIVATE_KEY` (else no `.sig`):
 //
-//   node scripts/updater-manifest.mjs --url <adresse publique de l'installeur>
+//   node scripts/updater-manifest.mjs --url <public URL of the installer>
 //                                     [--out latest.json] [--notes notes.md]
 //
-// Les notes de version viennent de la section de `CHANGELOG.md` qui porte
-// le numéro de la version. `--notes` les écrit aussi à part, pour la
-// description de la release GitHub.
+// The release notes come from the `CHANGELOG.md` section that carries the
+// version number. `--notes` also writes them separately, for the GitHub
+// release description.
 
 import { createHash, createPublicKey, verify } from "node:crypto";
 import { readdir, readFile, writeFile } from "node:fs/promises";
@@ -30,7 +30,7 @@ const { values } = parseArgs({
 	},
 });
 if (!values.url?.startsWith("https://")) {
-	console.error("--url <https://...> requis : adresse publique de l'installeur");
+	console.error("--url <https://...> required: public URL of the installer");
 	process.exit(1);
 }
 
@@ -39,24 +39,24 @@ const version = config.version;
 
 const installer = (await readdir(nsis)).find((f) => f.endsWith("-setup.exe") && f.includes(`_${version}_`));
 if (!installer) {
-	console.error(`Aucun installeur ${version} dans ${nsis} : lancer \`tauri build\` d'abord.`);
+	console.error(`No ${version} installer in ${nsis}: run \`tauri build\` first.`);
 	process.exit(1);
 }
 const signature = await readFile(join(nsis, `${installer}.sig`), "utf8").catch(() => {
-	console.error(`${installer}.sig introuvable : TAURI_SIGNING_PRIVATE_KEY était-elle définie pendant le build ?`);
+	console.error(`${installer}.sig not found: was TAURI_SIGNING_PRIVATE_KEY set during the build?`);
 	process.exit(1);
 });
-// `tauri build` ne fait qu'avertir quand la clé privée n'est pas celle de
-// `plugins.updater.pubkey` : une mise à jour publiée ainsi serait refusée
-// par toutes les applis installées.
+// `tauri build` only warns when the private key isn't the one of
+// `plugins.updater.pubkey`: an update published that way would be refused
+// by every installed app.
 if (!signedBy(await readFile(join(nsis, installer)), signature, config.plugins.updater.pubkey)) {
-	console.error(`${installer}.sig ne correspond pas à la clé publique de tauri.conf.json : mauvaise clé privée, ou installeur modifié après sa signature.`);
+	console.error(`${installer}.sig doesn't match the public key of tauri.conf.json: wrong private key, or installer modified after signing.`);
 	process.exit(1);
 }
 
 const notes = await changelogNotes(version);
 if (!notes) {
-	console.error(`Section ## [${version}] vide ou absente de CHANGELOG.md : les notes de version en viennent.`);
+	console.error(`Section ## [${version}] empty or missing from CHANGELOG.md: the release notes come from it.`);
 	process.exit(1);
 }
 if (values.notes) await writeFile(values.notes, `${notes}\n`);
@@ -70,14 +70,13 @@ const manifest = {
 	},
 };
 await writeFile(values.out, `${JSON.stringify(manifest, null, 2)}\n`);
-console.log(`${values.out} : ${installer}, version ${version}`);
+console.log(`${values.out}: ${installer}, version ${version}`);
 
 /**
- * Vérifie une signature minisign, au format de Tauri : `.sig` et clé
- * publique sont le texte minisign encodé en base64. Ligne 2 de la clé :
- * `Ed`, identifiant (8 octets), clé Ed25519 (32). Ligne 2 de la signature :
- * algorithme (`ED` : sur l'empreinte BLAKE2b-512 du fichier), identifiant,
- * signature (64).
+ * Checks a minisign signature, in Tauri's format: `.sig` and public key
+ * are the minisign text encoded in base64. Line 2 of the key: `Ed`, id (8
+ * bytes), Ed25519 key (32). Line 2 of the signature: algorithm (`ED`: over
+ * the BLAKE2b-512 hash of the file), id, signature (64).
  */
 function signedBy(file, sig, pubkey) {
 	const line = (b64) => Buffer.from(Buffer.from(b64, "base64").toString("utf8").split("\n")[1], "base64");
@@ -85,14 +84,14 @@ function signedBy(file, sig, pubkey) {
 	const signature = line(sig.trim());
 	if (!key.subarray(2, 10).equals(signature.subarray(2, 10))) return false;
 	const data = signature.subarray(0, 2).toString() === "ED" ? createHash("blake2b512").update(file).digest() : file;
-	// Clé brute Ed25519 dans son enveloppe SPKI (DER), seule forme qu'accepte Node.
+	// Raw Ed25519 key in its SPKI (DER) envelope, the only form Node accepts.
 	const spki = Buffer.concat([Buffer.from("302a300506032b6570032100", "hex"), key.subarray(10, 42)]);
 	return verify(null, data, createPublicKey({ key: spki, format: "der", type: "spki" }), signature.subarray(10, 74));
 }
 
-/** Corps de la section `## [<version>]` du changelog, sans son titre. */
+/** Body of the changelog's `## [<version>]` section, without its title. */
 async function changelogNotes(version) {
-	// Fins de ligne Unix : un checkout Windows (autocrlf) donne des CRLF.
+	// Unix line endings: a Windows checkout (autocrlf) gives CRLF.
 	const text = (await readFile(join(repo, "CHANGELOG.md"), "utf8")).replace(/\r\n/g, "\n");
 	const sections = text.split(/^## /m);
 	const section = sections.find((s) => s.startsWith(`[${version}]`));

@@ -41,7 +41,7 @@ import {
 	useUpdates,
 } from "@/lib/installs";
 
-/** Onglet Mes mods (SPEC §3.5) : activer, désactiver, retirer avec « Undo ». */
+/** My mods tab: enable, disable, remove with "Undo". */
 export function MyMods({ appId, onDiscover }: { appId: number; onDiscover: () => void }) {
 	const mods = useInstalled(appId);
 	const updates = useUpdates(appId) ?? [];
@@ -87,7 +87,7 @@ export function MyMods({ appId, onDiscover }: { appId: number; onDiscover: () =>
 					{active} active mod{active === 1 ? "" : "s"} · changes apply the next time you launch the game
 				</p>
 				{updates.length > 0 && (
-					// Contour : « Play » reste la seule action principale de l'écran.
+					// Outline: "Play" stays the only primary action of the screen.
 					<Button
 						size="sm"
 						variant="outline"
@@ -98,7 +98,7 @@ export function MyMods({ appId, onDiscover }: { appId: number; onDiscover: () =>
 					</Button>
 				)}
 			</div>
-			{/* Sans overflow-hidden : le menu de version d'une ligne déborde sur les suivantes. */}
+			{/* No overflow-hidden: a row's version menu overflows onto the next ones. */}
 			<ul className="rounded-xl border border-line bg-surface">
 				{mods.map((m, i) => (
 					<li key={m.id} className={cn(i > 0 && "border-t border-line")}>
@@ -111,8 +111,8 @@ export function MyMods({ appId, onDiscover }: { appId: number; onDiscover: () =>
 }
 
 /**
- * Téléchargements et installations du jeu en cours, chacun annulable, puis
- * ceux mis en pause (appli quittée) : à reprendre là où ils en étaient.
+ * The game's downloads and installs in progress, each cancelable, then the
+ * paused ones (app closed): to resume where they were.
  */
 function InProgress({ appId }: { appId: number }) {
 	const active = useActiveInstalls(appId);
@@ -120,7 +120,7 @@ function InProgress({ appId }: { appId: number }) {
 	const refresh = useCallback(() => {
 		pausedDownloads(appId).then(setPaused, () => setPaused([]));
 	}, [appId]);
-	// Une installation qui démarre ou se termine change la liste des pauses.
+	// An install that starts or ends changes the list of paused ones.
 	useEffect(refresh, [refresh, active.length]);
 
 	const waiting = paused.filter((p) => !active.some(([id]) => id === p.modId));
@@ -194,7 +194,7 @@ function PausedRow({ appId, download: p, onDiscarded }: { appId: number; downloa
 function ProgressRow({ appId, modId, active: a }: { appId: number; modId: string; active: ActiveInstall }) {
 	const router = useRouter();
 	const progress = a.status === "running" ? a.progress : null;
-	// « resolving » n'a pas encore de nom de paquet.
+	// "resolving" doesn't have a package name yet.
 	const name = a.name ?? (progress && "name" in progress ? progress.name : modId);
 	const value = progress ? overallProgress(progress) : 0;
 
@@ -251,14 +251,14 @@ function ModRow({ mod: m, appId }: { mod: InstalledMod; appId: number }) {
 	const router = useRouter();
 	const [busy, setBusy] = useState(false);
 	const loader = m.loaderRoot !== null;
-	// Changement demandé pendant une partie : on montre l'état prévu.
+	// Change requested during a session: show the planned state.
 	const pending = usePendingOp(appId, m.id);
 	const removing = pending?.type === "uninstall";
 	const enabled = pending?.type === "setEnabled" ? pending.enabled : m.enabled;
 	const update = useModUpdate(appId, m.id);
 	const active = useActiveInstall(appId, m.id);
 	const updating = active?.status === "queued" || active?.status === "running";
-	// Versions d'avant gardées : la version devient un menu pour y revenir.
+	// Previous versions kept: the version becomes a menu to go back.
 	const picker = m.previousVersions.length > 0 && !pending && !updating;
 	const [menuOpen, setMenuOpen] = useState(false);
 
@@ -282,7 +282,7 @@ function ModRow({ mod: m, appId }: { mod: InstalledMod; appId: number }) {
 			className={cn(
 				"flex animate-row-in items-center gap-3 px-4 py-3",
 				removing && "opacity-60",
-				// Menu de version ouvert : peint au-dessus des lignes suivantes.
+				// Version menu open: painted above the next rows.
 				menuOpen && "relative z-20",
 			)}
 		>
@@ -345,8 +345,8 @@ function ModRow({ mod: m, appId }: { mod: InstalledMod; appId: number }) {
 }
 
 /**
- * Version installée, et celles d'avant pour y revenir en un clic : elles sont
- * gardées dans le stockage, rien n'est retéléchargé.
+ * Installed version, and the previous ones to go back in one click: they
+ * are kept in the storage, nothing is downloaded again.
  */
 function VersionPicker({
 	mod: m,
@@ -367,7 +367,7 @@ function VersionPicker({
 			.then((reverted) => {
 				toast({
 					title: `${m.name} is back to ${versionLabel(reverted.version)}`,
-					// La version quittée est devenue une version précédente.
+					// The version left became a previous version.
 					action: { label: "Undo", onClick: () => void revert(appId, m.id, m.package).catch(onError) },
 				});
 			}, onError)
@@ -396,8 +396,8 @@ function VersionPicker({
 }
 
 /**
- * Version lisible : `v1.4`, mais une date telle quelle (ancien fichier
- * Nexus sans numéro, installé pour une version plus ancienne du jeu).
+ * Readable version: `v1.4`, but a date as is (old Nexus file without a
+ * number, installed for an older version of the game).
  */
 function versionLabel(version: string): string {
 	if (!version) return "";

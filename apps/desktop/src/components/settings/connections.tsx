@@ -11,7 +11,7 @@ import { openExternal } from "@/lib/open";
 
 const API_KEYS_PAGE = "https://next.nexusmods.com/settings/api-keys";
 
-/** Comptes des sources de mods, sur le modèle des Connections d'Unalia. */
+/** Accounts of the mod sources, modeled on Unalia's Connections. */
 export function Connections() {
 	return (
 		<>
@@ -64,7 +64,7 @@ function NexusCard() {
 	};
 
 	const connect = async () => {
-		// Sans l'approbation de Nexus, la clé personnelle est la seule voie.
+		// Without Nexus's approval, the personal key is the only way.
 		if (!status?.sso) {
 			setKeyForm(true);
 			return;
@@ -156,8 +156,8 @@ function NexusCard() {
 }
 
 /**
- * Clé API personnelle : la voie que Nexus autorise aux applications qu'il
- * n'a pas encore approuvées. Elle reste sur cette machine.
+ * Personal API key: the way Nexus allows for applications it hasn't
+ * approved yet. It stays on this machine.
  */
 function ApiKeyForm({ onCancel }: { onCancel: () => void }) {
 	const [key, setKey] = useState("");
@@ -202,7 +202,7 @@ function ApiKeyForm({ onCancel }: { onCancel: () => void }) {
 						placeholder="Personal API key"
 						autoComplete="off"
 						spellCheck={false}
-						// Le formulaire s'ouvre sur demande, pour y coller la clé.
+						// The form opens on demand, to paste the key.
 						autoFocus
 						className="h-full min-w-0 flex-1 bg-transparent text-sm text-fg outline-none placeholder:text-fg-faint"
 					/>
@@ -227,7 +227,7 @@ function ConnectionCard({ linked, accent, children }: { linked: boolean; accent:
 				linked ? "border-line bg-white/[0.03]" : "border-dashed border-line hover:border-line-strong hover:bg-white/[0.02]",
 			)}
 		>
-			{/* Liseré coloré en haut, comme dans Unalia. */}
+			{/* Colored edge line at the top, like in Unalia. */}
 			{linked && (
 				<div
 					className="absolute inset-x-0 top-0 h-px"

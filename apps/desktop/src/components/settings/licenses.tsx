@@ -6,7 +6,7 @@ import { FileText } from "lucide-react";
 import { toast } from "@/components/toaster";
 import { openLicense, splitError } from "@/lib/engine";
 
-/** Licence de l'appli et celles des projets sur lesquels elle repose. */
+/** The app's license and those of the projects it relies on. */
 export function Licenses() {
 	const open = (license: "app" | "thirdParty") =>
 		openLicense(license).catch((error: unknown) => {

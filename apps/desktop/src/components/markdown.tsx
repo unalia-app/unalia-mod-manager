@@ -10,10 +10,10 @@ import remarkGfm from "remark-gfm";
 import { openExternal } from "@/lib/open";
 
 /**
- * Le HTML des descriptions n'est jamais rendu tel quel (SPEC §7) : il est
- * analysé (rehype-raw) puis passé dans une liste blanche (rehype-sanitize,
- * schéma de GitHub) qui retire scripts, styles, iframes et gestionnaires
- * d'événements. Liens et images : HTTPS seulement.
+ * The HTML of descriptions is never rendered as is: it is parsed
+ * (rehype-raw) then passed through an allowlist (rehype-sanitize, GitHub's
+ * schema) that removes scripts, styles, iframes and event handlers. Links
+ * and images: HTTPS only.
  */
 const schema = {
 	...defaultSchema,
@@ -27,8 +27,8 @@ function img({ src, alt }: ComponentProps<"img">) {
 }
 
 /**
- * `internalLink` : page de l'appli pour un lien de la description (un autre
- * mod du même jeu), sinon `null` et le lien s'ouvre dans le navigateur.
+ * `internalLink`: app page for a link in the description (another mod of
+ * the same game), else `null` and the link opens in the browser.
  */
 export function Markdown({
 	children,
@@ -42,7 +42,7 @@ export function Markdown({
 		() => ({
 			a: ({ href, children: label }) => {
 				if (!href?.startsWith("https://")) {
-					// Ancres et liens relatifs : ils mèneraient dans l'appli elle-même.
+					// Anchors and relative links: they would lead into the app itself.
 					return <span>{label}</span>;
 				}
 				const inside = internalLink?.(href) ?? null;
@@ -51,7 +51,7 @@ export function Markdown({
 						href={href}
 						title={inside ? "Open in Unalia" : undefined}
 						onClick={(event) => {
-							// Jamais de navigation vers un site dans la fenêtre de l'appli.
+							// Never navigate to a website inside the app window.
 							event.preventDefault();
 							if (inside) router.push(inside);
 							else void openExternal(href);

@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 
 import { useNexusAccount } from "@/lib/nexus";
 
-/** Sans compte Nexus, on parcourt les mods mais on ne peut pas les télécharger. */
+/** Without a Nexus account, you can browse mods but not download them. */
 export function NexusConnect() {
 	const account = useNexusAccount();
 	const router = useRouter();

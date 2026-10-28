@@ -1,7 +1,7 @@
-// Jamais de console sous Windows, même en dev : un lien `nxm://` relance
-// l'appli (qui passe le lien à l'exemplaire déjà ouvert puis s'arrête), et
-// une console ferait un flash à l'écran. Les logs de dev arrivent quand même
-// dans le terminal de `tauri dev`, qui lit la sortie du processus.
+// Never a console on Windows, even in dev: an `nxm://` link starts the app
+// again (which hands the link to the instance already open, then exits),
+// and a console would flash on screen. Dev logs still reach the terminal of
+// `tauri dev`, which reads the process output.
 #![windows_subsystem = "windows"]
 
 fn main() {

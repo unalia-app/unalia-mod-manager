@@ -10,8 +10,8 @@ function detect(): Platform {
 }
 
 /**
- * Plateforme de la fenêtre. Pendant l'export statique (pas de navigateur),
- * on suppose macOS ; la vraie valeur arrive au premier rendu côté client.
+ * Platform of the window. During the static export (no browser), we assume
+ * macOS; the real value arrives at the first client render.
  */
 export function usePlatform(): Platform {
 	return useSyncExternalStore(

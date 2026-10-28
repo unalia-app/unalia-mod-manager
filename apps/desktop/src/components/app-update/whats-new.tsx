@@ -11,12 +11,12 @@ import { Glow } from "@/components/app-update-check";
 import { SAMPLE_NOTES } from "@/lib/app-update";
 import { takeWhatsNew } from "@/lib/whats-new";
 
-/** Laisse la fenêtre se poser avant de s'ouvrir. */
+/** Lets the window settle before opening. */
 const OPEN_AFTER_MS = 800;
 
 /**
- * « What's new », comme dans Unalia : à la première ouverture après une
- * mise à jour faite depuis l'appli, les notes de la version, une fois.
+ * "What's new", like in Unalia: at the first launch after an update done
+ * from the app, the version's notes, once.
  */
 export function WhatsNew() {
 	const [shown, setShown] = useState<{ version: string; notes: string } | null>(null);
@@ -24,7 +24,7 @@ export function WhatsNew() {
 
 	useEffect(() => {
 		if (process.env.NODE_ENV === "development") {
-			// Aperçu en dev : Ctrl+Maj+N (`DevShortcuts`).
+			// Dev preview: Ctrl+Shift+N (`DevShortcuts`).
 			const preview = () => {
 				setShown({ version: "0.1.2", notes: SAMPLE_NOTES });
 				setOpen(true);

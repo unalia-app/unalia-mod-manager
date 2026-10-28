@@ -1,5 +1,5 @@
-//! Journal de l'appli et rapport de diagnostic : de quoi comprendre un bug
-//! signalé, sans que l'utilisateur ait à chercher un fichier.
+//! App log and diagnostic report: enough to understand a reported bug,
+//! without the user having to look for a file.
 
 use std::fs;
 use std::path::PathBuf;
@@ -9,14 +9,14 @@ use tauri::{AppHandle, Manager};
 use tauri_plugin_log::{RotationStrategy, Target, TargetKind};
 use tauri_plugin_opener::OpenerExt;
 
-/// Nom du fichier de journal, dans le dossier des logs de l'appli.
+/// Name of the log file, in the app's log folder.
 const LOG_NAME: &str = "unalia";
 
-/// Lignes du journal jointes au rapport : les dernières, les plus utiles.
+/// Log lines attached to the report: the last ones, the most useful.
 const TAIL_LINES: usize = 150;
 
-/// Journal dans un fichier (500 Ko, l'ancien gardé une fois), et dans le
-/// terminal en dev.
+/// Log to a file (500 KB, the previous one kept once), and to the terminal
+/// in dev.
 pub fn log_plugin() -> tauri::plugin::TauriPlugin<tauri::Wry> {
     tauri_plugin_log::Builder::new()
         .clear_targets()
@@ -32,7 +32,7 @@ pub fn log_plugin() -> tauri::plugin::TauriPlugin<tauri::Wry> {
         .build()
 }
 
-/// Un plantage finit dans le journal, avec l'endroit du code.
+/// A crash ends up in the log, with the code location.
 pub fn log_panics() {
     let previous = std::panic::take_hook();
     std::panic::set_hook(Box::new(move |info| {
@@ -41,7 +41,7 @@ pub fn log_panics() {
     }));
 }
 
-/// Erreur renvoyée à l'interface, notée au passage dans le journal.
+/// Error sent back to the UI, logged on the way.
 pub fn logged(error: impl std::fmt::Display) -> String {
     let message = error.to_string();
     log::warn!("{message}");
@@ -51,10 +51,10 @@ pub fn logged(error: impl std::fmt::Display) -> String {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Diagnostics {
-    /// Système et version (ex. « Windows 11 Home 10.0.26200 »).
+    /// System and version (e.g. "Windows 11 Home 10.0.26200").
     os: String,
     arch: &'static str,
-    /// Fin du journal, chemins personnels et clés masqués.
+    /// End of the log, personal paths and keys masked.
     log: String,
 }
 
@@ -62,7 +62,7 @@ pub struct Diagnostics {
 pub fn diagnostics(app: AppHandle) -> Diagnostics {
     let info = os_info::get();
     let os = match info.edition() {
-        // « Core » est le nom interne de l'édition Famille (Home).
+        // "Core" is the internal name of the Home edition.
         Some(edition) => format!("{} {}", edition.replace(" Core", " Home"), info.version()),
         None => format!("{} {}", info.os_type(), info.version()),
     };
@@ -81,7 +81,7 @@ pub fn diagnostics(app: AppHandle) -> Diagnostics {
     }
 }
 
-/// Ouvre le dossier des logs dans l'explorateur de fichiers.
+/// Opens the log folder in the file explorer.
 #[tauri::command]
 pub fn open_logs_folder(app: AppHandle) -> Result<(), String> {
     let dir = app.path().app_log_dir().map_err(logged)?;
@@ -91,18 +91,18 @@ pub fn open_logs_folder(app: AppHandle) -> Result<(), String> {
         .map_err(logged)
 }
 
-/// Textes de licence livrés avec l'appli (`bundle.resources` de
-/// `tauri.conf.json`). En `.txt` : le Bloc-notes les ouvre sur tous les PC.
+/// License texts shipped with the app (`bundle.resources` of
+/// `tauri.conf.json`). As `.txt`: Notepad opens them on every PC.
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum License {
     /// GPL v3, celle de l'appli.
     App,
-    /// Celles des dépendances, et d'UnRAR.
+    /// The dependencies' licenses, and UnRAR's.
     ThirdParty,
 }
 
-/// Ouvre un texte de licence dans l'éditeur de texte du système.
+/// Opens a license text in the system's text editor.
 #[tauri::command]
 pub fn open_license(app: AppHandle, license: License) -> Result<(), String> {
     let name = match license {
@@ -115,7 +115,7 @@ pub fn open_license(app: AppHandle, license: License) -> Result<(), String> {
         .map_err(logged)
 }
 
-/// Désinstalleur posé par l'installeur NSIS à côté de l'exe. Absent en dev.
+/// Uninstaller placed by the NSIS installer next to the exe. Missing in dev.
 fn uninstaller() -> Option<PathBuf> {
     let file = std::env::current_exe()
         .ok()?
@@ -124,15 +124,15 @@ fn uninstaller() -> Option<PathBuf> {
     file.is_file().then_some(file)
 }
 
-/// L'appli installée peut se désinstaller depuis Settings.
+/// The installed app can uninstall itself from Settings.
 #[tauri::command]
 pub fn can_uninstall() -> bool {
     cfg!(windows) && uninstaller().is_some()
 }
 
-/// Ouvre le désinstalleur de Windows puis ferme l'appli : il refuse de
-/// continuer tant qu'elle tourne. Sa case « supprimer les données » retire
-/// aussi les mods des jeux (`--remove-all-mods`, `windows/hooks.nsh`).
+/// Opens the Windows uninstaller then closes the app: it refuses to go on
+/// while the app runs. Its "delete the data" box also removes the mods
+/// from the games (`--remove-all-mods`, `windows/hooks.nsh`).
 #[tauri::command]
 pub fn uninstall_app(app: AppHandle) -> Result<(), String> {
     let file = uninstaller().ok_or_else(|| {
@@ -148,8 +148,8 @@ fn log_file(app: &AppHandle) -> Option<PathBuf> {
     Some(app.path().app_log_dir().ok()?.join(format!("{LOG_NAME}.log")))
 }
 
-/// Retire ce qui identifie l'utilisateur : son dossier personnel (nom de
-/// compte Windows) et les clés des liens `nxm://`.
+/// Removes what identifies the user: their home folder (Windows account
+/// name) and the keys of `nxm://` links.
 fn anonymize(text: &str) -> String {
     let mut text = text.to_owned();
     for var in ["USERPROFILE", "HOME"] {
@@ -162,8 +162,8 @@ fn anonymize(text: &str) -> String {
     redact_params(&text, &["key=", "expires=", "apikey="])
 }
 
-/// Remplace la valeur de chaque paramètre listé (jusqu'au prochain `&`,
-/// espace ou guillemet) par `…`.
+/// Replaces the value of each listed parameter (up to the next `&`, space
+/// or quote) with `…`.
 fn redact_params(text: &str, params: &[&str]) -> String {
     let mut out = String::with_capacity(text.len());
     let mut rest = text;

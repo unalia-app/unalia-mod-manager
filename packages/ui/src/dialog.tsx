@@ -1,6 +1,6 @@
 "use client";
-// AlertDialog d'Unalia (components/ui/shadcn/alert-dialog.tsx), aux tokens
-// de @modalia/ui et sans Radix : titre, description, actions en bas à droite.
+// Unalia's AlertDialog (components/ui/shadcn/alert-dialog.tsx), with the
+// @modalia/ui tokens and without Radix: title, description, actions bottom right.
 
 import { type ComponentProps, type ReactNode, createContext, useContext, useEffect, useId, useRef } from "react";
 import { createPortal } from "react-dom";
@@ -10,9 +10,9 @@ import { cn } from "./cn";
 const TitleId = createContext<string | undefined>(undefined);
 
 /**
- * Fenêtre modale. Échap ou un clic à côté la ferment (`onClose`), la page
- * derrière ne défile plus, et le focus revient où il était à la fermeture.
- * Dans un portail : `fixed` ne doit dépendre d'aucun parent transformé.
+ * Modal dialog. Escape or a click outside closes it (`onClose`), the page
+ * behind stops scrolling, and focus returns where it was on close. In a
+ * portal: `fixed` must not depend on any transformed parent.
  */
 export function Dialog({
 	open,
@@ -21,7 +21,7 @@ export function Dialog({
 	className,
 }: {
 	open: boolean;
-	/** Absent : rien ne ferme la fenêtre (action en cours). */
+	/** Missing: nothing closes the dialog (action in progress). */
 	onClose?: () => void;
 	children: ReactNode;
 	className?: string;
@@ -32,7 +32,7 @@ export function Dialog({
 	useEffect(() => {
 		if (!open) return;
 		const before = document.activeElement as HTMLElement | null;
-		// Le focus entre dans la fenêtre, sauf si un champ l'a déjà pris.
+		// Focus enters the dialog, unless a field already took it.
 		if (!panel.current?.contains(document.activeElement)) panel.current?.focus();
 		const overflow = document.documentElement.style.overflow;
 		document.documentElement.style.overflow = "hidden";

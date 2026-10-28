@@ -4,7 +4,7 @@ import type { ComponentProps, ReactNode } from "react";
 import { cn } from "./cn";
 import { Spinner } from "./spinner";
 
-// Repris du MainButton d'Unalia : fond blanc, texte qui glisse au survol.
+// Taken from Unalia's MainButton: white background, text that slides on hover.
 const buttonVariants = cva(
 	"group inline-flex select-none items-center justify-center rounded-md font-medium transition-[color,background-color,scale] duration-200 cursor-pointer active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/60 disabled:cursor-not-allowed disabled:opacity-60",
 	{
@@ -14,7 +14,7 @@ const buttonVariants = cva(
 				secondary: "text-fg hover:bg-surface-strong",
 				outline:
 					"border border-line-strong bg-surface text-fg hover:bg-surface-hover",
-				// Action qui retire quelque chose : couleur d'état, jamais en aplat.
+				// Action that removes something: state color, never solid.
 				danger: "border border-danger/30 bg-danger/10 text-danger hover:bg-danger/20",
 			},
 			size: {
@@ -77,8 +77,8 @@ export function Button({
 	);
 }
 
-// La copie cachée part à 200 % : à 164 % comme dans Unalia, l'inclinaison
-// faisait dépasser le haut des capitales sous le libellé.
+// The hidden copy starts at 200%: at 164% like in Unalia, the slant made
+// the top of the capitals peek out under the label.
 function SlidingLabel({ label }: { label: string }) {
 	return (
 		<span className="relative inline-flex overflow-hidden">

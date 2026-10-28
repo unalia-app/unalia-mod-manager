@@ -23,14 +23,14 @@ function acknowledge(appId: number) {
 		const ids = Array.isArray(list) ? list : [];
 		localStorage.setItem(ACKNOWLEDGED, JSON.stringify([...ids, appId]));
 	} catch {
-		// Sans stockage, la fenêtre reviendra à la prochaine visite.
+		// Without storage, the dialog comes back at the next visit.
 	}
 }
 
 /**
- * Jeu protégé par un anti-triche : les mods restent permis (c'est le jeu du
- * joueur), mais en ligne ils peuvent valoir un bannissement. Un bandeau sur
- * la page du jeu, toujours là, et une fenêtre à la première visite.
+ * Game protected by an anti-cheat: mods stay allowed (it is the player's
+ * game), but online they can get the account banned. A banner on the game
+ * page, always there, and a dialog on the first visit.
  */
 export function AntiCheatBanner({ game }: { game: SteamGame }) {
 	const [open, setOpen] = useState(false);

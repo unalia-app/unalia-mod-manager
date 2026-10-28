@@ -2,5 +2,5 @@
 
 export const REPO_URL = "https://github.com/unalia-app/unalia-mod-manager";
 
-// Invitation sans expiration.
+// Invite that never expires.
 export const DISCORD_URL = "https://discord.gg/AMtDVqygh5";

@@ -6,12 +6,12 @@ import { useEffect, useState } from "react";
 import { artworkUrl } from "@/lib/engine";
 
 /**
- * Ambiance du jeu actif (SPEC §3.2) : sa bannière floutée en tête d'écran et
- * un halo teinté par l'accent. Les changements de jeu se font en fondu.
+ * Ambience of the active game: its blurred banner at the top of the screen
+ * and a glow tinted by the accent. Game changes cross-fade.
  */
 export function Ambience({ appId }: { appId: number | null }) {
-	// On garde les dernières bannières montées pour que l'ancienne s'efface
-	// pendant que la nouvelle apparaît.
+	// Keep the last mounted banners so that the old one fades out while the
+	// new one appears.
 	const [stack, setStack] = useState<number[]>([]);
 
 	useEffect(() => {

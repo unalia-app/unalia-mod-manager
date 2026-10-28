@@ -15,13 +15,13 @@ import { loadGames, recentGameIds, withRecentsFirst } from "@/lib/games-store";
 const REFRESH_EVERY_MS = 5_000;
 
 /**
- * Accueil en tableau de bord : le dernier jeu moddé en grand, puis la
- * bibliothèque. Au tout premier lancement (aucun jeu récent), la question
- * d'Unalia remplace la carte.
+ * Dashboard home: the last modded game large, then the library. At the
+ * very first launch (no recent game), Unalia's question replaces the
+ * card.
  */
 export function HomeScreen() {
 	const [state, setState] = useState<LibraryState>({ status: "loading" });
-	// Jeu survolé dans la grille : l'ambiance le suit.
+	// Game hovered in the grid: the ambience follows it.
 	const [focused, setFocused] = useState<SteamGame | null>(null);
 	const accent = useAccent(focused?.appId ?? null);
 
@@ -42,9 +42,9 @@ export function HomeScreen() {
 
 	useEffect(() => scan(), [scan]);
 
-	// Nouveau scan sans vider la grille : un jeu installé par Steam pendant
-	// que l'appli tourne apparaît sans la relancer. Un échec garde la liste
-	// affichée.
+	// New scan without emptying the grid: a game installed by Steam while the
+	// app runs shows up without restarting it. A failure keeps the list on
+	// screen.
 	const [refreshing, setRefreshing] = useState(false);
 	const lastRefresh = useRef(0);
 	const refresh = useCallback(() => {
@@ -58,8 +58,8 @@ export function HomeScreen() {
 			.finally(() => setRefreshing(false));
 	}, []);
 
-	// Retour dans la fenêtre (depuis Steam, souvent) : on relit la
-	// bibliothèque, au plus une fois toutes les 5 secondes.
+	// Back to the window (from Steam, often): read the library again, at
+	// most once every 5 seconds.
 	useEffect(() => {
 		const onFocus = () => {
 			const due = Date.now() - lastRefresh.current > REFRESH_EVERY_MS;
@@ -72,8 +72,8 @@ export function HomeScreen() {
 	const { featured, games, others } = useMemo(() => {
 		const all = state.status === "ready" ? state.scan.games : [];
 		const moddable = withRecentsFirst(all.filter(isModdable));
-		// Le plus récent encore installé : un jeu désinstallé ou sur un disque
-		// débranché ne fait pas disparaître la carte.
+		// The most recent one still installed: a game uninstalled or on an
+		// unplugged drive doesn't make the card disappear.
 		const featured =
 			recentGameIds()
 				.map((id) => moddable.find((g) => g.appId === id))

@@ -9,9 +9,9 @@ import { gameHref } from "@/lib/games-store";
 import { clearError, dismissFailure, install, useInstallFailure } from "@/lib/installs";
 
 /**
- * Une installation vient d'échouer : la raison et quoi faire, dans une
- * fenêtre plutôt qu'en petit sur la carte du mod. Quand le moteur conseille
- * « Reset mods » (fichiers laissés par un autre outil), le bouton est là.
+ * An install just failed: the reason and what to do, in a dialog rather
+ * than small on the mod card. When the engine advises "Reset mods" (files
+ * left by another tool), the button is there.
  */
 export function InstallErrorDialog() {
 	const failure = useInstallFailure();
@@ -30,8 +30,8 @@ export function InstallErrorDialog() {
 	const reset = () => {
 		dismissFailure();
 		clearError(appId, modId);
-		// La fenêtre « Reset mods » est sur la page du jeu.
-		// (`location` plutôt que `useSearchParams`, qui demande un Suspense dans le layout.)
+		// The "Reset mods" dialog is on the game page.
+		// (`location` rather than `useSearchParams`, which needs a Suspense in the layout.)
 		const here = window.location.pathname.startsWith("/game") && new URLSearchParams(window.location.search).get("id") === String(appId);
 		if (!here) router.push(gameHref(appId));
 		requestReset(appId);

@@ -14,17 +14,17 @@ import { modHref } from "@/lib/games-store";
 import { cancel, install, overallProgress, useActiveInstall, useInstalled, useModUpdate } from "@/lib/installs";
 import { openExternal } from "@/lib/open";
 
-/** Nom affiché de la source d'un mod (`ModSummary.source`). */
+/** Display name of a mod's source (`ModSummary.source`). */
 const SOURCE_LABEL: Record<string, string> = {
 	nexus: "Nexus Mods",
 	thunderstore: "Thunderstore",
 };
 
 /**
- * Carte de la grille Découvrir, dans l'esprit des cartes de jeu d'Unalia.
+ * Card of the Discover grid, in the spirit of Unalia's game cards.
  *
- * Toute la carte mène à la page du mod (lien étiré par-dessus), sauf le
- * bouton « Install » posé au-dessus du lien.
+ * The whole card leads to the mod page (stretched link on top), except the
+ * "Install" button placed above the link.
  */
 export function ModCard({
 	mod,
@@ -36,23 +36,23 @@ export function ModCard({
 	index: number;
 	appId: number;
 	/**
-	 * Entrée animée en cascade : pour la première page seulement. Rejouée
-	 * à chaque page chargée au défilement, elle retardait l'arrivée des
-	 * cartes et faisait sauter la position de défilement.
+	 * Staggered entrance animation: for the first page only. Replayed on
+	 * each page loaded on scroll, it delayed the cards and made the scroll
+	 * position jump.
 	 */
 	animated?: boolean;
 }) {
 	const [image, setImage] = useState<"loading" | "loaded" | "missing">(mod.iconUrl ? "loading" : "missing");
-	// Icône carrée (Thunderstore) dans un cadre 16:9 : entière, sur un fond
-	// flou d'elle-même. Les vignettes de Nexus, déjà en 16:9, le remplissent.
+	// Square icon (Thunderstore) in a 16:9 frame: whole, over a blurred copy
+	// of itself. Nexus thumbnails, already 16:9, fill it.
 	const [square, setSquare] = useState(false);
 	const category = mod.categories[0];
 
 	return (
 		<article
 			style={animated ? { animationDelay: `${(index % 24) * 20}ms` } : undefined}
-			// Pas de `glass` ici : un backdrop-filter recalculé à chaque image du
-			// survol, sur toute une grille, saccade (surtout dans WebKit).
+			// No `glass` here: a backdrop-filter recomputed at each hover frame,
+			// across a whole grid, stutters (especially in WebKit).
 			className={cn(
 				"group relative flex flex-col rounded-xl border border-line bg-surface p-2 transition-[background-color,border-color,translate] duration-300 ease-out hover:-translate-y-1 hover:border-line-strong hover:bg-surface-hover has-[:focus-visible]:border-accent/60",
 				animated ? "animate-row-in" : "animate-fade-in",
@@ -64,9 +64,9 @@ export function ModCard({
 				className="absolute inset-0 z-10 rounded-xl focus-visible:outline-none"
 			/>
 
-			{/* Conteneur sans transform : le bouton rapide passe au-dessus du
-			    lien. L'image a sa propre couche (`transform-gpu`), sans quoi
-			    WebKit perd le découpage des coins arrondis pendant le zoom. */}
+			{/* Container without a transform: the quick button goes above the
+			    link. The image has its own layer (`transform-gpu`), without
+			    which WebKit loses the rounded-corner clipping during the zoom. */}
 			<div className="relative">
 				<div className="relative aspect-video transform-gpu overflow-hidden rounded-lg bg-white/[0.04]">
 					{image === "loading" && <Skeleton className="absolute inset-0 rounded-none" />}
@@ -131,8 +131,8 @@ export function ModCard({
 					</span>
 					<span aria-hidden>·</span>
 					<span className="truncate">{relativeDate(mod.updatedAt)}</span>
-					{/* Le texte est tronqué dans le badge, pas le badge lui-même : même
-					    marge à gauche et à droite. */}
+					{/* The text is truncated inside the badge, not the badge itself:
+					    same margin on the left and right. */}
 					{category && (
 						<Badge className="ml-auto max-w-[45%] min-w-0 shrink" title={category}>
 							<span className="min-w-0 truncate">{category}</span>
@@ -145,10 +145,10 @@ export function ModCard({
 }
 
 /**
- * Petit bouton « Install » au survol de la carte (SPEC §3.4) : un
- * clic installe le mod avec ses dépendances et le loader. Pendant
- * l'installation, il montre juste l'avancement ; une fois installé, il
- * devient « Uninstall » (badge « Installed » en haut de la carte).
+ * Small "Install" button on card hover: one click installs the mod with
+ * its dependencies and the loader. During the install, it only shows the
+ * progress; once installed, it becomes "Uninstall" ("Installed" badge at
+ * the top of the card).
  */
 function QuickInstall({ appId, modId, name }: { appId: number; modId: string; name: string }) {
 	const installed = useInstalled(appId)?.some((m) => m.id === modId);
@@ -183,7 +183,7 @@ function QuickInstall({ appId, modId, name }: { appId: number; modId: string; na
 	}
 
 	const failed = active?.status === "error";
-	// Compte Nexus gratuit : la page de téléchargement attend un clic.
+	// Free Nexus account: the download page waits for a click.
 	const website = active?.status === "website" ? active.url : null;
 	const percent = active?.status === "running" ? Math.round(overallProgress(active.progress) * 100) : null;
 	const Icon = failed ? RotateCw : website ? ExternalLink : update ? ArrowUp : Download;
@@ -199,18 +199,18 @@ function QuickInstall({ appId, modId, name }: { appId: number; modId: string; na
 			}
 			className={cn(
 				"group/quick absolute right-2 bottom-2 z-20 flex h-7 min-w-[4.5rem] cursor-pointer items-center justify-center gap-1.5 rounded-full px-2.5 font-tight text-[11px] font-semibold shadow-lg transition-[opacity,translate,background-color] duration-200 ease-out",
-				// Au survol seulement : sur toute une grille, un bouton par carte
-				// se répète trop. Il reste affiché pendant l'installation et en
-				// cas d'échec, pour ne pas perdre l'info.
+				// On hover only: across a whole grid, one button per card
+				// repeats too much. It stays shown during the install and on
+				// failure, so the info isn't lost.
 				!busy && !failed && !website &&
 					"translate-y-1 opacity-0 group-hover:translate-y-0 group-hover:opacity-100 focus-visible:translate-y-0 focus-visible:opacity-100",
-				// Verre sombre : lisible sur une icône blanche comme sombre.
+				// Dark glass: readable over a white or dark icon.
 				failed ? "bg-danger text-bg" : "liquid-glass hover:brightness-125",
 			)}
 		>
 			{busy ? (
 				<>
-					{/* En cours : l'avancement, et au survol de quoi l'arrêter. */}
+					{/* In progress: the progress, and on hover a way to stop it. */}
 					<span className="flex items-center gap-1.5 group-hover/quick:hidden group-focus-visible/quick:hidden">
 						<Spinner className="size-3 border-[1.5px]" />
 						{percent !== null ? `${percent}%` : "…"}

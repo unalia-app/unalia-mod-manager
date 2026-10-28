@@ -1,8 +1,8 @@
 /*
- * Tokens Modalia, hérités d'Unalia. Règles d'usage : DESIGN.md.
+ * Modalia tokens, inherited from Unalia. Usage rules: DESIGN.md.
  *
- * L'appli importe ce fichier après `@import "tailwindcss"` et déclare
- * `@source` vers ce package pour que Tailwind voie ses classes.
+ * The app imports this file after `@import "tailwindcss"` and declares
+ * `@source` to this package so that Tailwind sees its classes.
  */
 
 @theme {
@@ -16,13 +16,13 @@
 	--color-line: rgb(255 255 255 / 0.08);
 	--color-line-strong: rgb(255 255 255 / 0.2);
 
-	/* Texte : blanc à opacités dégressives, jamais de gris opaque. */
+	/* Text: white at decreasing opacities, never an opaque gray. */
 	--color-fg: #ffffff;
 	--color-fg-muted: rgb(255 255 255 / 0.6);
 	--color-fg-subtle: rgb(255 255 255 / 0.4);
 	--color-fg-faint: rgb(255 255 255 / 0.25);
 
-	/* États : toujours en contour + fond à 10 %, comme les badges d'Unalia. */
+	/* States: always an outline + 10% background, like Unalia's badges. */
 	--color-success: var(--color-emerald-400);
 	--color-info: var(--color-blue-400);
 	--color-warning: var(--color-amber-400);
@@ -37,7 +37,7 @@
 	--radius-xl: 0.875rem;
 	--radius-2xl: 1rem;
 
-	/* Courbes d'Unalia : `out` pour les panneaux, `swap` pour les soulignés. */
+	/* Unalia's curves: `out` for panels, `swap` for underlines. */
 	--ease-out: cubic-bezier(0.32, 0.72, 0, 1);
 	--ease-swap: cubic-bezier(0.65, 0.05, 0.36, 1);
 
@@ -100,15 +100,15 @@
 }
 
 /*
- * Grain de film : bruit SVG en ligne, des points blancs dont l'opacité suit
- * le bruit (alpha = 3 x bruit - 1,2), lisible sans éclaircir le fond. Sert
- * au fond de l'appli et aux surfaces qui veulent la même matière.
+ * Film grain: inline SVG noise, white dots whose opacity follows the noise
+ * (alpha = 3 x noise - 1.2), readable without lightening the background.
+ * Used for the app background and the surfaces that want the same texture.
  */
 :root {
 	--noise-texture: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.7' numOctaves='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 3 0 0 0 -1.2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
 }
 
-/* Surface avec le grain par-dessus son fond, sous son contenu. */
+/* Surface with the grain over its background, under its content. */
 @utility grain {
 	isolation: isolate;
 	&::before {
@@ -123,7 +123,7 @@
 	}
 }
 
-/* Temps restant d'un toast : durée et pause posées par `ToastStack`. */
+/* Time left on a toast: duration and pause set by `ToastStack`. */
 @keyframes toast-timer {
 	from {
 		transform: scaleX(1);
@@ -134,10 +134,10 @@
 }
 
 /*
- * Accent : seule couleur qui change selon le jeu actif (SPEC §4). Un
- * conteneur définit `--accent` ; `inline` fait résoudre la variable sur
- * l'élément qui l'utilise (et pas une fois pour toutes sur :root).
- * L'enregistrer comme <color> permet de l'animer (`accent-transition`).
+ * Accent: the only color that changes with the active game. A container
+ * defines `--accent`; `inline` makes the variable resolve on the element
+ * that uses it (and not once and for all on :root). Registering it as a
+ * <color> allows animating it (`accent-transition`).
  */
 @property --accent {
 	syntax: "<color>";
@@ -177,10 +177,10 @@
 }
 
 /*
- * Verre « liquide » pour les petits contrôles posés sur une image (bouton
- * d'une carte, badge sur une jaquette) : verre sombre teinté, lisible sur
- * une image claire comme sombre. Liseré clair en haut pour l'effet de
- * verre. Réservé aux petites surfaces (backdrop-filter, voir plus haut).
+ * "Liquid" glass for small controls placed over an image (card button,
+ * badge on a cover): tinted dark glass, readable over a light or dark
+ * image. Light edge at the top for the glass effect. Kept for small
+ * surfaces (backdrop-filter, see above).
  */
 @utility liquid-glass {
 	background: linear-gradient(180deg, rgb(28 28 32 / 0.55), rgb(10 10 12 / 0.62));
@@ -202,9 +202,9 @@
 }
 
 /*
- * Barres de défilement natives masquées : même transparente, celle de
- * Chromium (WebView2) réserve sa colonne, et le contenu s'arrête avant. La
- * page a sa propre barre en surimpression (`OverlayScrollbar`).
+ * Native scrollbars hidden: even transparent, Chromium's (WebView2)
+ * reserves its column, and the content stops before it. The page has its
+ * own overlay bar (`OverlayScrollbar`).
  */
 html,
 body {

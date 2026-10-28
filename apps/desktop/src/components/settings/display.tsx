@@ -6,7 +6,7 @@ import { type InterfaceSize, SIZES, autoScale, setInterfaceSize, useInterfaceSiz
 
 const percent = (scale: number) => `${Math.round(scale * 100)}%`;
 
-/** Taille de l'interface : automatique selon l'écran, ou fixée. */
+/** Interface size: automatic from the screen, or fixed. */
 export function Display() {
 	const size = useInterfaceSize();
 	const items = SIZES.map((s) => ({

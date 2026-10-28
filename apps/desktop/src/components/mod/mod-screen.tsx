@@ -22,7 +22,7 @@ import { openExternal } from "@/lib/open";
 
 type Load<T> = { status: "loading" } | { status: "ready"; value: T } | { status: "error"; message: string };
 
-/** Page de détail d'un mod (SPEC §3.3). */
+/** Detail page of a mod. */
 export function ModScreen() {
 	const params = useSearchParams();
 	const appId = Number(params.get("game"));
@@ -124,7 +124,7 @@ function ModDetailsView({
 	const community = game.profile?.community ?? "";
 	const nexus = game.profile?.nexus ?? null;
 	const source = sourceName(game);
-	// Nexus ne publie pas de page d'auteur stable par nom : texte simple.
+	// Nexus doesn't publish a stable author page by name: plain text.
 	const authorUrl = nexus ? null : `https://thunderstore.io/c/${community}/p/${mod.author}/`;
 	const extraDependencies = mod.dependencies.filter((d) => !d.loader).length;
 	const account = useNexusAccount();
@@ -265,7 +265,7 @@ function ModDetailsView({
 
 function DependencyRow({ dependency: d, appId, nexus }: { dependency: DependencyInfo; appId: number; nexus: boolean }) {
 	const router = useRouter();
-	// Thunderstore publie l'icône de chaque version à une adresse prévisible.
+	// Thunderstore publishes each version's icon at a predictable URL.
 	const icon = nexus ? undefined : `https://gcdn.thunderstore.io/live/repository/icons/${d.id}-${d.minVersion}.png`;
 	const detail = nexus
 		? d.automatic
@@ -361,8 +361,8 @@ function ExternalTextLink({ href, className, children }: { href: string; classNa
 }
 
 /**
- * Lien vers un autre mod du même jeu, sur sa source : sa page dans
- * Unalia. Le téléchargement suit les règles de la source (Nexus : son site).
+ * Link to another mod of the same game, on its source: its page in
+ * Unalia. The download follows the source's rules (Nexus: its site).
  */
 function modLink(href: string, game: SteamGame): string | null {
 	const profile = game.profile;
@@ -382,7 +382,7 @@ function modLink(href: string, game: SteamGame): string | null {
 		}
 	}
 	if (!profile.nexus && host === "thunderstore.io") {
-		// /c/<communauté>/p/<namespace>/<nom>/
+		// /c/<community>/p/<namespace>/<name>/
 		const [c, community, p, namespace, name] = parts;
 		if (c === "c" && community === profile.community && p === "p" && namespace && name) {
 			return modHref(game.appId, `${namespace}-${name}`);

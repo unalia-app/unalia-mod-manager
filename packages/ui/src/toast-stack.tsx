@@ -1,7 +1,7 @@
 "use client";
-// beui.dev/components/motion/animated-toast-stack, adapté aux tokens de
-// @modalia/ui : chaque toast tient son minuteur (pause au survol et quand
-// les détails sont ouverts), avec une barre de temps restant.
+// beui.dev/components/motion/animated-toast-stack, adapted to the
+// @modalia/ui tokens: each toast holds its timer (paused on hover and while
+// the details are open), with a time-left bar.
 
 import { AnimatePresence, motion, type Transition, useReducedMotion } from "motion/react";
 import { Check, CircleAlert, Info, type LucideIcon, X } from "lucide-react";
@@ -15,7 +15,7 @@ export type ToastStackItem = {
 	id: number;
 	title: ReactNode;
 	tone: ToastTone;
-	/** Détail technique, replié derrière « Details ». */
+	/** Technical detail, folded behind "Details". */
 	details?: string;
 	action?: { label: string; onClick: () => void };
 	/** En millisecondes. */
@@ -47,13 +47,13 @@ const TIMER_CLASS: Record<ToastTone, string> = {
 	error: "bg-danger",
 };
 
-/** Après une pause, le toast reste au moins ce temps. */
+/** After a pause, the toast stays at least this long. */
 const MIN_REMAINING_MS = 800;
 
 /**
- * Pile de toasts en bas au centre (le coin bas droit est à la bulle de la
- * bêta). Le plus récent en bas ; un glissement vers la droite ou la croix
- * le ferme.
+ * Toast stack at the bottom center (the bottom right corner belongs to the
+ * beta bubble). The most recent at the bottom; a swipe to the right or the
+ * cross closes it.
  */
 export function ToastStack({ toasts, onDismiss }: { toasts: ToastStackItem[]; onDismiss: (id: number) => void }) {
 	return (
@@ -120,7 +120,7 @@ const ToastItem = memo(function ToastItem({
 			className="pointer-events-auto relative will-change-transform"
 			style={{ zIndex: 20 - index }}
 		>
-			{/* Surface opaque : un toast doit se voir sur n'importe quelle ambiance. */}
+			{/* Opaque surface: a toast must show over any ambience. */}
 			<div className="relative overflow-hidden rounded-2xl border border-line-strong bg-[#18181b]/95 p-3 shadow-[0_16px_48px_rgba(0,0,0,0.55)] backdrop-blur-xl">
 				<div className="flex items-start gap-3">
 					<span
@@ -192,7 +192,7 @@ const ToastItem = memo(function ToastItem({
 	);
 });
 
-/** Barre du temps restant, arrêtée en même temps que le minuteur. */
+/** Time-left bar, stopped together with the timer. */
 function TimeLeft({ duration, paused, className }: { duration: number; paused: boolean; className: string }): ReactNode {
 	return (
 		<span

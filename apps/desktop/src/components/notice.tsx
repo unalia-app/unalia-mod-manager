@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 
-/** Message d'état (vide, erreur, indisponible) : ce qui se passe et quoi faire. */
+/** Status message (empty, error, unavailable): what is happening and what to do. */
 export function Notice({
 	icon,
 	title,

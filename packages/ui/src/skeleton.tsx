@@ -2,7 +2,7 @@ import type { ComponentProps } from "react";
 
 import { cn } from "./cn";
 
-// Bloc de chargement avec reflet qui balaie, comme les cartes d'Unalia.
+// Loading block with a sweeping sheen, like Unalia's cards.
 export function Skeleton({ className, ...props }: ComponentProps<"div">) {
 	return (
 		<div

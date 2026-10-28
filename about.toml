@@ -1,7 +1,7 @@
-# Licences acceptées pour les dépendances Rust (`cargo about`, voir
-# `scripts/licenses.mjs`). Une dépendance sous une autre licence fait
-# échouer la génération : vérifier qu'elle est compatible avec la GPL v3
-# avant de l'ajouter ici.
+# Licenses accepted for the Rust dependencies (`cargo about`, see
+# `scripts/licenses.mjs`). A dependency under another license makes the
+# generation fail: check that it is compatible with the GPL v3 before
+# adding it here.
 accepted = [
     "Apache-2.0",
     "Apache-2.0 WITH LLVM-exception",
@@ -19,11 +19,11 @@ accepted = [
     "0BSD",
     "bzip2-1.0.6",
 ]
-# Seule cible livrée pour l'instant.
+# Only target shipped for now.
 targets = ["x86_64-pc-windows-msvc"]
 ignore-build-dependencies = false
 ignore-dev-dependencies = true
 
-# Nos propres crates (GPL v3, voir LICENSE), non publiées.
+# Our own crates (GPL v3, see LICENSE), not published.
 [private]
 ignore = true

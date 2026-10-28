@@ -2,7 +2,7 @@ import { useEffect, useSyncExternalStore } from "react";
 
 import { type NexusAccount, type NexusStatus, nexusConnect, nexusDisconnect, nexusLogin, nexusStatus } from "@/lib/engine";
 
-/** État Nexus de la session : `undefined` tant qu'il n'est pas connu. */
+/** Nexus state of the session: `undefined` while it is unknown. */
 let status: NexusStatus | undefined;
 let loading: Promise<void> | null = null;
 const listeners = new Set<() => void>();
@@ -19,7 +19,7 @@ function subscribe(listener: () => void) {
 
 function load() {
 	if (loading) return;
-	// Clé refusée : on se comporte comme déconnecté.
+	// Key refused: behave as logged out.
 	loading = nexusStatus()
 		.then(set, () => set({ account: null, sso: false, offline: false }))
 		.finally(() => {
@@ -27,7 +27,7 @@ function load() {
 		});
 }
 
-// Nexus injoignable au démarrage : on revérifie le compte au retour du réseau.
+// Nexus unreachable at startup: check the account again when the network is back.
 if (typeof window !== "undefined") {
 	window.addEventListener("online", () => {
 		if (status?.offline) load();
@@ -43,8 +43,8 @@ export function useNexusStatus(): NexusStatus | undefined {
 }
 
 /**
- * Compte connecté : `null` sans compte, `undefined` tant qu'on ne sait pas.
- * Hors ligne, le dernier compte reconnu ; jamais vérifié, `undefined`.
+ * Logged-in account: `null` without an account, `undefined` while we don't
+ * know. Offline, the last recognized account; never checked, `undefined`.
  */
 export function useNexusAccount(): NexusAccount | null | undefined {
 	const value = useNexusStatus();

@@ -11,8 +11,8 @@ const DISMISSED = "modalia.betaFeedbackDismissed";
 const SHOW_AFTER_MS = 10_000;
 
 /**
- * Bulle « beta » d'Unalia : 10 s après l'ouverture, en bas à droite, une
- * invitation à donner son avis. Fermée ou utilisée, elle ne revient plus.
+ * Unalia's "beta" bubble: 10 s after opening, bottom right, an invitation
+ * to give feedback. Closed or used, it never comes back.
  */
 export function BetaBubble() {
 	const [visible, setVisible] = useState(false);
@@ -23,7 +23,7 @@ export function BetaBubble() {
 		try {
 			dismissed = localStorage.getItem(DISMISSED) !== null;
 		} catch {
-			// Stockage bloqué : on la montre, une fois par lancement.
+			// Storage blocked: show it, once per launch.
 		}
 		if (dismissed || feedbackSent()) return;
 		const timer = window.setTimeout(() => setVisible(true), SHOW_AFTER_MS);
@@ -38,7 +38,7 @@ export function BetaBubble() {
 		try {
 			localStorage.setItem(DISMISSED, "1");
 		} catch {
-			// Sans stockage, elle reviendra au prochain lancement.
+			// Without storage, it comes back at the next launch.
 		}
 	};
 
@@ -50,7 +50,7 @@ export function BetaBubble() {
 			)}
 		>
 			<div className="relative overflow-hidden rounded-xl border border-white/10 bg-bg shadow-xl shadow-black/40">
-				{/* Liseré en haut, comme dans Unalia */}
+				{/* Top edge line, like in Unalia */}
 				<div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-accent/60 to-transparent" />
 				<button
 					type="button"

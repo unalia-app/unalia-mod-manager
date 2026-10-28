@@ -12,7 +12,7 @@ import {
 } from "@/lib/engine";
 import { refreshInstalled, settleBackgroundInstalls } from "@/lib/installs";
 
-/** État des jeux (en cours, en démarrage, changements en attente), poussé par le moteur. */
+/** Game state (running, starting, pending changes), pushed by the engine. */
 
 let statuses = new Map<number, GameStatus>();
 const listeners = new Set<() => void>();
@@ -27,8 +27,8 @@ function listenOnce() {
 	if (listening) return;
 	listening = true;
 	void onGameStatus(set);
-	// Réussite : l'écran se met à jour, pas besoin de toast. Seuls les
-	// échecs sont signalés, faute d'autre endroit où les montrer.
+	// Success: the screen updates, no need for a toast. Only failures are
+	// reported, for lack of another place to show them.
 	void onPendingApplied(({ appId, failed }) => {
 		void refreshInstalled(appId).finally(() => settleBackgroundInstalls(appId));
 		for (const f of failed) {
@@ -52,7 +52,7 @@ export function useGameStatus(appId: number): GameStatus | undefined {
 	return status;
 }
 
-/** Changement en attente pour ce mod, s'il y en a un. */
+/** Pending change for this mod, if there is one. */
 export function usePendingOp(appId: number, modId: string): PendingOp | undefined {
 	return useGameStatus(appId)?.pending.find((op) => op.modId === modId);
 }

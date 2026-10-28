@@ -1,8 +1,8 @@
 import { type ClassValue, clsx } from "clsx";
 import { extendTailwindMerge } from "tailwind-merge";
 
-// tailwind-merge doit connaître les tokens maison pour ne pas confondre
-// `text-fg-muted` (couleur) et `text-sm` (taille).
+// tailwind-merge must know the custom tokens so it doesn't confuse
+// `text-fg-muted` (color) with `text-sm` (size).
 const twMerge = extendTailwindMerge({
 	extend: {
 		theme: {

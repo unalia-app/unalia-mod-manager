@@ -21,31 +21,31 @@ import {
 import { openExternal } from "@/lib/open";
 
 /**
- * Store des installations, partagé par tous les écrans : mods installés par
- * jeu, et installations en cours (une file : le moteur les traite une par
- * une, les suivantes attendent).
+ * Install store, shared by every screen: installed mods per game, and
+ * running installs (a queue: the engine handles them one by one, the next
+ * ones wait).
  */
 
-/** `name` : nom du mod demandé, s'il est connu (sinon, celui du paquet en cours). */
+/** `name`: name of the requested mod, if known (else, the current package's). */
 export type ActiveInstall = { name?: string } & (
 	| { status: "queued" }
-	/** `speed` : octets par seconde (moyenne lissée), pendant un téléchargement. */
+	/** `speed`: bytes per second (smoothed average), during a download. */
 	| { status: "running"; progress: InstallProgress; speed?: number }
-	/** Compte Nexus gratuit : téléchargement à confirmer sur la page ouverte. */
+	/** Free Nexus account: download to confirm on the opened page. */
 	| { status: "website"; url: string }
 	| { status: "error"; message: string; details: string | null }
 );
 
-/** Mod Nexus à plusieurs fichiers : le choix demandé à l'utilisateur. */
+/** Nexus mod with several files: the choice asked of the user. */
 export type FileChoice = { appId: number; modId: string; name?: string; files: NexusModFile[] };
 
-/** Installation qui vient d'échouer : montrée dans une fenêtre, pas seulement sur sa carte. */
+/** Install that just failed: shown in a dialog, not only on its card. */
 export type InstallFailure = { appId: number; modId: string; name?: string; message: string; details: string | null };
 
 type Snapshot = {
 	installed: Map<number, InstalledMod[]>;
 	active: Map<string, ActiveInstall>;
-	/** Mises à jour disponibles par jeu (vérifiées une fois par session). */
+	/** Available updates per game (checked once per session). */
 	updates: Map<number, ModUpdate[]>;
 	choice: FileChoice | null;
 	failure: InstallFailure | null;
@@ -76,9 +76,9 @@ function subscribe(listener: () => void) {
 const key = (appId: number, modId: string) => `${appId}:${modId}`;
 
 /**
- * Installations lancées par l'interface et pas encore terminées. Les autres
- * (file d'attente appliquée par le moteur à la fermeture du jeu) envoient
- * aussi leur progression, mais leur fin arrive par `pending-applied` : voir
+ * Installs started by the UI and not finished yet. The others (queue
+ * applied by the engine when the game closes) also send their progress,
+ * but their end comes through `pending-applied`: see
  * `settleBackgroundInstalls`.
  */
 const inFlight = new Set<string>();
@@ -94,12 +94,12 @@ function listenOnce() {
 			s.active.set(k, { status: "running", progress, speed: measureSpeed(k, progress), name });
 		}),
 	);
-	// Lien `nxm://` du site (bouton « Mod Manager Download ») : le moteur
-	// installe seul, l'interface apprend la fin ici.
+	// `nxm://` link from the site ("Mod Manager Download" button): the
+	// engine installs by itself, the UI learns about the end here.
 	void onNexusInstalled(({ appId, modId, name, missing, error, cancelled, website }) => {
 		const k = key(appId, modId);
-		// Un fichier d'un choix multiple est arrivé : la page du suivant est
-		// ouverte, on attend son lien.
+		// A file of a multiple choice arrived: the next one's page is open,
+		// we wait for its link.
 		if (website) {
 			update((s) => {
 				s.active.set(k, { status: "website", url: website, name: s.active.get(k)?.name });
@@ -145,12 +145,12 @@ function listenOnce() {
 	});
 }
 
-/** Échantillons de vitesse par installation (téléchargement en cours). */
+/** Speed samples per install (download in progress). */
 const samples = new Map<string, { index: number; bytes: number; at: number; speed?: number }>();
 
 /**
- * Vitesse lissée (moyenne mobile exponentielle) : assez réactive pour
- * suivre une variation, assez stable pour un temps restant lisible.
+ * Smoothed speed (exponential moving average): reactive enough to follow
+ * a change, stable enough for a readable time left.
  */
 function measureSpeed(k: string, progress: InstallProgress): number | undefined {
 	if (progress.stage !== "downloading") {
@@ -180,7 +180,7 @@ export async function refreshInstalled(appId: number) {
 	});
 }
 
-/** Lance l'installation (sans attendre) : l'état suit dans le store. `files` : fichiers Nexus choisis. */
+/** Starts the install (without waiting): the state follows in the store. `files`: picked Nexus files. */
 export function install(appId: number, modId: string, name?: string, files?: number[]): Promise<void> {
 	const k = key(appId, modId);
 	const current = snapshot.active.get(k);
@@ -194,24 +194,24 @@ export function install(appId: number, modId: string, name?: string, files?: num
 		.then(
 			(outcome) =>
 				update((s) => {
-					// Compte Nexus gratuit : la page de téléchargement s'ouvre, le lien
-					// `nxm://` reviendra avec la progression.
+					// Free Nexus account: the download page opens, the `nxm://`
+					// link will come back with the progress.
 					if (outcome.status === "browser") {
 						s.active.set(k, { status: "website", url: outcome.url, name });
 						void openExternal(outcome.url);
 						return;
 					}
-					// Plusieurs fichiers : la fenêtre de choix prend le relais.
+					// Several files: the picker dialog takes over.
 					if (outcome.status === "choose") {
 						s.active.delete(k);
 						s.choice = { appId, modId, name, files: outcome.files };
 						return;
 					}
-					// Annulée : rien n'a changé, rien à afficher.
-					// Mis en attente : la file du jeu (game-status) prend le relais.
+					// Canceled: nothing changed, nothing to show.
+					// Queued: the game's queue (game-status) takes over.
 					if (outcome.status === "done") {
 						s.installed.set(appId, outcome.value);
-						// Installé à sa dernière version : plus de mise à jour en attente.
+						// Installed at its latest version: no pending update anymore.
 						const updates = s.updates.get(appId);
 						if (updates) s.updates.set(appId, updates.filter((u) => u.modId !== modId));
 					}
@@ -227,9 +227,9 @@ export function install(appId: number, modId: string, name?: string, files?: num
 }
 
 /**
- * La file d'attente du jeu vient d'être appliquée : les installations
- * qu'elle a faites sont terminées (ou ont échoué, signalé à part). On
- * efface leur progression, et on revérifie les mises à jour du jeu.
+ * The game's queue was just applied: the installs it ran are finished (or
+ * failed, reported separately). We clear their progress, and check the
+ * game's updates again.
  */
 export function settleBackgroundInstalls(appId: number) {
 	update((s) => {
@@ -241,9 +241,9 @@ export function settleBackgroundInstalls(appId: number) {
 }
 
 /**
- * Annule une installation : en cours ou en file, le moteur s'arrête (le jeu
- * n'est pas touché, le déjà-téléchargé reste en cache) ; en attente du site
- * de Nexus, on oublie simplement.
+ * Cancels an install: running or queued, the engine stops (the game is not
+ * touched, what was downloaded stays cached); waiting for the Nexus site,
+ * we simply forget it.
  */
 export async function cancel(appId: number, modId: string) {
 	const active = snapshot.active.get(key(appId, modId));
@@ -254,12 +254,12 @@ export async function cancel(appId: number, modId: string) {
 	clearError(appId, modId);
 }
 
-/** Choix des fichiers en cours (fenêtre ouverte), sinon `null`. */
+/** File picking in progress (dialog open), else `null`. */
 export function useFileChoice(): FileChoice | null {
 	return useSyncExternalStore(subscribe, () => snapshot.choice, () => null);
 }
 
-/** Installe les fichiers choisis, dans cet ordre (ou ferme la fenêtre sans rien faire). */
+/** Installs the picked files, in this order (or closes the dialog without doing anything). */
 export function settleFileChoice(files: number[] | null) {
 	const choice = snapshot.choice;
 	update((s) => {
@@ -272,7 +272,7 @@ export function useInstallFailure(): InstallFailure | null {
 	return useSyncExternalStore(subscribe, () => snapshot.failure, () => null);
 }
 
-/** Ferme la fenêtre d'échec. L'erreur reste sur la carte du mod. */
+/** Closes the failure dialog. The error stays on the mod card. */
 export function dismissFailure() {
 	update((s) => {
 		s.failure = null;
@@ -285,9 +285,9 @@ export function clearError(appId: number, modId: string) {
 	});
 }
 
-/** Renvoie `queued` si le jeu tourne : le changement attend sa fermeture. */
+/** Returns `queued` if the game is running: the change waits for it to close. */
 export async function toggle(appId: number, modId: string, enabled: boolean): Promise<"done" | "queued"> {
-	// Optimiste : l'interrupteur bouge tout de suite (SPEC §3.5 « instantané »).
+	// Optimistic: the switch moves right away.
 	const apply = (value: boolean) =>
 		update((s) => {
 			const list = s.installed.get(appId);
@@ -296,8 +296,8 @@ export async function toggle(appId: number, modId: string, enabled: boolean): Pr
 	apply(enabled);
 	try {
 		const outcome = await setModEnabled(appId, modId, enabled);
-		// En attente : l'état réel ne change qu'à la fermeture du jeu ;
-		// l'interface montre le changement prévu à partir de la file.
+		// Queued: the real state only changes when the game closes; the UI
+		// shows the planned change from the queue.
 		if (outcome.status === "queued") apply(!enabled);
 		return outcome.status;
 	} catch (error) {
@@ -317,7 +317,7 @@ export async function restore(appId: number, modId: string) {
 	await refreshInstalled(appId);
 }
 
-/** Jeu retiré d'Unalia : ses mods et mises à jour en mémoire partent aussi. */
+/** Game removed from Unalia: its in-memory mods and updates go too. */
 export function forgetGameMods(appId: number) {
 	update((s) => {
 		s.installed.delete(appId);
@@ -325,7 +325,7 @@ export function forgetGameMods(appId: number) {
 	});
 }
 
-/** Revient à une version précédente du mod, gardée dans le stockage. */
+/** Goes back to a previous version of the mod, kept in the storage. */
 export async function revert(appId: number, modId: string, pkg: string): Promise<InstalledMod> {
 	const reverted = await revertMod(appId, modId, pkg);
 	await refreshInstalled(appId);
@@ -333,7 +333,7 @@ export async function revert(appId: number, modId: string, pkg: string): Promise
 	return reverted;
 }
 
-/** Mods installés du jeu (`undefined` pendant le premier chargement). */
+/** Installed mods of the game (`undefined` during the first load). */
 export function useInstalled(appId: number): InstalledMod[] | undefined {
 	const list = useSyncExternalStore(subscribe, () => snapshot.installed.get(appId), () => undefined);
 	useEffect(() => {
@@ -344,7 +344,7 @@ export function useInstalled(appId: number): InstalledMod[] | undefined {
 	return list;
 }
 
-/** Installations du jeu en cours, en file ou à confirmer (pas les échecs). */
+/** The game's installs running, queued or to confirm (not the failures). */
 export function useActiveInstalls(appId: number): [string, ActiveInstall][] {
 	const active = useSyncExternalStore(subscribe, () => snapshot.active, () => emptyActive);
 	return useMemo(
@@ -362,7 +362,7 @@ export function useActiveInstall(appId: number, modId: string): ActiveInstall | 
 	return useSyncExternalStore(subscribe, () => snapshot.active.get(key(appId, modId)), () => undefined);
 }
 
-/** Avancement global d'une installation, de 0 à 1. */
+/** Overall progress of an install, from 0 to 1. */
 export function overallProgress(progress: InstallProgress): number {
 	switch (progress.stage) {
 		case "resolving":
@@ -380,7 +380,7 @@ export function overallProgress(progress: InstallProgress): number {
 
 const checking = new Set<number>();
 
-/** Mises à jour disponibles pour le jeu (`undefined` tant que la vérification tourne). */
+/** Available updates for the game (`undefined` while the check runs). */
 export function useUpdates(appId: number): ModUpdate[] | undefined {
 	const list = useSyncExternalStore(subscribe, () => snapshot.updates.get(appId), () => undefined);
 	useEffect(() => {
@@ -403,14 +403,14 @@ export function useModUpdate(appId: number, modId: string): ModUpdate | undefine
 	return useUpdates(appId)?.find((u) => u.modId === modId);
 }
 
-/** Mises à jour à revérifier (ex. après une mise à jour du jeu). */
+/** Updates to check again (e.g. after a game update). */
 export function recheckUpdates(appId: number) {
 	update((s) => {
 		s.updates.delete(appId);
 	});
 }
 
-/** Met à jour plusieurs mods, l'un après l'autre (le moteur les traite en file). */
+/** Updates several mods, one after the other (the engine queues them). */
 export function updateAll(appId: number, updates: ModUpdate[]) {
 	const names = new Map((snapshot.installed.get(appId) ?? []).map((m) => [m.id, m.name]));
 	for (const u of updates) void install(appId, u.modId, names.get(u.modId));

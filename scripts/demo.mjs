@@ -1,13 +1,13 @@
 #!/usr/bin/env node
-// Faux dossier Steam de démo, pour voir Modalia avec de vrais jeux sans
-// avoir Steam : manifestes, dossiers de jeu vides avec les signatures de
-// moteur, et vraies jaquettes téléchargées depuis le CDN public de Steam.
+// Fake demo Steam folder, to see Modalia with real games without having
+// Steam: manifests, empty game folders with the engine signatures, and
+// real covers downloaded from Steam's public CDN.
 //
-// Tout est écrit dans `.demo/` (ignoré par Git) : aucun asset officiel
-// n'entre dans le repo (SPEC §4).
+// Everything is written to `.demo/` (ignored by Git): no official asset
+// enters the repo.
 //
-//   pnpm demo          prépare la démo puis lance l'appli dessus
-//   pnpm demo --setup  prépare seulement
+//   pnpm demo          sets up the demo then starts the app on it
+//   pnpm demo --setup  only sets it up
 
 import { spawn } from "node:child_process";
 import { existsSync } from "node:fs";
@@ -19,8 +19,8 @@ const repo = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const root = join(repo, ".demo", "steam");
 
 /**
- * [appid, nom, moteur]. Pas de Silksong ni de Cyberpunk 2077 : ils sont
- * ajoutés à la main depuis leur vrai dossier, pour les vidéos.
+ * [appid, name, engine]. No Silksong or Cyberpunk 2077: they are added by
+ * hand from their real folder.
  */
 const GAMES = [
 	[367520, "Hollow Knight", "unity"],
@@ -63,7 +63,7 @@ async function touch(path) {
 	if (!existsSync(path)) await writeFile(path, "");
 }
 
-/** Fichiers vides qui portent la signature du moteur (voir detect/engine.rs). */
+/** Empty files that carry the engine signature (see detect/engine.rs). */
 async function writeGameFiles(dir, name, engine) {
 	const exe = name.replace(/[^\p{L}\p{N}]/gu, "");
 	await touch(join(dir, `${exe}.exe`));
@@ -96,7 +96,7 @@ async function setup() {
 		`"libraryfolders"\n{\n\t"0"\n\t{\n\t\t"path"\t\t${vdfString(root)}\n\t}\n}\n`,
 	);
 
-	// Un jeu retiré de la liste quitte aussi la bibliothèque de démo.
+	// A game removed from the list also leaves the demo library.
 	const kept = new Set(GAMES.map(([appId]) => `appmanifest_${appId}.acf`));
 	for (const file of await readdir(steamapps)) {
 		if (file.startsWith("appmanifest_") && !kept.has(file)) await rm(join(steamapps, file));
@@ -111,7 +111,7 @@ async function setup() {
 		await writeGameFiles(join(steamapps, "common", dir), name, engine);
 	}
 
-	// Quelques téléchargements en parallèle, pas plus : on reste poli avec le CDN.
+	// A few downloads in parallel, no more: we stay polite with the CDN.
 	const jobs = GAMES.flatMap(([appId, name]) => ARTWORK.map((file) => ({ appId, name, file })));
 	const missing = [];
 	let done = 0;
@@ -120,21 +120,21 @@ async function setup() {
 			const status = await download(job.appId, job.file).catch(() => "absent");
 			if (status === "absent") missing.push(`${job.name} (${job.file})`);
 			done++;
-			process.stdout.write(`\r  Images : ${done}/${GAMES.length * ARTWORK.length}`);
+			process.stdout.write(`\r  Images: ${done}/${GAMES.length * ARTWORK.length}`);
 		}
 	};
 	await Promise.all(Array.from({ length: 6 }, worker));
 	process.stdout.write("\n");
 
-	console.log(`  ${GAMES.length} jeux prêts dans ${root}`);
-	if (missing.length) console.log(`  Images introuvables sur le CDN : ${missing.join(", ")}`);
+	console.log(`  ${GAMES.length} games ready in ${root}`);
+	if (missing.length) console.log(`  Images missing from the CDN: ${missing.join(", ")}`);
 }
 
-console.log("Préparation du Steam de démo…");
+console.log("Setting up the demo Steam…");
 await setup();
 
 if (!process.argv.includes("--setup")) {
-	console.log("Lancement de Modalia sur la démo…");
+	console.log("Starting Modalia on the demo…");
 	const child = spawn("pnpm", ["--filter", "@modalia/desktop", "tauri", "dev"], {
 		cwd: repo,
 		stdio: "inherit",

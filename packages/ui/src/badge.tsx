@@ -3,7 +3,7 @@ import type { ComponentProps } from "react";
 
 import { cn } from "./cn";
 
-// Contour + fond à 10 % de la teinte, comme les badges NEW / IMPROVED d'Unalia.
+// Outline + 10% background of the hue, like Unalia's NEW / IMPROVED badges.
 const badgeVariants = cva(
 	"inline-flex w-fit shrink-0 items-center gap-1 whitespace-nowrap rounded-full border px-2 py-0.5 font-tight text-[11px] font-semibold tracking-wide [&>svg]:size-3",
 	{

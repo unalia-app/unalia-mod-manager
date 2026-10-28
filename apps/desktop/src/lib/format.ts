@@ -18,7 +18,7 @@ export function bytes(n: number): string {
 	return unit === 0 ? `${n} B` : `${value.toFixed(value >= 100 ? 0 : 1)} ${units[unit]}`;
 }
 
-/** 380 → « 6 min left ». Arrondi grossier : une estimation, pas un chrono. */
+/** 380 gives "6 min left". Rough rounding: an estimate, not a stopwatch. */
 export function timeLeft(seconds: number): string {
 	if (!Number.isFinite(seconds) || seconds < 0) return "";
 	if (seconds < 60) return `${Math.max(5, Math.round(seconds / 5) * 5)} s left`;

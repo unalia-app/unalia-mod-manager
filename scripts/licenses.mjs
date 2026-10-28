@@ -1,16 +1,15 @@
 #!/usr/bin/env node
-// Licences des dépendances livrées avec l'appli, dans
-// `THIRD_PARTY_LICENSES.md` : installé à côté de l'exécutable et ouvert
-// depuis Settings > Support. À relancer quand les dépendances changent,
-// et avant chaque release.
+// Licenses of the dependencies shipped with the app, in
+// `THIRD_PARTY_LICENSES.md`: installed next to the executable and opened
+// from Settings > Support. Run it again when the dependencies change, and
+// before each release.
 //
-//   pnpm licenses:update     (demande `cargo install cargo-about --features cli`)
+//   pnpm licenses:update     (needs `cargo install cargo-about --features cli`)
 //
-// Trois parties : UnRAR (sa licence n'est pas celle déclarée par la crate
-// qui l'embarque), les crates Rust (`cargo about`, règles dans
-// `about.toml`), les paquets npm de l'interface (`pnpm licenses`). Une même
-// licence au même texte n'est écrite qu'une fois, avec la liste de ceux
-// qui l'utilisent.
+// Three parts: UnRAR (its license isn't the one declared by the crate that
+// embeds it), the Rust crates (`cargo about`, rules in `about.toml`), the
+// npm packages of the UI (`pnpm licenses`). The same license with the same
+// text is only written once, with the list of those that use it.
 
 import { execFileSync } from "node:child_process";
 import { existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -23,9 +22,9 @@ const out = join(repo, "THIRD_PARTY_LICENSES.md");
 
 const run = (cmd, args) => execFileSync(cmd, args, { cwd: repo, encoding: "utf8", maxBuffer: 256 * 1024 * 1024 });
 
-// Le pnpm qui a lancé `pnpm licenses:update`, sans passer par un shell
-// (`pnpm.cmd` sous Windows) : un script à donner à Node, ou un exécutable
-// autonome (pnpm installé par winget).
+// The pnpm that started `pnpm licenses:update`, without going through a
+// shell (`pnpm.cmd` on Windows): a script to hand to Node, or a standalone
+// executable (pnpm installed by winget).
 const pnpm = (args) => {
 	const execPath = process.env.npm_execpath;
 	if (!execPath) return run("pnpm", args);
@@ -34,8 +33,8 @@ const pnpm = (args) => {
 
 // ---------------------------------------------------------------- Rust
 
-// Dans un fichier : sous Windows, `cargo about` refuse d'écrire sur la sortie
-// standard redirigée (problèmes d'encodage de PowerShell).
+// Into a file: on Windows, `cargo about` refuses to write to a redirected
+// standard output (PowerShell encoding issues).
 const aboutFile = join(mkdtempSync(join(tmpdir(), "licenses-")), "about.json");
 run("cargo", ["about", "generate", "--format", "json", "-o", aboutFile]);
 const about = JSON.parse(readFileSync(aboutFile, "utf8"));
@@ -45,23 +44,23 @@ const rust = about.licenses.map((l) => ({
 	users: l.used_by.map((u) => `${u.crate.name} ${u.crate.version}`),
 }));
 
-// UnRAR : code C embarqué par `unrar_sys`, qui se déclare MIT OR Apache-2.0
-// pour sa propre partie seulement.
+// UnRAR: C code embedded by `unrar_sys`, which declares itself MIT OR
+// Apache-2.0 for its own part only.
 const metadata = JSON.parse(run("cargo", ["metadata", "--format-version", "1", "--locked"]));
 const unrarSys = metadata.packages.find((p) => p.name === "unrar_sys");
 const unrarLicense = unrarSys && join(dirname(unrarSys.manifest_path), "vendor", "unrar", "license.txt");
 if (!unrarLicense || !existsSync(unrarLicense)) {
-	console.error("Licence d'UnRAR introuvable dans la crate unrar_sys : vérifier son emplacement.");
+	console.error("UnRAR license not found in the unrar_sys crate: check where it moved.");
 	process.exit(1);
 }
 
-// L'exception GPL qui permet de livrer UnRAR avec l'appli : son paragraphe
-// juridique, recopié tel quel (le fichier lui-même n'est pas installé).
+// The GPL exception that allows shipping UnRAR with the app: its legal
+// paragraph, copied as is (the file itself is not installed).
 const exception = readFileSync(join(repo, "LICENSE-EXCEPTION.md"), "utf8")
 	.replace(/\r\n/g, "\n")
 	.match(/^## (Additional permission under GNU GPL version 3 section 7)\n\n(.+)$/m);
 if (!exception) {
-	console.error("Paragraphe de l'exception introuvable dans LICENSE-EXCEPTION.md.");
+	console.error("Exception paragraph not found in LICENSE-EXCEPTION.md.");
 	process.exit(1);
 }
 const exceptionText = `**${exception[1]}.** ${exception[2]}`;
@@ -82,7 +81,7 @@ for (const [id, packages] of Object.entries(npmList)) {
 	}
 }
 
-/** Texte du fichier de licence d'un paquet npm, s'il en a un. */
+/** Text of an npm package's license file, if it has one. */
 function licenseFile(dir) {
 	const file = readdirSync(dir).find((f) => /^(licen[cs]e|copying)(\.|$)/i.test(f));
 	return file ? readFileSync(join(dir, file), "utf8") : null;
@@ -96,7 +95,7 @@ const sections = (groups) =>
 		.map((g) => `### ${g.id}\n\nUsed by: ${g.users.sort().join(", ")}.\n\n\`\`\`text\n${clean(g.text)}\n\`\`\`\n`)
 		.join("\n");
 
-/** Sans lignes vides autour, mais l'indentation de la première ligne gardée. */
+/** Without blank lines around, but keeping the first line's indentation. */
 const clean = (text) => text.replace(/^(\s*\n)+/, "").trimEnd();
 
 const markdown = `# Third-party licenses
@@ -123,6 +122,6 @@ ${sections(rust)}
 ${sections([...npmGroups.values()])}`;
 
 writeFileSync(out, markdown.replace(/\r\n/g, "\n"));
-// Une crate sous double licence apparaît dans deux groupes : on la compte une fois.
+// A dual-licensed crate shows up in two groups: count it once.
 const count = (groups) => new Set(groups.flatMap((g) => g.users)).size;
-console.log(`${out} : ${count(rust)} crates, ${count([...npmGroups.values()])} paquets npm, UnRAR`);
+console.log(`${out}: ${count(rust)} crates, ${count([...npmGroups.values()])} npm packages, UnRAR`);

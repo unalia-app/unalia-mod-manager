@@ -9,8 +9,8 @@ import { type SteamGame, missingMods, putBackMods, splitError } from "@/lib/engi
 import { refreshInstalled, useInstalled } from "@/lib/installs";
 
 /**
- * Des mods actifs ont quitté le dossier du jeu : Steam l'a réinstallé ou a
- * vérifié ses fichiers. Le stockage les a encore, on les repose en un clic.
+ * Enabled mods left the game folder: Steam reinstalled it or verified its
+ * files. The storage still has them, we put them back in one click.
  */
 export function MissingModsBanner({ game }: { game: SteamGame }) {
 	const installed = useInstalled(game.appId);
@@ -27,7 +27,7 @@ export function MissingModsBanner({ game }: { game: SteamGame }) {
 				() => {},
 			);
 		void check();
-		// Le jeu a pu être réinstallé pendant que l'appli était ouverte.
+		// The game may have been reinstalled while the app was open.
 		window.addEventListener("focus", check);
 		return () => {
 			current = false;

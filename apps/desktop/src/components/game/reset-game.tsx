@@ -9,28 +9,28 @@ import { type ResetPreview, type SteamGame, resetGame, resetPreview, splitError 
 import { bytes } from "@/lib/format";
 import { forgetGameMods, recheckUpdates, refreshInstalled } from "@/lib/installs";
 
-/** Jeu dont la remise à zéro est demandée d'ailleurs (fenêtre d'échec d'une installation). */
+/** Game whose reset is requested from elsewhere (install failure dialog). */
 let requested: number | null = null;
 const listeners = new Set<() => void>();
 
-/** Ouvre « Reset mods » du jeu dès que sa page l'affiche. */
+/** Opens the game's "Reset mods" as soon as its page shows it. */
 export function requestReset(appId: number) {
 	requested = appId;
 	for (const listener of listeners) listener();
 }
 
 /**
- * Remet le jeu à zéro côté mods : ceux d'Unalia le quittent, et ce que
- * d'autres outils ont laissé (à la main, Vortex…) part à la corbeille.
- * Pour repartir propre quand on ne sait plus quoi effacer. Chaque reste a
- * sa case : décochée quand il pourrait servir au jeu (une DLL au nom
- * commun que le jeu ou un autre programme demande).
+ * Resets the game's mods: Unalia's leave it, and what other tools left (by
+ * hand, Vortex…) goes to the Recycle Bin. To start clean when you no longer
+ * know what to delete. Each leftover has its box: unticked when it might
+ * serve the game (a DLL with a common name that the game or another
+ * program asks for).
  */
 export function ResetGame({ game }: { game: SteamGame }) {
 	const [open, setOpen] = useState(false);
 	// `null` : chargement.
 	const [preview, setPreview] = useState<ResetPreview | null>(null);
-	// Restes cochés : partiront à la corbeille.
+	// Ticked leftovers: will go to the Recycle Bin.
 	const [picked, setPicked] = useState<Set<string>>(new Set());
 	const [resetting, setResetting] = useState(false);
 
@@ -72,7 +72,7 @@ export function ResetGame({ game }: { game: SteamGame }) {
 		}
 	};
 
-	// Demande venue d'ailleurs : la fenêtre s'ouvre ici, une seule fois.
+	// Request from elsewhere: the dialog opens here, only once.
 	useEffect(() => {
 		const check = () => {
 			if (requested !== game.appId) return;
@@ -87,7 +87,7 @@ export function ResetGame({ game }: { game: SteamGame }) {
 	}, [game.appId]);
 
 	const empty = preview !== null && preview.mods === 0 && preview.foreign.length === 0;
-	// Rien d'Unalia et rien de coché : le bouton n'aurait rien à faire.
+	// Nothing from Unalia and nothing ticked: the button would have nothing to do.
 	const idle = preview !== null && preview.mods === 0 && picked.size === 0;
 	const toggle = (path: string, on: boolean) =>
 		setPicked((current) => {

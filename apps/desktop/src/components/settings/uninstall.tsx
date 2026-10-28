@@ -8,8 +8,8 @@ import { toast } from "@/components/toaster";
 import { canUninstall, splitError, uninstallApp } from "@/lib/engine";
 
 /**
- * Désinstaller sans chercher l'installeur ni passer par les paramètres de
- * Windows : beaucoup le suppriment après usage. Masqué en dev.
+ * Uninstall without looking for the installer or going through Windows
+ * settings: many people remove it after use. Hidden in dev.
  */
 export function Uninstall() {
 	const [available, setAvailable] = useState(false);
@@ -32,7 +32,7 @@ export function Uninstall() {
 	const uninstall = async () => {
 		setStarting(true);
 		try {
-			// En cas de succès, l'appli se ferme : la promesse ne revient pas.
+			// On success, the app closes: the promise doesn't come back.
 			await uninstallApp();
 		} catch (error) {
 			const { message, details } = splitError(error);

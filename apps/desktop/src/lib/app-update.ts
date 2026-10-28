@@ -4,13 +4,13 @@ import { type AvailableUpdate, checkAppUpdate, installAppUpdate, onUpdateProgres
 import { rememberWhatsNew } from "@/lib/whats-new";
 
 /**
- * Mise à jour de l'appli : cherchée au démarrage et depuis Settings, jamais
- * installée sans un clic (comme pour les mods, SPEC §3.5).
+ * App update: checked at startup and from Settings, never installed
+ * without a click (same as for mods).
  */
 export type AppUpdateState =
 	| { status: "idle" | "checking" | "upToDate" }
 	| { status: "available"; update: AvailableUpdate }
-	/** `progress` : de 0 à 1, `null` tant que la taille est inconnue. */
+	/** `progress`: from 0 to 1, `null` while the size is unknown. */
 	| { status: "installing"; update: AvailableUpdate; progress: number | null }
 	| { status: "error"; update: AvailableUpdate | null; message: string; details: string | null };
 
@@ -33,7 +33,7 @@ export function useAppUpdate(): AppUpdateState {
 	);
 }
 
-/** Interroge le serveur des releases. Renvoie la mise à jour trouvée. */
+/** Asks the release server. Returns the update found. */
 export async function checkForUpdate(): Promise<AvailableUpdate | null> {
 	if (state.status === "checking" || state.status === "installing") return null;
 	set({ status: "checking" });
@@ -48,8 +48,8 @@ export async function checkForUpdate(): Promise<AvailableUpdate | null> {
 }
 
 /**
- * Télécharge et installe la mise à jour trouvée. En cas de succès, l'appli
- * se ferme et la nouvelle version s'ouvre : la promesse ne se résout pas.
+ * Downloads and installs the update found. On success, the app closes and
+ * the new version opens: the promise doesn't resolve.
  */
 export async function installUpdate(): Promise<void> {
 	if (state.status !== "available" && !(state.status === "error" && state.update)) return;
@@ -57,7 +57,7 @@ export async function installUpdate(): Promise<void> {
 	if (!update) return;
 	if (previewing) return simulateInstall(update);
 	set({ status: "installing", update, progress: null });
-	// Lu à la relance par « What's new ».
+	// Read on restart by "What's new".
 	rememberWhatsNew(update.version, update.notes);
 	const unlisten = await onUpdateProgress(({ downloaded, total }) => {
 		if (state.status !== "installing") return;
@@ -73,10 +73,10 @@ export async function installUpdate(): Promise<void> {
 	}
 }
 
-// Aperçu en dev (Ctrl+Maj+U) : une fausse mise à jour, dont l'installation
-// fait avancer la barre sans rien télécharger.
+// Dev preview (Ctrl+Shift+U): a fake update, whose install moves the bar
+// forward without downloading anything.
 
-/** Notes d'exemple, au format de `CHANGELOG.md`. */
+/** Sample notes, in the `CHANGELOG.md` format. */
 export const SAMPLE_NOTES = `Small fixes after the first week of the beta.
 
 ### Added

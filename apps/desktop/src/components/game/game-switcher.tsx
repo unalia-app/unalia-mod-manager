@@ -13,7 +13,7 @@ import { normalize } from "@/lib/text";
 
 const LIMIT = 8;
 
-/** Sélecteur de jeu de l'en-tête (SPEC §3.2) : jeu actif, recherche, récents en premier. */
+/** Header game switcher: active game, search, recent first. */
 export function GameSwitcher({ current }: { current: SteamGame }) {
 	const router = useRouter();
 	const [open, setOpen] = useState(false);

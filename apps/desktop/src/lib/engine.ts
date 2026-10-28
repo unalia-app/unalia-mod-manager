@@ -1,23 +1,23 @@
 import { invoke, isTauri } from "@tauri-apps/api/core";
 import { type UnlistenFn, listen } from "@tauri-apps/api/event";
 
-// Miroir des types sérialisés par le moteur (serde, camelCase).
+// Mirror of the types serialized by the engine (serde, camelCase).
 export type Engine = "unity" | "unreal" | "unknown";
 
-/** Ce que Modalia sait du jeu : schéma Thunderstore ou profil écrit à la main (brique games). */
+/** What Modalia knows about the game: Thunderstore schema or hand-written profile (games block). */
 export type GameProfile = {
 	id: string;
 	name: string;
-	/** Communauté Thunderstore, ou `nexus:<domaine>` pour un jeu Nexus Mods. */
+	/** Thunderstore community, or `nexus:<domain>` for a Nexus Mods game. */
 	community: string;
 	steamAppIds: number[];
 	loader: string;
 	supported: boolean;
 	coverUrl: string | null;
 	heroUrl: string | null;
-	/** Jeu dont les mods viennent de Nexus Mods. */
+	/** Game whose mods come from Nexus Mods. */
 	nexus: { domain: string; gameId: number } | null;
-	/** Grandes versions du jeu, de la plus ancienne à la plus récente (date ISO de sortie). */
+	/** Major versions of the game, oldest to newest (ISO release date). */
 	versions: { name: string; released: string }[];
 };
 
@@ -27,20 +27,20 @@ export type SteamGame = {
 	installDir: string;
 	library: string;
 	engine: Engine;
-	/** Dernière mise à jour du jeu (secondes Unix), si connue. */
+	/** Last game update (Unix seconds), if known. */
 	lastUpdated: number | null;
 	profile: GameProfile | null;
-	/** Décidé par le moteur : profil connu, avec un loader géré. */
+	/** Decided by the engine: known profile, with a supported loader. */
 	moddable: boolean;
-	/** `manual` : ajouté à la main depuis son dossier. */
+	/** `manual`: added by hand from its folder. */
 	source: "steam" | "manual";
-	/** Jeu ajouté à la main que l'utilisateur a aussi ajouté à Steam (jeu non-Steam). */
+	/** Manually added game that the user also added to Steam (non-Steam game). */
 	steamShortcut: boolean;
-	/** Play passe par Steam, pour son overlay (compteur FPS…). */
+	/** Play goes through Steam, for its overlay (FPS counter…). */
 	launchViaSteam: boolean;
-	/** Ancienne version du jeu sur laquelle l'utilisateur est resté ; `null` : la plus récente. */
+	/** Old version of the game the user stayed on; `null`: the latest. */
 	gameVersion: string | null;
-	/** Anti-triche trouvé dans le jeu (ex. `Easy Anti-Cheat`) : mods permis, bannissement possible en ligne. */
+	/** Anti-cheat found in the game (e.g. `Easy Anti-Cheat`): mods allowed, online ban possible. */
 	antiCheat: string | null;
 };
 
@@ -50,36 +50,35 @@ export type GameScan = {
 };
 
 export async function listGames(): Promise<GameScan> {
-	// Hors de Tauri (ex. `next dev` dans un navigateur), aucun moteur n'est joignable.
+	// Outside Tauri (e.g. `next dev` in a browser), no engine is reachable.
 	if (!isTauri()) return { steamFound: false, games: [] };
 	return invoke<GameScan>("list_games");
 }
 
 /**
- * Ajoute le jeu à Steam (jeu non-Steam, avec son nom et ses images). Steam
- * est fermé puis rouvert s'il était ouvert.
+ * Adds the game to Steam (non-Steam game, with its name and images). Steam
+ * is closed then opened again if it was open.
  */
 export function addToSteam(appId: number): Promise<void> {
 	return invoke("add_to_steam", { appId });
 }
 
-/** Coche ou décoche « Launch through Steam » (jeu ajouté à la main). */
+/** Ticks or unticks "Launch through Steam" (manually added game). */
 export function setLaunchViaSteam(appId: number, enabled: boolean): Promise<void> {
 	return invoke("set_launch_via_steam", { appId, enabled });
 }
 
 /**
- * Version du jeu installée, après un retour en arrière (`null` : la plus
- * récente). Les installations et mises à jour prennent alors les fichiers
- * publiés pour elle.
+ * Installed game version, after going back (`null`: the latest). Installs
+ * and updates then take the files published for it.
  */
 export function setGameVersion(appId: number, version: string | null): Promise<void> {
 	return invoke("set_game_version", { appId, version });
 }
 
 /**
- * Ajoute un jeu installé hors de Steam à partir de son dossier. Le moteur le
- * reconnaît par ses fichiers ; renvoie son identifiant.
+ * Adds a game installed outside Steam from its folder. The engine
+ * recognizes it by its files; returns its id.
  */
 export function addManualGame(path: string): Promise<number> {
 	return invoke("add_manual_game", { path });
@@ -109,15 +108,15 @@ const LOADER_LABEL: Record<string, string> = {
 	northstar: "Northstar",
 };
 
-/** Sous-titre d'un jeu : moteur, et loader quand Modalia le connaît. */
+/** Subtitle of a game: engine, and loader when Modalia knows it. */
 export function gameSubtitle(game: SteamGame): string {
 	const loader = game.profile && game.profile.loader !== "none" ? (LOADER_LABEL[game.profile.loader] ?? game.profile.loader) : null;
 	if (!loader) return ENGINE_LABEL[game.engine];
-	// Moteur maison (REDengine, Creation Engine…) : le loader suffit.
+	// In-house engine (REDengine, Creation Engine…): the loader is enough.
 	return game.engine === "unknown" ? loader : `${ENGINE_LABEL[game.engine]} · ${loader}`;
 }
 
-/** Nom de la source des mods du jeu, pour les textes. */
+/** Name of the game's mod source, for copy. */
 export function sourceName(game: SteamGame | null): string {
 	return game?.profile?.nexus ? "Nexus Mods" : "Thunderstore";
 }
@@ -125,8 +124,8 @@ export function sourceName(game: SteamGame | null): string {
 export type ArtworkKind = "cover" | "hero" | "header" | "logo";
 
 /**
- * Image du cache local de Steam, servie par le protocole `artwork` du moteur.
- * Sous Windows, la webview expose les protocoles maison en `http://<nom>.localhost`.
+ * Image from Steam's local cache, served by the engine's `artwork` protocol.
+ * On Windows, the webview exposes custom protocols as `http://<name>.localhost`.
  */
 export function artworkUrl(appId: number, kind: ArtworkKind): string {
 	const windows = typeof navigator !== "undefined" && navigator.userAgent.includes("Windows");
@@ -136,7 +135,7 @@ export function artworkUrl(appId: number, kind: ArtworkKind): string {
 
 const accents = new Map<number, Promise<string | null>>();
 
-/** Couleur d'accent CSS du jeu (`null` : accent neutre). Calculée une fois. */
+/** CSS accent color of the game (`null`: neutral accent). Computed once. */
 export function gameAccent(appId: number): Promise<string | null> {
 	if (!isTauri()) return Promise.resolve(null);
 	let accent = accents.get(appId);
@@ -147,7 +146,7 @@ export function gameAccent(appId: number): Promise<string | null> {
 	return accent;
 }
 
-// Mods (brique sources du moteur, format neutre SPEC §6.5).
+// Mods (engine sources block, neutral format).
 
 export type ModSort = "popular" | "downloads" | "newest" | "updated";
 
@@ -181,7 +180,7 @@ export type Mod = Omit<ModSummary, "iconUrl" | "downloads" | "pinned"> & {
 	downloads: number | null;
 	sourceUrl: string;
 	websiteUrl: string | null;
-	/** Lien de don de l'auteur : 100 % du don lui revient. */
+	/** The author's donation link: 100% of the donation goes to them. */
 	donationUrl: string | null;
 	versions: ModVersion[];
 };
@@ -192,26 +191,26 @@ export function searchMods(community: string, text: string, sort: ModSort, page:
 	return invoke("search_mods", { community, text, sort, page });
 }
 
-/** Dépendance de la dernière version, prête à afficher (moteur : get_mod). */
+/** Dependency of the latest version, ready to display (engine: get_mod). */
 export type DependencyInfo = {
 	id: string;
 	name: string;
 	author: string;
 	minVersion: string;
-	/** Loader du jeu : installé à part, automatiquement. */
+	/** The game's loader: installed apart, automatically. */
 	loader: boolean;
-	/** Installée avec le mod. Sinon (prérequis Nexus, compte gratuit), à installer soi-même. */
+	/** Installed with the mod. Otherwise (Nexus requirement, free account), to install yourself. */
 	automatic: boolean;
 };
 
-/** `direct` : s'installe sans passer par le site de la source (frameworks Nexus pris sur GitHub). */
+/** `direct`: installs without going through the source's site (Nexus frameworks taken from GitHub). */
 export type ModDetails = Mod & { dependencies: DependencyInfo[]; direct: boolean };
 
 export function getMod(community: string, id: string): Promise<ModDetails> {
 	return invoke("get_mod", { community, id });
 }
 
-/** Markdown brut de la source : à nettoyer avant tout affichage (SPEC §7). */
+/** Raw Markdown from the source: sanitize it before any display. */
 export function modDescription(community: string, id: string, version: string): Promise<string> {
 	return invoke("mod_description", { community, id, version });
 }
@@ -225,18 +224,18 @@ export type InstalledMod = {
 	author: string;
 	version: string;
 	iconUrl: string | null;
-	/** Paquet loader : son dossier racine dans l'archive. */
+	/** Loader package: its root folder in the archive. */
 	loaderRoot: string | null;
 	enabled: boolean;
-	/** Demandé par l'utilisateur (sinon installé comme dépendance). */
+	/** Requested by the user (else installed as a dependency). */
 	explicit: boolean;
 	sha256: string;
 	installedAt: number;
-	/** Paquet du stockage qui contient ses fichiers. */
+	/** Storage package that holds its files. */
 	package: string;
-	/** Fichiers Nexus installés, dans l'ordre où ils sont posés. */
+	/** Installed Nexus files, in the order they are placed. */
 	files: number[];
-	/** Versions d'avant, gardées pour y revenir sans rien retélécharger, la plus récente en tête. */
+	/** Previous versions, kept to go back without downloading again, the most recent first. */
 	previousVersions: PreviousVersion[];
 };
 
@@ -248,7 +247,7 @@ export type PreviousVersion = {
 	replacedAt: number;
 };
 
-/** Un fichier d'un mod Nexus (variante, option…). */
+/** A file of a Nexus mod (variant, option…). */
 export type NexusModFile = {
 	fileId: number;
 	name: string;
@@ -275,31 +274,31 @@ export function installedMods(appId: number): Promise<InstalledMod[]> {
 	return invoke("installed_mods", { appId });
 }
 
-/** Fait tout de suite, ou mis en attente parce que le jeu tourne. */
+/** Done right away, or queued because the game is running. */
 export type Outcome<T> = { status: "done"; value: T } | { status: "queued" };
 
 /**
- * Une installation peut aussi demander une confirmation sur le site de la
- * source (Nexus, compte gratuit) : le lien `nxm://` revient ensuite à Modalia.
+ * An install can also ask for a confirmation on the source's site (Nexus,
+ * free account): the `nxm://` link then comes back to Modalia.
  */
 export type InstallOutcome =
 	| Outcome<InstalledMod[]>
 	| { status: "browser"; url: string }
 	| { status: "cancelled" }
-	/** Mod Nexus à plusieurs fichiers : à choisir, le conseillé en tête. */
+	/** Nexus mod with several files: to pick, the advised one first. */
 	| { status: "choose"; files: NexusModFile[] };
 
-/** `files` : fichiers Nexus choisis, posés dans cet ordre. */
+/** `files`: picked Nexus files, placed in this order. */
 export function installMod(appId: number, modId: string, files?: number[]): Promise<InstallOutcome> {
 	return invoke("install_mod", { appId, modId, files: files ?? null });
 }
 
-/** Arrête une installation en cours ou en file (le jeu n'est pas touché). */
+/** Stops a running or queued install (the game is not touched). */
 export function cancelInstall(appId: number, modId: string): Promise<boolean> {
 	return invoke("cancel_install", { appId, modId });
 }
 
-/** Téléchargement interrompu (appli quittée, réseau perdu), reprenable. */
+/** Interrupted download (app closed, network lost), resumable. */
 export type PausedDownload = { appId: number; modId: string; name: string; received: number; total: number | null };
 
 export function pausedDownloads(appId: number): Promise<PausedDownload[]> {
@@ -307,7 +306,7 @@ export function pausedDownloads(appId: number): Promise<PausedDownload[]> {
 	return invoke("paused_downloads", { appId });
 }
 
-/** Jette un téléchargement en pause et ce qu'il avait déjà reçu. */
+/** Throws away a paused download and what it already received. */
 export function discardDownload(appId: number, modId: string): Promise<void> {
 	return invoke("discard_download", { appId, modId });
 }
@@ -324,23 +323,23 @@ export function restoreMod(appId: number, modId: string): Promise<InstalledMod> 
 	return invoke("restore_mod", { appId, modId });
 }
 
-/** Revient à une version précédente (`package`, l'une des `previousVersions`). */
+/** Goes back to a previous version (`package`, one of the `previousVersions`). */
 export function revertMod(appId: number, modId: string, pkg: string): Promise<InstalledMod> {
 	return invoke("revert_mod", { appId, modId, package: pkg });
 }
 
-/** Mods actifs effacés du dossier du jeu (jeu réinstallé, fichiers vérifiés) : leurs noms. */
+/** Enabled mods deleted from the game folder (game reinstalled, files verified): their names. */
 export function missingMods(appId: number): Promise<string[]> {
 	if (!isTauri()) return Promise.resolve([]);
 	return invoke("missing_mods", { appId });
 }
 
-/** Repose les mods effacés depuis le stockage, sans rien retélécharger. Renvoie leur nombre. */
+/** Places the deleted mods again from the storage, downloading nothing again. Returns their count. */
 export function putBackMods(appId: number): Promise<number> {
 	return invoke("put_back_mods", { appId });
 }
 
-/** Jeu désinstallé dont Unalia garde encore les mods. `size` : octets libérés en l'oubliant. */
+/** Uninstalled game whose mods Unalia still keeps. `size`: bytes freed by forgetting it. */
 export type ForgottenGame = { appId: number; name: string; mods: number; size: number };
 
 export function forgottenGames(): Promise<ForgottenGame[]> {
@@ -352,22 +351,22 @@ export function forgetGame(appId: number): Promise<void> {
 	return invoke("forget_game", { appId });
 }
 
-/** Retire un jeu ajouté à la main : ses mods quittent son dossier, le jeu reste installé. Renvoie le nombre de mods retirés. */
+/** Removes a manually added game: its mods leave its folder, the game stays installed. Returns the number of removed mods. */
 export function removeManualGame(appId: number): Promise<number> {
 	return invoke("remove_manual_game", { appId });
 }
 
-/** Emplacement de mods posé dans le jeu par un autre outil (à la main, Vortex…). */
+/** Mod location placed in the game by another tool (by hand, Vortex…). */
 export type ForeignFiles = {
-	/** Relatif au dossier du jeu, avec des `/`. */
+	/** Relative to the game folder, with `/`. */
 	path: string;
 	dir: boolean;
-	/** Fichiers qui ne viennent pas d'Unalia (0 : dossier vide laissé là). */
+	/** Files that don't come from Unalia (0: empty folder left behind). */
 	files: number;
 	bytes: number;
 	/**
-	 * Reste d'un loader à coup sûr : coché d'office. Sinon (DLL au nom
-	 * commun sans son loader), il peut servir au jeu : décoché.
+	 * Surely a loader leftover: ticked by default. Otherwise (common DLL
+	 * name without its loader), it may serve the game: unticked.
 	 */
 	sure: boolean;
 };
@@ -376,14 +375,14 @@ export type ResetPreview = { mods: number; foreign: ForeignFiles[] };
 
 export type ResetResult = { mods: number; foreign: number; left: string[] };
 
-/** Ce qu'une remise à zéro retirerait du jeu. */
+/** What a reset would remove from the game. */
 export function resetPreview(appId: number): Promise<ResetPreview> {
 	return invoke("reset_preview", { appId });
 }
 
 /**
- * Retire les mods d'Unalia et envoie à la corbeille les emplacements
- * `foreign` (cochés) laissés par d'autres outils. Les fichiers du jeu restent.
+ * Removes Unalia's mods and sends the `foreign` locations (ticked) left by
+ * other tools to the Recycle Bin. The game's files stay.
  */
 export function resetGame(appId: number, foreign: string[]): Promise<ResetResult> {
 	return invoke("reset_game", { appId, foreign });
@@ -402,15 +401,15 @@ export function onInstallProgress(handler: (event: InstallEvent) => void): Promi
 }
 
 /**
- * Les erreurs du moteur arrivent en deux parties : un message lisible, puis
- * après un retour à la ligne, la cause technique (à replier).
+ * Engine errors come in two parts: a readable message, then after a line
+ * break, the technical cause (to fold).
  */
 export function splitError(error: unknown): { message: string; details: string | null } {
 	const text = String(error);
 	const [first, ...rest] = text.split("\n");
 	const message = first ?? text;
-	// Les messages Rust commencent par une minuscule ; l'interface suit la
-	// casse de phrase.
+	// Rust messages start with a lowercase letter; the UI follows sentence
+	// case.
 	return {
 		message: message.charAt(0).toUpperCase() + message.slice(1),
 		details: rest.length ? rest.join("\n") : null,
@@ -419,7 +418,7 @@ export function splitError(error: unknown): { message: string; details: string |
 
 // Lancement et file d'attente (moteur : launch).
 
-/** `ready` : installation déjà téléchargée pendant la partie. */
+/** `ready`: install already downloaded during the session. */
 export type PendingOp = { name: string; ready: boolean } & (
 	| { type: "install"; modId: string }
 	| { type: "setEnabled"; modId: string; enabled: boolean }
@@ -439,7 +438,7 @@ export function playGame(appId: number): Promise<void> {
 	return invoke("play_game", { appId });
 }
 
-/** Arrête d'attendre un jeu en démarrage (lancement abandonné dans son launcher). */
+/** Stops waiting for a starting game (launch abandoned in its launcher). */
 export function cancelStarting(appId: number): Promise<void> {
 	return invoke("cancel_starting", { appId });
 }
@@ -463,24 +462,24 @@ export function onPendingApplied(handler: (event: PendingApplied) => void): Prom
 export type NexusAccount = { name: string; premium: boolean; avatarUrl: string | null };
 
 /**
- * `sso` : connexion en un clic disponible (Modalia approuvé par Nexus).
- * `offline` : clé enregistrée mais Nexus injoignable, `account` est le dernier compte reconnu.
+ * `sso`: one-click login available (Modalia approved by Nexus).
+ * `offline`: key saved but Nexus unreachable, `account` is the last recognized account.
  */
 export type NexusStatus = { account: NexusAccount | null; sso: boolean; offline: boolean };
 
-/** Prérequis Nexus que Modalia n'installe pas seul. */
+/** Nexus requirement that Modalia doesn't install by itself. */
 export type NexusRequirement = { modId: number | null; name: string; url: string | null };
 
-/** Fin d'une installation lancée par un lien `nxm://` du site. */
+/** End of an install started by an `nxm://` link from the site. */
 export type NexusInstalled = {
 	appId: number;
 	modId: string;
-	/** Annulée par l'utilisateur : rien à signaler. */
+	/** Canceled by the user: nothing to report. */
 	cancelled: boolean;
 	name: string | null;
 	missing: NexusRequirement[];
 	error: string | null;
-	/** Fichier suivant d'un choix multiple : sa page, déjà ouverte dans le navigateur. */
+	/** Next file of a multiple choice: its page, already open in the browser. */
 	website: string | null;
 };
 
@@ -489,7 +488,7 @@ export function nexusStatus(): Promise<NexusStatus> {
 	return invoke("nexus_status");
 }
 
-/** Connexion en un clic : la page d'autorisation de Nexus s'ouvre, la clé revient seule. */
+/** One-click login: Nexus's authorization page opens, the key comes back by itself. */
 export function nexusLogin(): Promise<NexusAccount> {
 	return invoke("nexus_login");
 }
@@ -507,7 +506,7 @@ export function onNexusInstalled(handler: (event: NexusInstalled) => void): Prom
 	return listen<NexusInstalled>("nexus-installed", (e) => handler(e.payload));
 }
 
-/** Page Nexus d'un mod (`nexus-<id>`). */
+/** Nexus page of a mod (`nexus-<id>`). */
 export function nexusModUrl(domain: string, modId: string, tab?: "files"): string {
 	const id = modId.replace(/^nexus-/, "");
 	return `https://www.nexusmods.com/${domain}/mods/${id}${tab ? `?tab=${tab}` : ""}`;
@@ -515,7 +514,7 @@ export function nexusModUrl(domain: string, modId: string, tab?: "files"): strin
 
 // Support (moteur : support.rs).
 
-/** Système, et fin du journal de l'appli (chemins personnels et clés masqués). */
+/** System, and end of the app log (personal paths and keys masked). */
 export type Diagnostics = { os: string; arch: string; log: string };
 
 export function diagnostics(): Promise<Diagnostics> {
@@ -527,35 +526,35 @@ export function openLogsFolder(): Promise<void> {
 	return invoke("open_logs_folder");
 }
 
-/** `app` : la GPL v3 de l'appli. `thirdParty` : celles des dépendances. */
+/** `app`: the app's GPL v3. `thirdParty`: the dependencies' licenses. */
 export function openLicense(license: "app" | "thirdParty"): Promise<void> {
 	return invoke("open_license", { license });
 }
 
-/** Faux en dev et hors Windows : pas de désinstalleur. */
+/** False in dev and outside Windows: no uninstaller. */
 export function canUninstall(): Promise<boolean> {
 	if (!isTauri()) return Promise.resolve(false);
 	return invoke("can_uninstall");
 }
 
-/** Ouvre le désinstalleur de Windows, puis l'appli se ferme. */
+/** Opens the Windows uninstaller, then the app closes. */
 export function uninstallApp(): Promise<void> {
 	return invoke("uninstall_app");
 }
 
-// Mises à jour de l'appli (moteur : app_update).
+// App updates (engine: app_update).
 
 export type AvailableUpdate = { version: string; notes: string | null };
 
 export type UpdateProgress = { downloaded: number; total: number | null };
 
-/** Une version plus récente de l'appli, ou `null` : elle est à jour. */
+/** A newer version of the app, or `null`: it is up to date. */
 export function checkAppUpdate(): Promise<AvailableUpdate | null> {
 	if (!isTauri()) return Promise.resolve(null);
 	return invoke("check_app_update");
 }
 
-/** Installe la mise à jour trouvée : l'appli se ferme et se relance. */
+/** Installs the update found: the app closes and restarts. */
 export function installAppUpdate(): Promise<void> {
 	return invoke("install_app_update");
 }

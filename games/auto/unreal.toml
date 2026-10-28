@@ -1,10 +1,10 @@
-# Modèle des jeux Unreal reconnus automatiquement : un jeu Unreal (dossier
-# de projet trouvé sur le disque) dont le nom existe sur Nexus Mods, sans
-# profil écrit à la main dans `games/`. Seuls les frameworks viennent d'ici,
-# le reste est déduit du jeu (`crates/mod-engine/src/games/auto.rs`).
+# Template for automatically recognized Unreal games: an Unreal game
+# (project folder found on disk) whose name exists on Nexus Mods, without a
+# hand-written profile in `games/`. Only the frameworks come from here, the
+# rest is derived from the game (`crates/mod-engine/src/games/auto.rs`).
 #
-# UE4SS : mods en Lua et mods Blueprint (LogicMods). La build expérimentale,
-# publiée en continu, gère aussi les Unreal 5 récents.
+# UE4SS: Lua mods and Blueprint mods (LogicMods). The experimental build,
+# published continuously, also handles recent Unreal 5 games.
 
 [[frameworks]]
 name = "UE4SS"

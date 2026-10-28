@@ -20,8 +20,8 @@ export type LibraryState =
 	| { status: "error"; message: string };
 
 /**
- * Bibliothèque de l'accueil, comme le backlog d'Unalia : les jeux moddables en
- * jaquettes, les autres repliés en bas. La recherche filtre les deux.
+ * Home library, like Unalia's backlog: moddable games as covers, the others
+ * folded at the bottom. The search filters both.
  */
 export function GameLibrary({
 	state,
@@ -33,15 +33,15 @@ export function GameLibrary({
 	onFocusChange,
 }: {
 	state: LibraryState;
-	/** Jeux moddables, récents en tête. */
+	/** Moddable games, recent first. */
 	games: SteamGame[];
-	/** Jeux que Unalia ne sait pas encore modder. */
+	/** Games Unalia can't mod yet. */
 	others: SteamGame[];
 	onRetry: () => void;
-	/** Relit la bibliothèque sans vider la grille. */
+	/** Reads the library again without emptying the grid. */
 	onRefresh: () => void;
 	refreshing: boolean;
-	/** Jeu survolé, pour l'ambiance (`null` en sortant de la grille). */
+	/** Hovered game, for the ambience (`null` when leaving the grid). */
 	onFocusChange: (game: SteamGame | null) => void;
 }) {
 	const router = useRouter();
@@ -178,7 +178,7 @@ export function SectionTitle({
 	);
 }
 
-/** Jaquette du jeu, son nom, et ce qui est installé : la carte du backlog d'Unalia. */
+/** The game's cover, its name, and what is installed: the card of Unalia's backlog. */
 function GameTile({ game, onHover }: { game: SteamGame; onHover: () => void }) {
 	const installed = useInstalled(game.appId);
 	const [cover, setCover] = useState<"loading" | "loaded" | "missing">("loading");
@@ -231,7 +231,7 @@ function GameTile({ game, onHover }: { game: SteamGame; onHover: () => void }) {
 	);
 }
 
-/** Jeux pas encore pris en charge : présents pour qu'on les retrouve, sans encombrer. */
+/** Games not supported yet: there so people find them, without clutter. */
 function NotSupported({ games, open }: { games: SteamGame[]; open: boolean }) {
 	return (
 		<details open={open || undefined} className="group/others mt-10 border-t border-line pt-6">

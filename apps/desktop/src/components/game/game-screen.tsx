@@ -30,16 +30,16 @@ import { useInstalled } from "@/lib/installs";
 type Tab = "discover" | "mine";
 
 
-/** Écran d'un jeu : ambiance du jeu, onglets Découvrir et Mes mods (SPEC §3.2). */
+/** A game's screen: game ambience, Discover and My mods tabs. */
 export function GameScreen() {
 	const appId = Number(useSearchParams().get("id"));
-	// `undefined` : chargement ; `null` : jeu introuvable.
+	// `undefined`: loading; `null`: game not found.
 	const [game, setGame] = useState<SteamGame | null | undefined>(undefined);
 	const [tab, setTab] = useState<Tab>("discover");
 	const accent = useAccent(game?.appId ?? null);
 	const installedCount = useInstalled(appId)?.length ?? 0;
-	// « Play » de l'en-tête : seulement quand celui de la bannière est sorti
-	// de l'écran, jamais les deux à la fois.
+	// Header "Play": only when the banner's one has left the screen, never
+	// both at once.
 	const heroPlay = useRef<HTMLDivElement>(null);
 	const heroPlayVisible = useVisible(heroPlay, game);
 	const tabs: { value: Tab; label: ReactNode }[] = [
@@ -104,7 +104,7 @@ export function GameScreen() {
 
 				{game?.moddable && game.profile && (
 					<>
-						{/* Au-dessus des onglets : le menu « Game version » s'ouvre vers eux. */}
+						{/* Above the tabs: the "Game version" menu opens toward them. */}
 						<section key={game.appId} className="relative z-20 flex items-end gap-6 pt-10">
 							<GameCover
 								game={game}
@@ -112,7 +112,7 @@ export function GameScreen() {
 							/>
 							<div className="min-w-0 flex-1 animate-fade-up pb-1 [animation-delay:60ms]">
 								<Badge tone="accent">{gameSubtitle(game)}</Badge>
-								{/* `truncate` coupe ce qui dépasse : le pb-1 laisse la place aux jambages (g, j, p). */}
+								{/* `truncate` cuts what overflows: pb-1 leaves room for descenders (g, j, p). */}
 								<h1 className="mt-2 truncate pb-1 text-4xl leading-tight font-semibold tracking-tight">{game.name}</h1>
 								<p className="mt-1.5 text-sm text-fg-subtle">
 									{game.profile.nexus
@@ -157,15 +157,15 @@ export function GameScreen() {
 	);
 }
 
-/** L'élément est-il à l'écran ? (vrai tant qu'on ne sait pas). */
+/** Is the element on screen? (true while we don't know). */
 function useVisible(ref: RefObject<HTMLElement | null>, trigger: unknown): boolean {
 	const [visible, setVisible] = useState(true);
-	// `trigger` relance l'observation quand l'élément apparaît (jeu chargé).
+	// `trigger` restarts the observation when the element appears (game loaded).
 	useEffect(() => {
 		const node = ref.current;
 		if (!node) return;
-		// La marge du haut compte l'en-tête collé (h-15) : sous lui, le bouton
-		// n'est plus visible.
+		// The top margin counts the sticky header (h-15): under it, the button
+		// is no longer visible.
 		const observer = new IntersectionObserver(([entry]) => setVisible(entry?.isIntersecting ?? true), {
 			rootMargin: "-60px 0px 0px 0px",
 		});

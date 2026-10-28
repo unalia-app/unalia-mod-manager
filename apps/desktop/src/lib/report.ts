@@ -6,9 +6,9 @@ import { diagnostics, gameSubtitle, installedMods, isModdable, nexusStatus, sour
 import { loadGames } from "@/lib/games-store";
 
 /**
- * Rapport à coller dans un signalement de bug (Markdown) : version, système,
- * jeux moddables et leurs mods, fin du journal. Ni nom de compte, ni clé,
- * ni chemin personnel.
+ * Report to paste into a bug report (Markdown): version, system, moddable
+ * games and their mods, end of the log. No account name, no key, no
+ * personal path.
  */
 export async function buildReport(): Promise<string> {
 	const [version, system, scan, nexus] = await Promise.all([

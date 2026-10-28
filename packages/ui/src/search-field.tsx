@@ -4,12 +4,12 @@ import type { ComponentProps, ReactNode } from "react";
 import { cn } from "./cn";
 
 export type SearchFieldProps = Omit<ComponentProps<"input">, "type"> & {
-	/** Élément affiché à droite (raccourci clavier, compteur…). */
+	/** Element shown on the right (keyboard shortcut, counter…). */
 	trailing?: ReactNode;
 };
 
-// Champ de recherche d'Unalia (verre clair, léger soulèvement au survol),
-// ici en vrai `<input>`.
+// Unalia's search field (light glass, slight lift on hover), here as a
+// real `<input>`.
 export function SearchField({ className, trailing, ...props }: SearchFieldProps) {
 	return (
 		<label

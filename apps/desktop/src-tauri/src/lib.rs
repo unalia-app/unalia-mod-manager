@@ -22,22 +22,22 @@ use tauri::{AppHandle, Manager, State, UriSchemeContext, UriSchemeResponder, Wry
 use crate::catalog::Catalog;
 use crate::mods::Mods;
 
-/// Ce que l'appli sait de la bibliothèque de jeux pendant la session.
+/// What the app knows about the game library during the session.
 #[derive(Default)]
 struct Library {
     steam_root: Mutex<Option<PathBuf>>,
-    /// Accents déjà calculés (`None` : jeu sans accent, accent neutre).
+    /// Accents already computed (`None`: game without an accent, neutral accent).
     accents: Mutex<HashMap<u32, Option<String>>>,
-    /// Jeux moddables du dernier scan. Les commandes d'installation ne
-    /// reçoivent qu'un identifiant de l'interface : le dossier du jeu vient
-    /// toujours d'ici, jamais de la webview.
+    /// Moddable games from the last scan. Install commands only receive an
+    /// id from the UI: the game folder always comes from here, never from
+    /// the webview.
     games: Mutex<HashMap<u32, KnownGame>>,
-    /// Images publiées par Thunderstore pour chaque jeu connu (jaquette,
-    /// bannière) : repli quand le cache de Steam n'a rien, notamment pour
-    /// les jeux ajoutés à la main.
+    /// Images published by Thunderstore for each known game (cover,
+    /// banner): fallback when Steam's cache has nothing, notably for
+    /// manually added games.
     remote_art: Mutex<HashMap<u32, RemoteArt>>,
-    /// Une image téléchargée à la fois : deux demandes simultanées de la
-    /// même image n'écrivent pas le même fichier en parallèle.
+    /// One image downloaded at a time: two simultaneous requests for the
+    /// same image don't write the same file in parallel.
     art_downloads: tauri::async_runtime::Mutex<()>,
 }
 
@@ -45,22 +45,22 @@ struct Library {
 struct KnownGame {
     dir: PathBuf,
     community: String,
-    /// Ajouté à la main : se lance par son exécutable, pas par Steam.
+    /// Added by hand: launches through its executable, not through Steam.
     manual: bool,
-    /// Exécutables connus du catalogue pour ce jeu.
+    /// Executables known to the catalog for this game.
     exe_names: Vec<String>,
-    /// Profil du jeu : source des mods (Nexus), frameworks.
+    /// Game profile: mod source (Nexus), frameworks.
     profile: GameProfile,
-    /// Jeu hors Steam ajouté à Steam : adresse qui le lance par Steam (et
-    /// son overlay).
+    /// Non-Steam game added to Steam: URL that launches it through Steam
+    /// (and its overlay).
     steam_shortcut: Option<String>,
-    /// Version du jeu choisie par l'utilisateur (resté sur une ancienne).
+    /// Game version picked by the user (stayed on an old one).
     game_version: Option<String>,
 }
 
 impl KnownGame {
-    /// Jeu resté sur une ancienne version : ses mods doivent avoir été
-    /// publiés avant cette date.
+    /// Game that stayed on an old version: its mods must have been
+    /// published before this date.
     fn mods_before(&self) -> Option<&str> {
         self.profile.mods_before(self.game_version.as_deref()?)
     }
@@ -85,8 +85,8 @@ impl Library {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct GameScan {
-    /// `false` si aucune installation de Steam n'a été trouvée : l'accueil
-    /// propose alors l'ajout manuel d'un dossier.
+    /// `false` if no Steam install was found: the home screen then offers
+    /// to add a folder by hand.
     steam_found: bool,
     games: Vec<GameEntry>,
 }
@@ -96,22 +96,22 @@ struct GameScan {
 struct GameEntry {
     #[serde(flatten)]
     game: SteamGame,
-    /// `steam`, ou `manual` pour un jeu ajouté à la main.
+    /// `steam`, or `manual` for a manually added game.
     source: &'static str,
-    /// Profil Thunderstore du jeu, s'il est connu.
+    /// The game's Thunderstore profile, if known.
     profile: Option<GameProfile>,
-    /// Modalia sait-il modder ce jeu ?
+    /// Can Modalia mod this game?
     moddable: bool,
-    /// Jeu ajouté à la main que l'utilisateur a aussi ajouté à Steam.
+    /// Manually added game that the user also added to Steam.
     steam_shortcut: bool,
-    /// Play passe par Steam (overlay, compteur FPS) : réglage du jeu, oui
-    /// par défaut quand le raccourci existe.
+    /// Play goes through Steam (overlay, FPS counter): a per-game setting,
+    /// on by default when the shortcut exists.
     launch_via_steam: bool,
-    /// Ancienne version du jeu sur laquelle l'utilisateur est resté (une
-    /// des `versions` du profil) ; `None` : la plus récente.
+    /// Old version of the game the user stayed on (one of the profile's
+    /// `versions`); `None`: the latest.
     game_version: Option<String>,
-    /// Anti-triche trouvé dans le jeu (ex. `Easy Anti-Cheat`) : les mods
-    /// restent permis, l'interface prévient du risque de bannissement.
+    /// Anti-cheat found in the game (e.g. `Easy Anti-Cheat`): mods stay
+    /// allowed, the UI warns about the ban risk.
     anti_cheat: Option<&'static str>,
 }
 
@@ -125,7 +125,7 @@ async fn list_games(
     let root = steam_root();
     *library.steam_root.lock().unwrap() = root.clone();
 
-    // Scan local et catalogue (cache ou réseau) en parallèle.
+    // Local scan and catalog (cache or network) in parallel.
     let scan = tauri::async_runtime::spawn_blocking(move || {
         root.map(|r| detect::scan_steam(&r)).transpose()
     });
@@ -143,8 +143,8 @@ async fn list_games(
                 .as_ref()
                 .and_then(|c| c.by_steam_app_id(game.app_id))
                 .cloned();
-            // Sans catalogue (premier lancement hors ligne), on se rabat
-            // sur la détection du moteur.
+            // Without a catalog (first launch offline), fall back on engine
+            // detection.
             let moddable = match (&games_catalog, &profile) {
                 (Some(_), Some(p)) => p.supported,
                 (Some(_), None) => false,
@@ -163,7 +163,7 @@ async fn list_games(
         })
         .collect();
 
-    // Jeux Unreal sans profil : reconnus d'après leur nom sur Nexus.
+    // Unreal games without a profile: recognized from their name on Nexus.
     let unknown: Vec<usize> = entries
         .iter()
         .enumerate()
@@ -179,8 +179,8 @@ async fn list_games(
         }
     }
 
-    // Jeux ajoutés à la main, sauf ceux que Steam connaît déjà. S'ils ont
-    // été ajoutés à Steam comme jeux non-Steam, Play peut passer par Steam.
+    // Manually added games, except the ones Steam already knows. If they
+    // were added to Steam as non-Steam games, Play can go through Steam.
     let shortcuts = library
         .steam_root()
         .map(|root| shortcuts::steam_shortcuts(&root))
@@ -298,10 +298,10 @@ async fn list_games(
     })
 }
 
-/// Ajoute un jeu installé hors de Steam, à partir du dossier choisi par
-/// l'utilisateur. Le jeu est reconnu par ses fichiers grâce au catalogue de
-/// Thunderstore et aux profils écrits à la main, sinon d'après son moteur et
-/// son nom sur Nexus (`games::auto`). Renvoie l'identifiant du jeu.
+/// Adds a game installed outside Steam, from the folder the user picked.
+/// The game is recognized by its files thanks to the Thunderstore catalog
+/// and the hand-written profiles, else from its engine and its name on
+/// Nexus (`games::auto`). Returns the game id.
 #[tauri::command]
 async fn add_manual_game(
     app: AppHandle,
@@ -353,10 +353,10 @@ async fn add_manual_game(
     Ok(app_id)
 }
 
-/// Jeu Unreal sans profil, dans `dir` ou un de ses dossiers (on choisit
-/// souvent le dossier parent), trouvé sur Nexus d'après le nom de son
-/// dossier ou de son exécutable. Échec : le nom cherché si c'était bien un
-/// jeu Unreal.
+/// Unreal game without a profile, in `dir` or one of its folders (people
+/// often pick the parent folder), found on Nexus from the name of its
+/// folder or executable. Failure: the name looked up, if it really was an
+/// Unreal game.
 async fn find_auto_game(catalog: &Catalog, dir: &Path) -> Result<(GameProfile, PathBuf), Option<String>> {
     let mut dirs = vec![dir.to_path_buf()];
     dirs.extend(
@@ -380,12 +380,12 @@ async fn find_auto_game(catalog: &Catalog, dir: &Path) -> Result<(GameProfile, P
         .ok_or_else(|| names.first().cloned())
 }
 
-/// Réglage « Play passe par Steam » d'un jeu ajouté à la main.
+/// "Play goes through Steam" setting of a manually added game.
 pub(crate) fn launch_setting(app_id: u32) -> String {
     format!("launch_via_steam:{app_id}")
 }
 
-/// Coche ou décoche « Launch through Steam » pour un jeu ajouté à la main.
+/// Ticks or unticks "Launch through Steam" for a manually added game.
 #[tauri::command]
 async fn set_launch_via_steam(
     library: State<'_, Library>,
@@ -401,7 +401,7 @@ async fn set_launch_via_steam(
             Some(if enabled { "1" } else { "0" }),
         )
         .map_err(crate::support::logged)?;
-    // Pris en compte tout de suite, sans attendre un nouveau scan.
+    // Applied right away, without waiting for a new scan.
     let root = library.steam_root();
     if let Some(game) = library.games.lock().unwrap().get_mut(&app_id) {
         game.steam_shortcut = if enabled {
@@ -416,14 +416,14 @@ async fn set_launch_via_steam(
     Ok(())
 }
 
-/// Réglage « version du jeu » : celle sur laquelle l'utilisateur est resté.
+/// "Game version" setting: the one the user stayed on.
 pub(crate) fn version_setting(app_id: u32) -> String {
     format!("game_version:{app_id}")
 }
 
-/// Version du jeu installée, quand l'utilisateur est revenu à une
-/// ancienne (`None` : la plus récente). Les prochaines installations et
-/// mises à jour prennent les fichiers publiés pour elle.
+/// Installed game version, when the user went back to an old one (`None`:
+/// the latest). The next installs and updates take the files published for
+/// it.
 #[tauri::command]
 async fn set_game_version(
     library: State<'_, Library>,
@@ -452,10 +452,10 @@ async fn set_game_version(
     Ok(())
 }
 
-/// Ajoute un jeu ajouté à la main à Steam (jeu non-Steam), avec son nom et
-/// ses images, pour le lancer par Steam et avoir son overlay. Steam garde
-/// ses raccourcis en mémoire et les réécrit en quittant : s'il est ouvert,
-/// il est fermé proprement (`steam://exit`) puis rouvert.
+/// Adds a manually added game to Steam (non-Steam game), with its name and
+/// its images, to launch it through Steam and get its overlay. Steam keeps
+/// its shortcuts in memory and rewrites them on exit: if it is open, it is
+/// closed cleanly (`steam://exit`) then opened again.
 #[tauri::command]
 async fn add_to_steam(
     app: AppHandle,
@@ -478,7 +478,7 @@ async fn add_to_steam(
         return Err("Unalia couldn't find the game's executable in its folder.".into());
     };
 
-    // Steam ouvert : on le ferme et on attend qu'il soit vraiment parti.
+    // Steam open: close it and wait until it is really gone.
     let was_running = launch::steam_running(&mods.running_exes());
     if was_running {
         app.opener()
@@ -510,7 +510,7 @@ async fn add_to_steam(
     )
     .map_err(|e| format!("Couldn't add the game to Steam.\n{e}"))?;
 
-    // Ses images dans la bibliothèque de Steam.
+    // Its images in the Steam library.
     for (kind, suffix) in [
         (ArtworkKind::Cover, "p"),
         (ArtworkKind::Hero, "_hero"),
@@ -542,8 +542,7 @@ async fn add_to_steam(
     Ok(())
 }
 
-/// Hors de Steam, la date de la dernière mise à jour est celle de
-/// l'exécutable du jeu.
+/// Outside Steam, the date of the last update is the game executable's.
 fn exe_modified(dir: &std::path::Path, exe_names: &[String]) -> Option<i64> {
     exe_names
         .iter()
@@ -553,7 +552,7 @@ fn exe_modified(dir: &std::path::Path, exe_names: &[String]) -> Option<i64> {
         .map(|d| d.as_secs() as i64)
 }
 
-/// Couleur d'accent CSS du jeu, extraite de sa jaquette.
+/// CSS accent color of the game, extracted from its cover.
 #[tauri::command]
 async fn game_accent(
     app: AppHandle,
@@ -569,7 +568,7 @@ async fn game_accent(
     })
     .await
     .map_err(crate::support::logged)?;
-    // Rien dans le cache de Steam : jaquette publiée par Thunderstore.
+    // Nothing in Steam's cache: cover published by Thunderstore.
     if accent.is_none()
         && let Some(cover) = artwork_file(&app, app_id, ArtworkKind::Cover).await
     {
@@ -588,8 +587,8 @@ async fn game_accent(
     Ok(accent)
 }
 
-/// Image d'un jeu prête à afficher. Un logo perd ses marges transparentes
-/// (copie faite une fois dans le cache de l'appli), pour remplir sa place.
+/// Image of a game, ready to display. A logo loses its transparent margins
+/// (copy made once in the app cache), to fill its slot.
 async fn artwork_file(app: &AppHandle, app_id: u32, kind: ArtworkKind) -> Option<PathBuf> {
     let file = source_artwork(app, app_id, kind).await?;
     if kind != ArtworkKind::Logo {
@@ -619,9 +618,8 @@ async fn artwork_file(app: &AppHandle, app_id: u32, kind: ArtworkKind) -> Option
     Some(if done == Some(true) { trimmed } else { file })
 }
 
-/// Image d'un jeu : cache de Steam d'abord, sinon l'image publiée par
-/// Thunderstore pour les gestionnaires de mods, téléchargée une fois dans
-/// le cache de l'appli.
+/// Image of a game: Steam's cache first, else the image published by
+/// Thunderstore for mod managers, downloaded once into the app cache.
 async fn source_artwork(app: &AppHandle, app_id: u32, kind: ArtworkKind) -> Option<PathBuf> {
     let library = app.state::<Library>();
     if let Some(root) = library.steam_root()
@@ -641,14 +639,14 @@ async fn source_artwork(app: &AppHandle, app_id: u32, kind: ArtworkKind) -> Opti
         ArtworkKind::Hero | ArtworkKind::HeroBlur => remote.hero.map(|u| (u, "hero")),
         ArtworkKind::Header | ArtworkKind::Logo => None,
     };
-    // Sinon, les images publiques de la page Steam du jeu : utile pour un
-    // jeu pas encore ouvert dans Steam, ou une copie GOG ou Epic d'un jeu
-    // aussi vendu sur Steam.
+    // Otherwise, the public images of the game's Steam page: useful for a
+    // game not opened in Steam yet, or a GOG or Epic copy of a game also
+    // sold on Steam.
     let (url, name) = match thunderstore {
         Some(found) => found,
         None => steam_store_art(&app.state::<Catalog>().client, app_id, kind).await?,
     };
-    // Sans la requête (`?t=...` des images du magasin Steam).
+    // Without the query (`?t=...` of Steam store images).
     let extension = url
         .split(['?', '#'])
         .next()
@@ -666,7 +664,7 @@ async fn source_artwork(app: &AppHandle, app_id: u32, kind: ArtworkKind) -> Opti
     let _guard = library.art_downloads.lock().await;
     if !file.is_file() {
         let client = app.state::<Catalog>().client.clone();
-        // Une image : une seule connexion, 20 Mo au plus.
+        // One image: a single connection, 20 MB at most.
         let options = download::Options {
             max_bytes: 20 * 1024 * 1024,
             connections: 1,
@@ -680,14 +678,14 @@ async fn source_artwork(app: &AppHandle, app_id: u32, kind: ArtworkKind) -> Opti
     Some(file)
 }
 
-/// Image publique de la page Steam d'un jeu. Les jeux sans identifiant
-/// Steam ont un identifiant dérivé, bit de poids fort à 1 (`manual_app_id`) :
-/// rien à chercher pour eux.
+/// Public image of a game's Steam page. Games without a Steam id have a
+/// derived id with the high bit set (`manual_app_id`): nothing to look up
+/// for them.
 ///
-/// Les jeux récents rangent leurs images sous une empreinte
-/// (`.../apps/<appid>/<hash>/library_hero.jpg`) : l'API publique du magasin
-/// donne ces chemins. Elle ne connaît pas le logo, ni certains vieux jeux :
-/// on se rabat alors sur l'ancienne adresse, sans empreinte.
+/// Recent games store their images under a hash
+/// (`.../apps/<appid>/<hash>/library_hero.jpg`): the public store API
+/// gives these paths. It doesn't know the logo, nor some old games: we then
+/// fall back on the old URL, without a hash.
 async fn steam_store_art(
     client: &mod_engine::HttpClient,
     app_id: u32,
@@ -713,8 +711,7 @@ async fn steam_store_art(
     ))
 }
 
-/// Adresse d'une image du magasin Steam (`IStoreBrowseService/GetItems`,
-/// sans clé).
+/// URL of a Steam store image (`IStoreBrowseService/GetItems`, no key).
 async fn store_asset_url(client: &mod_engine::HttpClient, app_id: u32, asset: &str) -> Option<String> {
     let input = serde_json::json!({
         "ids": [{ "appid": app_id }],
@@ -735,7 +732,7 @@ async fn store_asset_url(client: &mod_engine::HttpClient, app_id: u32, asset: &s
     let assets = &response["response"]["store_items"][0]["assets"];
     let format = assets["asset_url_format"].as_str()?;
     let path = assets[asset].as_str()?;
-    // Un chemin relatif simple : rien qui remonte ni ne change d'hôte.
+    // A plain relative path: nothing that goes up or changes host.
     if path.contains("..") || path.contains("://") || path.starts_with('/') {
         return None;
     }
@@ -745,8 +742,8 @@ async fn store_asset_url(client: &mod_engine::HttpClient, app_id: u32, asset: &s
     ))
 }
 
-/// En dev, `MODALIA_STEAM_ROOT` remplace la recherche automatique (ex. pour
-/// pointer sur `fixtures/steam/root`). Ignorée dans les builds de release.
+/// In dev, `MODALIA_STEAM_ROOT` replaces the automatic lookup (e.g. to
+/// point at `fixtures/steam/root`). Ignored in release builds.
 fn steam_root() -> Option<PathBuf> {
     if cfg!(debug_assertions)
         && let Some(root) = std::env::var_os("MODALIA_STEAM_ROOT")
@@ -756,16 +753,16 @@ fn steam_root() -> Option<PathBuf> {
     detect::find_steam_root()
 }
 
-/// Dossier de chaque jeu Steam installé. `None` : Steam introuvable ou
-/// illisible, on ne sait pas quels jeux sont là.
+/// Folder of each installed Steam game. `None`: Steam not found or
+/// unreadable, we don't know which games are there.
 fn steam_dirs() -> Option<HashMap<u32, PathBuf>> {
     let games = detect::scan_steam(&steam_root()?).ok()?;
     Some(games.into_iter().map(|game| (game.app_id, game.install_dir)).collect())
 }
 
-/// Protocole `artwork://localhost/<appid>/<type>` (Windows :
-/// `http://artwork.localhost/...`). Ne sert que les images des jeux (cache de
-/// Steam ou repli Thunderstore) : l'interface ne manipule jamais de chemin.
+/// Protocol `artwork://localhost/<appid>/<type>` (Windows:
+/// `http://artwork.localhost/...`). Only serves game images (Steam's cache
+/// or Thunderstore fallback): the UI never handles a path.
 fn artwork_protocol(
     ctx: UriSchemeContext<'_, Wry>,
     request: Request<Vec<u8>>,
@@ -810,18 +807,18 @@ fn mime(file: &std::path::Path) -> &'static str {
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let context = tauri::generate_context!();
-    // Sous Windows, la WebView crée son dossier dans les données locales dès
-    // l'ouverture de la fenêtre, avant `setup` : l'ancien dossier est repris
-    // avant (réglages de l'interface compris).
+    // On Windows, the WebView creates its folder in the local data as soon
+    // as the window opens, before `setup`: the old folder is taken over
+    // before that (UI settings included).
     #[cfg(windows)]
     for var in ["LOCALAPPDATA", "APPDATA"] {
         if let Some(base) = std::env::var_os(var) {
             mods::adopt_old_dir(&Path::new(&base).join(&context.config().identifier));
         }
     }
-    // Lancé par le désinstalleur Windows, case « supprimer les données »
-    // cochée : les jeux retrouvent leur état d'origine avant que la base
-    // qui liste les mods ne disparaisse. Pas de fenêtre.
+    // Started by the Windows uninstaller with the "delete the data" box
+    // ticked: the games get their original state back before the database
+    // that lists the mods disappears. No window.
     #[cfg(windows)]
     if std::env::args().any(|arg| arg == "--remove-all-mods") {
         if let Some(base) = std::env::var_os("LOCALAPPDATA") {
@@ -830,8 +827,8 @@ pub fn run() {
         return;
     }
     tauri::Builder::default()
-        // En premier : un lien `nxm://` ouvert pendant que Modalia tourne
-        // relance l'appli, qui passe le lien à la fenêtre déjà ouverte.
+        // First: an `nxm://` link opened while Modalia runs starts the app
+        // again, which hands the link to the window already open.
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
             if let Some(window) = app.get_webview_window("main") {
                 let _ = window.unminimize();

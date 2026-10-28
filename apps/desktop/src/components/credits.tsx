@@ -9,8 +9,8 @@ const LINK =
 	"flex cursor-pointer items-center rounded-full text-fg-faint transition-colors hover:text-fg-muted focus-visible:text-fg-muted";
 
 /**
- * En bas à gauche de toutes les pages, discret : le code, le Discord,
- * l'auteur. L'intro (z-60) le couvre au lancement.
+ * Bottom left of every page, discreet: the code, the Discord, the author.
+ * The intro (z-60) covers it at launch.
  */
 export function Credits({ className }: { className?: string }) {
 	return (

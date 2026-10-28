@@ -1,15 +1,15 @@
 import type { NextConfig } from "next";
 
-// Export statique servi par Tauri : pas de serveur, donc pas de server
-// actions, routes API, middleware ni optimisation d'images à la volée.
+// Static export served by Tauri: no server, so no server actions, API
+// routes, middleware or on-the-fly image optimization.
 const nextConfig: NextConfig = {
   output: "export",
   images: { unoptimized: true },
-  // `/game/` → `game/index.html` : servi tel quel par Tauri.
+  // `/game/` gives `game/index.html`: served as is by Tauri.
   trailingSlash: true,
   transpilePackages: ["@modalia/ui"],
   devIndicators: false,
-  // Pas d'AGENTS.md régénéré à chaque `next dev`.
+  // No AGENTS.md regenerated at each `next dev`.
   agentRules: false,
 };
 

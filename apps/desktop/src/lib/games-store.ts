@@ -1,13 +1,13 @@
 import { type GameScan, type SteamGame, listGames } from "@/lib/engine";
 
-// Un seul scan par session, partagé par l'accueil et l'écran du jeu.
+// A single scan per session, shared by the home screen and the game screen.
 let scan: Promise<GameScan> | null = null;
 
-/** Résultat du scan, lancé au premier appel. `fresh` relance un scan. */
+/** Scan result, started at the first call. `fresh` runs a new scan. */
 export function loadGames({ fresh = false } = {}): Promise<GameScan> {
 	if (!scan || fresh) {
 		scan = listGames();
-		// Un échec ne doit pas rester en cache : le prochain appel réessaie.
+		// A failure must not stay cached: the next call tries again.
 		scan.catch(() => {
 			scan = null;
 		});
@@ -15,7 +15,7 @@ export function loadGames({ fresh = false } = {}): Promise<GameScan> {
 	return scan;
 }
 
-/** Met à jour un jeu du scan en mémoire (ex. un réglage changé). */
+/** Updates a game of the in-memory scan (e.g. a changed setting). */
 export async function patchGame(appId: number, patch: Partial<SteamGame>) {
 	const { games } = await loadGames();
 	const game = games.find((g) => g.appId === appId);
@@ -27,8 +27,8 @@ export async function findGame(appId: number): Promise<SteamGame | null> {
 	return games.find((g) => g.appId === appId) ?? null;
 }
 
-// Jeux récents : simple confort local, perdu sans conséquence si le
-// stockage est indisponible.
+// Recent games: a simple local convenience, lost without consequence if
+// storage is unavailable.
 const RECENTS_KEY = "modalia.recentGames";
 const RECENTS_MAX = 8;
 
@@ -46,20 +46,20 @@ export function rememberGame(appId: number) {
 		const ids = [appId, ...recentGameIds().filter((id) => id !== appId)].slice(0, RECENTS_MAX);
 		localStorage.setItem(RECENTS_KEY, JSON.stringify(ids));
 	} catch {
-		// Stockage bloqué : on s'en passe.
+		// Storage blocked: do without.
 	}
 }
 
-/** Un jeu retiré d'Unalia quitte aussi les récents. */
+/** A game removed from Unalia also leaves the recent list. */
 export function forgetRecentGame(appId: number) {
 	try {
 		localStorage.setItem(RECENTS_KEY, JSON.stringify(recentGameIds().filter((id) => id !== appId)));
 	} catch {
-		// Stockage bloqué : on s'en passe.
+		// Storage blocked: do without.
 	}
 }
 
-/** Jeux triés avec les récents en tête, dans l'ordre d'utilisation. */
+/** Games sorted with the recent ones first, in order of use. */
 export function withRecentsFirst(games: SteamGame[]): SteamGame[] {
 	const recents = recentGameIds();
 	const rank = (g: SteamGame) => {

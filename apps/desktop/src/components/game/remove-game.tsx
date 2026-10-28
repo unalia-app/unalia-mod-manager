@@ -11,8 +11,8 @@ import { forgetRecentGame, loadGames } from "@/lib/games-store";
 import { forgetGameMods, useInstalled } from "@/lib/installs";
 
 /**
- * Retire un jeu ajouté à la main : ses mods quittent son dossier, puis il
- * disparaît d'Unalia. Le jeu lui-même reste installé.
+ * Removes a manually added game: its mods leave its folder, then it
+ * disappears from Unalia. The game itself stays installed.
  */
 export function RemoveGame({ game }: { game: SteamGame }) {
 	const router = useRouter();

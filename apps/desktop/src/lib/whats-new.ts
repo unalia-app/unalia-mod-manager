@@ -1,8 +1,8 @@
 /**
- * « What's new » après une mise à jour : juste avant d'installer, l'appli
- * garde la version et ses notes ; à la relance sur cette version, elles
- * s'affichent une fois. Simple confort local : perdu sans conséquence si
- * le stockage est indisponible.
+ * "What's new" after an update: right before installing, the app keeps the
+ * version and its notes; on restart on that version, they show once. A
+ * simple local convenience: lost without consequence if storage is
+ * unavailable.
  */
 
 const KEY = "unalia.whatsNew";
@@ -13,18 +13,18 @@ export function rememberWhatsNew(version: string, notes: string | null) {
 	try {
 		if (notes?.trim()) localStorage.setItem(KEY, JSON.stringify({ version, notes } satisfies Pending));
 	} catch {
-		// Stockage bloqué : on s'en passe.
+		// Storage blocked: do without.
 	}
 }
 
-/** Notes à montrer pour la version qui tourne, une seule fois. */
+/** Notes to show for the running version, only once. */
 export function takeWhatsNew(current: string): string | null {
 	try {
 		const raw = localStorage.getItem(KEY);
 		if (!raw) return null;
 		localStorage.removeItem(KEY);
 		const pending = JSON.parse(raw) as Partial<Pending>;
-		// Mise à jour qui n'est pas allée au bout : rien à annoncer.
+		// Update that didn't go through: nothing to announce.
 		return pending.version === current && typeof pending.notes === "string" ? pending.notes : null;
 	} catch {
 		return null;

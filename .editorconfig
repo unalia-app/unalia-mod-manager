@@ -10,6 +10,6 @@ indent_size = 2
 [*.rs]
 indent_size = 4
 
-# Comme Unalia (Biome) : tabulations pour le code front.
+# Same as Unalia (Biome): tabs for the front-end code.
 [*.{ts,tsx,js,mjs,css}]
 indent_style = tab

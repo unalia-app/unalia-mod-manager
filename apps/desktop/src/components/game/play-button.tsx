@@ -7,8 +7,8 @@ import { cancelStarting } from "@/lib/engine";
 import { play, useGameStatus } from "@/lib/game-status";
 
 /**
- * « Play » (SPEC §3.6) : lance le jeu avec ses mods actifs. `compact` : la
- * version de l'en-tête, toujours à portée pendant le défilement.
+ * "Play": launches the game with its enabled mods. `compact`: the header
+ * version, always at hand while scrolling.
  */
 export function PlayButton({ appId, compact = false }: { appId: number; compact?: boolean }) {
 	const status = useGameStatus(appId);
@@ -30,8 +30,8 @@ export function PlayButton({ appId, compact = false }: { appId: number; compact?
 			</div>
 		);
 	}
-	// En démarrage (ou launcher ouvert) : au survol, de quoi arrêter
-	// d'attendre si le lancement a été abandonné.
+	// Starting (or launcher open): on hover, a way to stop waiting if the
+	// launch was abandoned.
 	if (status?.starting) {
 		return (
 			<Button

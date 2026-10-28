@@ -9,11 +9,11 @@ import { patchGame } from "@/lib/games-store";
 import { recheckUpdates } from "@/lib/installs";
 
 /**
- * Version du jeu, pour qui est revenu à une ancienne (Steam, GOG) : les
- * mods s'installent alors dans leur version publiée avant la suivante, et
- * les frameworks dans leur release d'alors.
+ * Game version, for people who went back to an old one (Steam, GOG): mods
+ * then install in their version published before the next one, and
+ * frameworks in their release from back then.
  */
-/** Valeur de la plus récente version dans le menu (pas de réglage). */
+/** Value of the latest version in the menu (no setting). */
 const LATEST = "latest";
 
 export function GameVersion({ game }: { game: SteamGame }) {

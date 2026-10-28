@@ -12,8 +12,8 @@ import { cancel, clearError, install, overallProgress, useActiveInstall, useInst
 import { openExternal } from "@/lib/open";
 
 /**
- * Un clic : le bouton devient lui-même la barre de progression
- * (téléchargement → installation), puis « Installed ». Jamais de popup.
+ * One click: the button itself becomes the progress bar (download, then
+ * install), then "Installed". Never a popup.
  */
 export function InstallButton({
 	appId,
@@ -26,7 +26,7 @@ export function InstallButton({
 	modId: string;
 	modName: string;
 	dependencyCount: number;
-	/** Précision sous le bouton (ex. confirmation sur Nexus pour un compte gratuit). */
+	/** Detail under the button (e.g. confirmation on Nexus for a free account). */
 	hint?: string;
 }) {
 	const installed = useInstalled(appId)?.find((m) => m.id === modId);
@@ -34,7 +34,7 @@ export function InstallButton({
 	const pending = usePendingOp(appId, modId);
 	const update = useModUpdate(appId, modId);
 
-	// Le résultat (réussite ou erreur) arrive par le store, que le bouton suit.
+	// The result (success or error) arrives through the store, which the button follows.
 	const start = () => void install(appId, modId, modName);
 
 	if (active?.status === "queued" || active?.status === "running") {
@@ -73,8 +73,8 @@ export function InstallButton({
 		);
 	}
 
-	// Compte Nexus gratuit : Nexus veut un clic sur son site. Le lien
-	// `nxm://` revient à Modalia, qui enchaîne tout seul.
+	// Free Nexus account: Nexus wants a click on its site. The `nxm://`
+	// link comes back to Modalia, which carries on by itself.
 	if (active?.status === "website") {
 		return (
 			<div className="flex max-w-64 flex-col items-end gap-2 text-right">
@@ -100,7 +100,7 @@ export function InstallButton({
 		);
 	}
 
-	// Le jeu tourne : l'installation attend sa fermeture (SPEC §3.6).
+	// The game runs: the install waits for it to close.
 	if (pending?.type === "install") {
 		return (
 			<div className="flex flex-col items-end gap-2">
@@ -121,7 +121,7 @@ export function InstallButton({
 		);
 	}
 
-	// Pas de mise à jour automatique (SPEC §3.5) : on propose, on n'impose pas.
+	// No automatic update: we offer, we don't impose.
 	if (installed && update && pending?.type !== "uninstall") {
 		return (
 			<div className="flex flex-col items-end gap-2">
@@ -133,7 +133,7 @@ export function InstallButton({
 		);
 	}
 
-	// Le jeu tourne : le retrait attend sa fermeture.
+	// The game runs: the removal waits for it to close.
 	if (pending?.type === "uninstall") {
 		return (
 			<div className="flex flex-col items-end gap-2">
@@ -197,7 +197,7 @@ export function InstallButton({
 	);
 }
 
-/** « Installed », qui devient « Uninstall » au survol (retrait avec Undo). */
+/** "Installed", which becomes "Uninstall" on hover (removal with Undo). */
 function InstalledButton({
 	appId,
 	modId,
@@ -229,8 +229,8 @@ function InstalledButton({
 				onClick={() => void uninstall()}
 				className="group/installed hover:border-danger/30 hover:bg-danger/10 hover:text-danger focus-visible:border-danger/30 focus-visible:bg-danger/10 focus-visible:text-danger"
 			>
-				{/* Les deux libellés dans la même case : largeur fixe, rien ne bouge
-				    au survol. */}
+				{/* Both labels in the same cell: fixed width, nothing moves on
+				    hover. */}
 				<span className="grid">
 					<span className="col-start-1 row-start-1 flex items-center justify-center gap-2.5 group-hover/installed:invisible group-focus-visible/installed:invisible">
 						<Check className="size-4 text-success" />
@@ -250,7 +250,7 @@ function InstalledButton({
 	);
 }
 
-/** Le pourcentage est global, comme la barre ; le paquet en cours est dessous. */
+/** The percentage is global, like the bar; the current package is below. */
 export function progressLabel(progress: InstallProgress | null, value: number): string {
 	if (!progress) return "Waiting…";
 	if (progress.stage === "resolving") return "Preparing…";
@@ -261,8 +261,8 @@ export function progressLabel(progress: InstallProgress | null, value: number): 
 }
 
 /**
- * Paquet en cours, et pour les gros fichiers la quantité, la vitesse et le
- * temps restant : « 3.2 GB of 10 GB · 24 MB/s · 5 min left ».
+ * Current package, and for big files the amount, the speed and the time
+ * left: "3.2 GB of 10 GB · 24 MB/s · 5 min left".
  */
 export function progressDetail(progress: InstallProgress | null, speed?: number): string {
 	if (!progress || progress.stage === "resolving") return "Checking dependencies";
@@ -280,7 +280,7 @@ export function progressDetail(progress: InstallProgress | null, speed?: number)
 	return which;
 }
 
-/** Badge des cartes : installé / en cours. */
+/** Card badge: installed / in progress. */
 export function InstallStateBadge({ appId, modId, className }: { appId: number; modId: string; className?: string }) {
 	const installed = useInstalled(appId)?.some((m) => m.id === modId);
 	const active = useActiveInstall(appId, modId);

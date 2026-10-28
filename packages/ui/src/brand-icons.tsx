@@ -1,7 +1,7 @@
 import type { SVGProps } from "react";
 
-// Logos de marque (Simple Icons, CC0) : Lucide n'en a plus. Une couleur,
-// celle du texte, comme les icônes Lucide.
+// Brand logos (Simple Icons, CC0): Lucide doesn't ship them anymore. One
+// color, the text's, like Lucide icons.
 
 export function GitHubIcon(props: SVGProps<SVGSVGElement>) {
 	return (

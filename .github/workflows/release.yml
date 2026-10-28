@@ -1,21 +1,21 @@
-# Release : un tag `vX.Y.Z` poussé construit l'installeur Windows et publie
-# la release GitHub. Rien ne tourne sur les autres pushes (pas de CI de
-# tests pour l'instant, tests lancés en local).
+# Release: a pushed `vX.Y.Z` tag builds the Windows installer and publishes
+# the GitHub release. Nothing runs on other pushes (no test CI for now,
+# tests run locally).
 #
-# Avant de poser le tag :
-#   1. même version dans `apps/desktop/src-tauri/tauri.conf.json`,
-#      `apps/desktop/src-tauri/Cargo.toml` et `apps/desktop/package.json` ;
-#   2. section `## [X.Y.Z]` de `CHANGELOG.md` remplie (les notes de version
-#      de la release et de l'updater en viennent) ;
-#   3. `pnpm licenses:update`, et commit si `THIRD_PARTY_LICENSES.md` change.
+# Before setting the tag:
+#   1. same version in `apps/desktop/src-tauri/tauri.conf.json`,
+#      `apps/desktop/src-tauri/Cargo.toml` and `apps/desktop/package.json`;
+#   2. `## [X.Y.Z]` section of `CHANGELOG.md` filled in (the release and
+#      updater notes come from it);
+#   3. `pnpm licenses:update`, and commit if `THIRD_PARTY_LICENSES.md` changes.
 #
-# Réglages du dépôt GitHub, une fois :
-#   - Settings > Environments > `release` : « Deployment branches and tags »
-#     limité aux tags `v*`, avec les secrets `TAURI_SIGNING_PRIVATE_KEY`
-#     (contenu du fichier `.key`) et `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`.
-#     Rangés dans l'environnement, ils ne sont donnés qu'aux jobs des tags ;
-#   - Settings > Rules > Rulesets : tags `v*` protégés (création, suppression
-#     et modification réservées aux mainteneurs).
+# GitHub repo settings, once:
+#   - Settings > Environments > `release`: "Deployment branches and tags"
+#     limited to `v*` tags, with the secrets `TAURI_SIGNING_PRIVATE_KEY`
+#     (content of the `.key` file) and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`.
+#     Kept in the environment, they are only given to tag jobs;
+#   - Settings > Rules > Rulesets: `v*` tags protected (creation, deletion
+#     and update reserved to maintainers).
 
 name: Release
 
@@ -28,8 +28,8 @@ permissions:
 
 jobs:
   release:
-    # Runner Windows de GitHub, build complet sans cache : une release se
-    # construit de zéro.
+    # GitHub Windows runner, full build without cache: a release is built
+    # from scratch.
     runs-on: windows-latest
     timeout-minutes: 90
     environment: release
@@ -41,36 +41,36 @@ jobs:
         shell: pwsh
     steps:
       - uses: actions/checkout@v4
-      # Version de pnpm lue dans `packageManager` (package.json).
+      # pnpm version read from `packageManager` (package.json).
       - uses: pnpm/action-setup@v4
       - uses: actions/setup-node@v4
         with:
           node-version: lts/*
       - uses: dtolnay/rust-toolchain@stable
 
-      - name: Vérifier la version
+      - name: Check the version
         run: |
           $version = (Get-Content apps/desktop/src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version
-          if ("v$version" -ne $env:GITHUB_REF_NAME) { throw "tag $env:GITHUB_REF_NAME, mais tauri.conf.json est en $version" }
+          if ("v$version" -ne $env:GITHUB_REF_NAME) { throw "tag $env:GITHUB_REF_NAME, but tauri.conf.json is at $version" }
           "VERSION=$version" >> $env:GITHUB_ENV
 
       - run: pnpm install --frozen-lockfile
 
-      # NSIS seulement : l'updater et le désinstalleur (hooks) reposent dessus.
-      # Sans la clé privée, pas de `.sig` et `updater-manifest.mjs` échoue.
-      # Signature de l'exécutable (SignPath) : à brancher ici par
-      # `bundle.windows.signCommand`, pour signer avant le `.sig` de l'updater.
+      # NSIS only: the updater and the uninstaller (hooks) rely on it.
+      # Without the private key, no `.sig` and `updater-manifest.mjs` fails.
+      # Executable signing (SignPath): to wire here through
+      # `bundle.windows.signCommand`, to sign before the updater's `.sig`.
       - name: Build
         env:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         run: pnpm --filter @modalia/desktop tauri build --bundles nsis
 
-      # Installeur sous un nom fixe, sans espace : le site pointe vers
-      # /releases/latest/download/unalia-mod-manager-setup.exe, et l'updater
-      # lit `latest.json` à la même adresse (`tauri.conf.json`).
-      # Pas de `--prerelease` : GitHub l'exclurait de /releases/latest.
-      - name: Publier la release
+      # Installer under a fixed name, without spaces: the site points to
+      # /releases/latest/download/unalia-mod-manager-setup.exe, and the updater
+      # reads `latest.json` at the same URL (`tauri.conf.json`).
+      # No `--prerelease`: GitHub would leave it out of /releases/latest.
+      - name: Publish the release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |

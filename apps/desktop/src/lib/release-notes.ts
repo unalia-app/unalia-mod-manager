@@ -1,14 +1,14 @@
 /**
- * Notes de version : la section de `CHANGELOG.md` publiée avec la release
- * (`notes` de `latest.json`), au format Keep a Changelog. Un texte d'intro,
- * puis des sections `### Added`, `### Changed`, `### Fixed`… faites de
- * puces.
+ * Release notes: the `CHANGELOG.md` section published with the release
+ * (`notes` of `latest.json`), in the Keep a Changelog format. An intro
+ * text, then `### Added`, `### Changed`, `### Fixed`… sections made of
+ * bullets.
  */
 
 export type ChangeKind = "new" | "improved" | "fixed" | "removed";
 
 export type ReleaseNotes = {
-	/** Paragraphes avant la première section. */
+	/** Paragraphs before the first section. */
 	intro: string[];
 	changes: { kind: ChangeKind; text: string }[];
 };
@@ -39,7 +39,7 @@ export function parseReleaseNotes(markdown: string): ReleaseNotes {
 			continue;
 		}
 		const last = notes.changes.at(-1);
-		// Puce sur plusieurs lignes : la suite est indentée.
+		// Bullet over several lines: the rest is indented.
 		if (last && raw.startsWith(" ")) last.text += ` ${line}`;
 		else if (kind === null) notes.intro.push(line);
 	}

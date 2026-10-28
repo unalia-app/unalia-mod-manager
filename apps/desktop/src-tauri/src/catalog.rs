@@ -1,6 +1,6 @@
-//! Catalogue des jeux moddables (schéma Thunderstore, profils écrits à la
-//! main) et commandes de mods. Chaque commande s'adresse à la source du jeu :
-//! Thunderstore, ou Nexus Mods pour les communautés `nexus:<domaine>`.
+//! Catalog of moddable games (Thunderstore schema, hand-written profiles)
+//! and mod commands. Each command goes to the game's source: Thunderstore,
+//! or Nexus Mods for the `nexus:<domain>` communities.
 
 use std::path::Path;
 use std::sync::{Arc, Mutex as SyncMutex};
@@ -17,7 +17,7 @@ use serde::Serialize;
 use tauri::async_runtime::Mutex;
 use tauri::{AppHandle, Manager, State};
 
-/// Le schéma bouge peu : une mise à jour par jour suffit.
+/// The schema rarely moves: one update a day is enough.
 const SCHEMA_MAX_AGE: Duration = Duration::from_secs(24 * 3600);
 
 pub struct Catalog {
@@ -26,12 +26,12 @@ pub struct Catalog {
     pub(crate) nexus: Nexus,
     pub(crate) github: GitHub,
     games: Mutex<Option<Arc<GameCatalog>>>,
-    /// Jeux reconnus automatiquement : réponses de Nexus, gardées sur disque.
+    /// Automatically recognized games: Nexus answers, kept on disk.
     nexus_games: SyncMutex<NexusGames>,
 }
 
 impl Catalog {
-    /// `cache_dir` : où garder les réponses de GitHub (limite horaire).
+    /// `cache_dir`: where to keep GitHub answers (hourly limit).
     pub fn new(cache_dir: &std::path::Path) -> Self {
         let client = mod_engine::http_client();
         Self {
@@ -46,9 +46,9 @@ impl Catalog {
         }
     }
 
-    /// Jeux Nexus de ces noms (`games::auto`) : la réponse gardée si elle
-    /// est encore valable, sinon une requête pour tous les autres. Nexus
-    /// injoignable : la dernière réponse connue.
+    /// Nexus games with these names (`games::auto`): the kept answer if it
+    /// is still valid, else one request for all the others. Nexus
+    /// unreachable: the last known answer.
     pub async fn find_nexus_games(&self, names: &[String]) -> Vec<Option<FoundGame>> {
         let now = SystemTime::now()
             .duration_since(UNIX_EPOCH)
@@ -86,17 +86,16 @@ impl Catalog {
             .collect()
     }
 
-    /// Profil automatique d'un jeu ajouté à la main (`auto-<domaine>`),
-    /// d'après le jeu Nexus déjà trouvé.
+    /// Automatic profile of a manually added game (`auto-<domain>`), from
+    /// the Nexus game already found.
     pub fn auto_profile(&self, profile_id: &str, game_dir: &Path) -> Option<GameProfile> {
         let domain = auto::domain_of(profile_id)?;
         let found = self.nexus_games.lock().unwrap().by_domain(domain).cloned()?;
         auto::unreal_profile(&found, game_dir)
     }
 
-    /// Catalogue chargé une fois par session (cache disque, sinon réseau).
-    /// `None` si ni l'un ni l'autre n'est disponible : l'appli continue avec
-    /// la détection par moteur.
+    /// Catalog loaded once per session (disk cache, else network). `None`
+    /// if neither is available: the app goes on with engine detection.
     pub async fn games(&self, app: &AppHandle) -> Option<Arc<GameCatalog>> {
         let mut games = self.games.lock().await;
         if games.is_none() {
@@ -114,9 +113,9 @@ impl Catalog {
     }
 }
 
-/// Mods d'un jeu pour la grille Découvrir. Les loaders et les gestionnaires
-/// de mods sont retirés : Modalia installe les premiers tout seul et
-/// remplace les seconds.
+/// A game's mods for the Discover grid. Loaders and mod managers are
+/// removed: Modalia installs the former by itself and replaces the
+/// latter.
 #[tauri::command]
 pub async fn search_mods(
     app: AppHandle,
@@ -153,16 +152,16 @@ pub async fn search_mods(
     Ok(page)
 }
 
-/// Fiche d'un mod pour la page de détail.
+/// A mod's page for the detail view.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ModDetails {
     #[serde(flatten)]
     r#mod: Mod,
-    /// Dépendances de la dernière version, prêtes à afficher.
+    /// Dependencies of the latest version, ready to display.
     dependencies: Vec<DependencyInfo>,
-    /// S'installe sans passer par le site de la source (tout Thunderstore ;
-    /// sur Nexus, les frameworks, pris sur GitHub).
+    /// Installs without going through the source's site (all of
+    /// Thunderstore; on Nexus, the frameworks, taken from GitHub).
     direct: bool,
 }
 
@@ -173,10 +172,10 @@ pub struct DependencyInfo {
     name: String,
     author: String,
     min_version: String,
-    /// Loader du jeu (ex. BepInEx) : installé à part, à la racine du jeu.
+    /// The game's loader (e.g. BepInEx): installed apart, at the game root.
     loader: bool,
-    /// Installée automatiquement avec le mod. Sinon (prérequis Nexus pour
-    /// un compte gratuit), l'utilisateur doit l'installer lui-même.
+    /// Installed automatically with the mod. Otherwise (Nexus requirement
+    /// for a free account), the user has to install it themselves.
     automatic: bool,
 }
 
@@ -221,9 +220,9 @@ pub async fn get_mod(
     })
 }
 
-/// Fiche d'un mod Nexus : ses prérequis viennent avec leur nom. Les
-/// frameworks du jeu s'installent tout seuls (depuis GitHub), les autres
-/// prérequis non (compte gratuit).
+/// A Nexus mod's page: its requirements come with their names. The game's
+/// frameworks install by themselves (from GitHub), the other requirements
+/// don't (free account).
 async fn nexus_mod(
     app: &AppHandle,
     catalog: &Catalog,
@@ -267,7 +266,7 @@ async fn nexus_mod(
     })
 }
 
-/// Description en Markdown brut : l'interface la nettoie avant affichage.
+/// Description in raw Markdown: the UI sanitizes it before display.
 #[tauri::command]
 pub async fn mod_description(
     catalog: State<'_, Catalog>,

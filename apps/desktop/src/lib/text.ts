@@ -1,4 +1,4 @@
-/** Recherche tolérante : casse, accents et ponctuation ignorés. */
+/** Lenient search: case, accents and punctuation ignored. */
 export function normalize(text: string): string {
 	return text
 		.normalize("NFD")

@@ -10,10 +10,10 @@ export type SegmentedItem<T extends string> = {
 };
 
 /**
- * Choix exclusif avec un indicateur qui glisse vers l'option active.
- * - `tabs` : onglets d'écran, soulignement à l'accent du jeu ;
- * - `pills` : petit sélecteur (tri, filtres), pastille en verre, à la hauteur
- *   d'un `SearchField` compact (h-10) pour s'aligner dans une barre d'outils.
+ * Exclusive choice with an indicator that slides to the active option.
+ * - `tabs`: screen tabs, underline in the game's accent;
+ * - `pills`: small selector (sort, filters), glass pill, at the height of a
+ *   compact `SearchField` (h-10) to line up in a toolbar.
  */
 export function Segmented<T extends string>({
 	items,
@@ -27,7 +27,7 @@ export function Segmented<T extends string>({
 	value: T;
 	onChange: (value: T) => void;
 	variant?: "tabs" | "pills";
-	/** Nom accessible du groupe. */
+	/** Accessible name of the group. */
 	label: string;
 	className?: string;
 }) {
@@ -39,7 +39,7 @@ export function Segmented<T extends string>({
 		if (!el) return;
 		const measure = () => setIndicator({ x: el.offsetLeft, width: el.offsetWidth });
 		measure();
-		// Les libellés changent de largeur quand la police finit de charger.
+		// Labels change width when the font finishes loading.
 		const observer = new ResizeObserver(measure);
 		observer.observe(el);
 		return () => observer.disconnect();
@@ -60,7 +60,7 @@ export function Segmented<T extends string>({
 			{indicator && (
 				<span
 					aria-hidden
-					// Seul élément animé en largeur : petit, et la largeur suit le libellé.
+					// Only element animated in width: small, and the width follows the label.
 					style={{ transform: `translateX(${indicator.x}px)`, width: indicator.width }}
 					className={cn(
 						"absolute left-0 transition-[transform,width] duration-300 ease-out",

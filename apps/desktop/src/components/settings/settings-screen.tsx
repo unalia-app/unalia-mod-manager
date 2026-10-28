@@ -20,7 +20,7 @@ const sections = [
 
 type Section = (typeof sections)[number]["id"];
 
-/** Réglages (repris de la page Settings d'Unalia) : comptes liés, affichage, stockage, support. */
+/** Settings (taken from Unalia's Settings page): linked accounts, display, storage, support. */
 export function SettingsScreen() {
 	const router = useRouter();
 	const [section, setSection] = useState<Section>("connections");

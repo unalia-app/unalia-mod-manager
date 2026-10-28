@@ -4,10 +4,10 @@ import { currentMonitor } from "@tauri-apps/api/window";
 import { useSyncExternalStore } from "react";
 
 /**
- * Taille de l'interface : comme le zoom d'un navigateur, tout grandit
- * (textes, marges, icônes). `auto` part de la définition de l'écran : 100 %
- * jusqu'au 2K, comme Unalia dans un navigateur ; agrandi seulement sur un
- * écran 4K réglé à 100 % dans Windows, où tout serait minuscule.
+ * Interface size: like a browser zoom, everything grows (text, spacing,
+ * icons). `auto` starts from the screen resolution: 100% up to 2K, like
+ * Unalia in a browser; enlarged only on a 4K screen set to 100% in
+ * Windows, where everything would be tiny.
  */
 export type InterfaceSize = "auto" | 1 | 1.1 | 1.25 | 1.5;
 
@@ -16,10 +16,10 @@ export const SIZES: InterfaceSize[] = ["auto", 1, 1.1, 1.25, 1.5];
 const KEY = "modalia.interfaceSize";
 
 /**
- * Largeur de l'écran de la fenêtre, en pixels logiques. Lue auprès de Tauri :
- * sous Windows, le `screen` de la WebView reste figé sur l'écran de création
- * de la fenêtre (1920 sur un 2K, une fois la fenêtre passée d'un écran à
- * l'autre).
+ * Width of the window's screen, in logical pixels. Read from Tauri: on
+ * Windows, the WebView's `screen` stays stuck on the screen where the
+ * window was created (1920 on a 2K, once the window moved from one screen
+ * to another).
  */
 let monitorWidth: number | null = null;
 
@@ -32,7 +32,7 @@ async function readMonitorWidth(): Promise<number | null> {
 	}
 }
 
-/** Facteur choisi pour cet écran. Sa largeur ne dépend pas du zoom de la page. */
+/** Factor picked for this screen. Its width doesn't depend on the page zoom. */
 export function autoScale(
 	screenWidth = monitorWidth ?? (typeof window === "undefined" ? 1920 : window.screen.width),
 ): number {
@@ -61,7 +61,7 @@ export function scaleOf(size: InterfaceSize): number {
 	return size === "auto" ? autoScale() : size;
 }
 
-/** Applique la taille à la fenêtre (zoom de la WebView), pour l'écran où elle se trouve. */
+/** Applies the size to the window (WebView zoom), for the screen it is on. */
 export async function applyInterfaceSize(size = interfaceSize()) {
 	if (!isTauri()) return;
 	monitorWidth = (await readMonitorWidth()) ?? monitorWidth;
@@ -73,7 +73,7 @@ export function setInterfaceSize(size: InterfaceSize) {
 	try {
 		localStorage.setItem(KEY, String(size));
 	} catch {
-		// Stockage bloqué : le choix vaut pour cette session.
+		// Storage blocked: the choice holds for this session.
 	}
 	for (const listener of listeners) listener();
 	void applyInterfaceSize(size);

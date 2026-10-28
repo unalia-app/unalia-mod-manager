@@ -8,7 +8,7 @@ import { toast } from "@/components/toaster";
 import { type ForgottenGame, forgetGame, forgottenGames, splitError } from "@/lib/engine";
 import { bytes } from "@/lib/format";
 
-/** Stockage : les mods des jeux désinstallés, à libérer. */
+/** Storage: the mods of uninstalled games, to free. */
 export function Storage() {
 	const [games, setGames] = useState<ForgottenGame[] | null>(null);
 	const [busy, setBusy] = useState<number | null>(null);

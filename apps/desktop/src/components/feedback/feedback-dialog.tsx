@@ -22,9 +22,9 @@ const TYPES: { value: FeedbackType; label: string; icon: ReactNode }[] = [
 ];
 
 /**
- * Fenêtre Help & Feedback, reprise d'Unalia : type de retour, message, puis
- * remerciement. Dans un portail : `fixed` ne doit dépendre d'aucun parent
- * transformé (DESIGN.md).
+ * Help & Feedback dialog, taken from Unalia: feedback type, message, then
+ * thanks. In a portal: `fixed` must not depend on any transformed parent
+ * (DESIGN.md).
  */
 export function FeedbackDialog() {
 	const open = useFeedbackOpen();
@@ -34,7 +34,7 @@ export function FeedbackDialog() {
 	const [sending, setSending] = useState(false);
 	const [sent, setSent] = useState(false);
 
-	// Échap ferme ; la page derrière ne défile pas.
+	// Escape closes; the page behind doesn't scroll.
 	useEffect(() => {
 		if (!open) return;
 		const onKey = (e: KeyboardEvent) => e.key === "Escape" && closeFeedback();
@@ -47,7 +47,7 @@ export function FeedbackDialog() {
 		};
 	}, [open]);
 
-	// Remis à zéro après la fermeture (le temps du fondu).
+	// Reset after closing (the time of the fade).
 	useEffect(() => {
 		if (open) return;
 		const timer = window.setTimeout(() => {
@@ -149,7 +149,7 @@ export function FeedbackDialog() {
 									maxLength={MESSAGE_MAX}
 									disabled={sending}
 									rows={5}
-									// La fenêtre s'ouvre pour écrire : le curseur y est déjà.
+									// The dialog opens to write: the cursor is already there.
 									autoFocus
 									className="w-full resize-none bg-transparent text-sm text-fg/80 outline-none placeholder:text-white/22"
 								/>

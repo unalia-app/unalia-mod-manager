@@ -12,8 +12,8 @@ import { gameHref, rememberGame } from "@/lib/games-store";
 import { useInstalled, useUpdates } from "@/lib/installs";
 
 /**
- * Dernier jeu moddé, en grand : sa bannière, ses mods, et de quoi jouer ou
- * reprendre sans repasser par la liste.
+ * Last modded game, large: its banner, its mods, and a way to play or pick
+ * up without going through the list.
  */
 export function ContinueCard({ game }: { game: SteamGame }) {
 	const accent = useAccent(game.appId);
@@ -38,9 +38,9 @@ export function ContinueCard({ game }: { game: SteamGame }) {
 					onLoad={() => setHero("loaded")}
 					onError={() => setHero("missing")}
 					className={cn(
-						// Fondu vers la gauche par un masque plutôt qu'un calque sombre
-						// par-dessus : deux calques découpés sur l'arrondi laissaient
-						// un liseré de l'image dans les coins.
+						// Fade to the left with a mask rather than a dark layer on
+						// top: two layers clipped to the rounding left a thin line
+						// of the image in the corners.
 						"absolute inset-0 -z-10 size-full object-cover transition-opacity duration-700 [mask-image:linear-gradient(to_right,transparent,rgb(0_0_0/0.2)_50%,rgb(0_0_0/0.9))]",
 						hero === "loaded" ? "opacity-100" : "opacity-0",
 					)}

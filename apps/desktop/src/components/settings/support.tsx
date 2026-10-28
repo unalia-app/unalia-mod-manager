@@ -11,7 +11,7 @@ import { toast } from "@/components/toaster";
 import { openLogsFolder, splitError } from "@/lib/engine";
 import { buildReport } from "@/lib/report";
 
-/** Signaler un problème : un rapport prêt à coller, et les logs à portée. */
+/** Report a problem: a report ready to paste, and the logs at hand. */
 export function Support() {
 	const [report, setReport] = useState<string | null>(null);
 	const [copied, setCopied] = useState(false);
@@ -35,7 +35,7 @@ export function Support() {
 
 	const copy = async () => {
 		try {
-			// Rapport frais : le journal a pu bouger depuis l'ouverture.
+			// Fresh report: the log may have moved since opening.
 			const text = await buildReport();
 			setReport(text);
 			await navigator.clipboard.writeText(text);

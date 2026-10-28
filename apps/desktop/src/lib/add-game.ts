@@ -5,8 +5,8 @@ import { addManualGame } from "@/lib/engine";
 import { loadGames, rememberGame } from "@/lib/games-store";
 
 /**
- * Demande le dossier d'un jeu, le fait reconnaître par le moteur et
- * rafraîchit la liste des jeux. `null` si l'utilisateur a annulé.
+ * Asks for a game's folder, has the engine recognize it and refreshes the
+ * game list. `null` if the user canceled.
  */
 export async function pickAndAddGame(): Promise<number | null> {
 	if (!isTauri()) return null;

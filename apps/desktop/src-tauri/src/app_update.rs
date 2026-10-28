@@ -1,7 +1,7 @@
-//! Mises à jour de l'appli (updater Tauri). Cherchées au démarrage, jamais
-//! installées sans l'accord de l'utilisateur. Le paquet téléchargé est
-//! vérifié avec la clé publique de `tauri.conf.json` avant d'être lancé : un
-//! fichier modifié en route ou sur le serveur est refusé.
+//! App updates (Tauri updater). Checked at startup, never installed
+//! without the user's consent. The downloaded package is verified with the
+//! public key of `tauri.conf.json` before it runs: a file modified on the
+//! way or on the server is refused.
 
 use std::sync::Mutex;
 
@@ -11,8 +11,8 @@ use tauri_plugin_updater::{Update, UpdaterExt};
 
 use crate::mods::Mods;
 
-/// Dernière mise à jour trouvée : l'installation reprend celle-ci, sans
-/// redemander au serveur.
+/// Last update found: the install reuses this one, without asking the
+/// server again.
 #[derive(Default)]
 pub struct AppUpdate(Mutex<Option<Update>>);
 
@@ -20,7 +20,7 @@ pub struct AppUpdate(Mutex<Option<Update>>);
 #[serde(rename_all = "camelCase")]
 pub struct AvailableUpdate {
     version: String,
-    /// Notes de version publiées avec la release.
+    /// Release notes published with the release.
     notes: Option<String>,
 }
 
@@ -31,7 +31,7 @@ struct UpdateProgress {
     total: Option<u64>,
 }
 
-/// Une version plus récente, ou `None` : l'appli est à jour.
+/// A newer version, or `None`: the app is up to date.
 #[tauri::command]
 pub async fn check_app_update(
     app: AppHandle,
@@ -54,10 +54,10 @@ pub async fn check_app_update(
     Ok(available)
 }
 
-/// Télécharge et installe la mise à jour trouvée, puis relance l'appli.
-/// Sous Windows, l'installeur ferme l'appli lui-même. Refusé tant qu'un mod
-/// s'installe ou qu'un jeu tourne : ses changements en attente seraient
-/// appliqués trop tard.
+/// Downloads and installs the update found, then restarts the app. On
+/// Windows, the installer closes the app itself. Refused while a mod is
+/// installing or a game is running: its pending changes would be applied
+/// too late.
 #[tauri::command]
 pub async fn install_app_update(
     app: AppHandle,
@@ -85,11 +85,11 @@ pub async fn install_app_update(
         )
         .await
         .map_err(failed("couldn't install the update"))?;
-    // macOS et Linux : la nouvelle version est en place, il faut relancer.
+    // macOS and Linux: the new version is in place, a restart is needed.
     app.restart();
 }
 
-/// Erreur du updater : un message lisible, la cause technique en dessous.
+/// Updater error: a readable message, the technical cause below.
 fn failed(message: &'static str) -> impl Fn(tauri_plugin_updater::Error) -> String {
     move |error| crate::support::logged(format!("{message}\n{error}"))
 }

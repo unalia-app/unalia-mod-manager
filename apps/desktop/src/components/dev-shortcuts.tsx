@@ -3,10 +3,10 @@
 import { useEffect } from "react";
 
 /**
- * Raccourcis de développement : ⌘R / Ctrl+R recharge la fenêtre (et rejoue
- * l'intro), Ctrl+Maj+U et Ctrl+Maj+N montrent les fenêtres de mise à jour et
- * de « What's new ». Absents des builds de production, où un rechargement
- * accidentel ferait perdre l'état de l'appli.
+ * Development shortcuts: ⌘R / Ctrl+R reloads the window (and replays the
+ * intro), Ctrl+Shift+U and Ctrl+Shift+N show the update and "What's new"
+ * dialogs. Missing from production builds, where an accidental reload
+ * would lose the app state.
  */
 export function DevShortcuts() {
 	useEffect(() => {

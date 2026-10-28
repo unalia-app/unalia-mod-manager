@@ -12,7 +12,7 @@ const KIND: Record<ChangeKind, { label: string; className: string }> = {
 	removed: { label: "Removed", className: "border-danger/20 bg-danger/10 text-danger" },
 };
 
-/** Notes de version en liste, chaque changement avec son type en badge. */
+/** Release notes as a list, each change with its type as a badge. */
 export function ReleaseNotesList({ notes, className }: { notes: string; className?: string }) {
 	const { intro, changes } = useMemo(() => parseReleaseNotes(notes), [notes]);
 
@@ -46,7 +46,7 @@ export function ReleaseNotesList({ notes, className }: { notes: string; classNam
 	);
 }
 
-/** Texte des notes : seuls `code` et **gras** sont mis en forme. */
+/** Notes text: only `code` and **bold** are formatted. */
 function Inline({ text }: { text: string }) {
 	return text.split(/(`[^`]+`|\*\*[^*]+\*\*)/).map((part, i) => (
 		<Fragment key={i}>

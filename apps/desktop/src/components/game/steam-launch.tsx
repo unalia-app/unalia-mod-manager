@@ -8,9 +8,9 @@ import { type SteamGame, addToSteam, setLaunchViaSteam, splitError } from "@/lib
 import { patchGame } from "@/lib/games-store";
 
 /**
- * Lancement par Steam d'un jeu ajouté à la main, pour avoir l'overlay de
- * Steam (compteur FPS, captures). Déjà ajouté à Steam : un interrupteur.
- * Sinon : Unalia l'ajoute, avec son nom et ses images.
+ * Launch through Steam for a manually added game, to get the Steam overlay
+ * (FPS counter, screenshots). Already added to Steam: a switch. Otherwise:
+ * Unalia adds it, with its name and images.
  */
 export function SteamLaunch({ game }: { game: SteamGame }) {
 	const [shortcut, setShortcut] = useState(game.steamShortcut);

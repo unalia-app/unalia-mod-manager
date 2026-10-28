@@ -1,9 +1,8 @@
-//! Commandes d'installation et de lancement : brancher le moteur sur
-//! l'interface, avec la progression et l'état des jeux poussés par
-//! événements (SPEC §6.4).
+//! Install and launch commands: wire the engine to the UI, with progress
+//! and game state pushed through events.
 //!
-//! Pendant qu'un jeu tourne, toute modification de ses mods est mise en
-//! file et appliquée à sa fermeture (SPEC §3.6).
+//! While a game runs, any change to its mods is queued and applied when it
+//! closes.
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
@@ -28,42 +27,40 @@ use tauri_plugin_opener::OpenerExt;
 use crate::catalog::Catalog;
 use crate::{KnownGame, Library};
 
-/// Délai pendant lequel un jeu lancé est « en démarrage » avant d'apparaître
-/// dans les processus (Steam peut mettre un moment à le lancer).
+/// How long a launched game stays "starting" before it shows up among the
+/// processes (Steam can take a while to launch it).
 const STARTING_FOR: Duration = Duration::from_secs(60);
-/// Fréquence de la veille des processus.
+/// How often the process watch runs.
 const WATCH_EVERY: Duration = Duration::from_secs(2);
-/// Délai pendant lequel un retrait peut être annulé : le stockage du mod
-/// n'est libéré qu'après. Large devant le toast « Undo », qui se met en
-/// pause au survol.
+/// How long a removal can be undone: the mod's storage is only freed after.
+/// Much longer than the "Undo" toast, which pauses on hover.
 const UNDO_FOR: Duration = Duration::from_secs(120);
 
 pub struct Mods {
-    /// Une installation à la fois : elle garde la base pendant toute sa
-    /// durée, les suivantes attendent leur tour (file d'attente).
+    /// One install at a time: it holds the database for its whole duration,
+    /// the next ones wait their turn (queue).
     state: Mutex<ModState>,
     paths: Paths,
-    /// Mods tout juste désinstallés, gardés pour « Undo » avec l'instant du
-    /// retrait. Côté moteur : la webview ne renvoie qu'un identifiant,
-    /// jamais un chemin.
+    /// Mods just uninstalled, kept for "Undo" with the time of removal.
+    /// Engine side: the webview only sends back an id, never a path.
     removed: SyncMutex<HashMap<(String, String), (Instant, InstalledMod)>>,
     processes: SyncMutex<ProcessWatcher>,
-    /// Jeux vus en cours d'exécution au dernier passage de la veille.
+    /// Games seen running at the last pass of the watch.
     running: SyncMutex<HashSet<u32>>,
-    /// Jeux lancés depuis Modalia, pas encore visibles dans les processus.
+    /// Games launched from Modalia, not visible among the processes yet.
     starting: SyncMutex<HashMap<u32, Starting>>,
-    /// Téléchargements et extractions : un à la fois, pour que le
-    /// préchargement et une installation n'écrivent pas la même archive.
+    /// Downloads and extractions: one at a time, so that prefetching and an
+    /// install don't write the same archive.
     fetching: Mutex<()>,
-    /// Installations en attente déjà téléchargées et extraites : à la
-    /// fermeture du jeu, il ne reste qu'à poser les liens.
+    /// Pending installs already downloaded and extracted: when the game
+    /// closes, only the links remain to be placed.
     ready: SyncMutex<HashSet<(u32, String)>>,
-    /// Drapeau d'annulation de chaque installation en cours ou en file.
+    /// Cancel flag of each install running or queued.
     cancels: SyncMutex<HashMap<(u32, String), Cancel>>,
-    /// Téléchargements en cours ou interrompus (voir `Paused`).
+    /// Downloads running or interrupted (see `Paused`).
     paused: SyncMutex<Paused>,
-    /// Fichiers choisis d'un mod Nexus qui attendent leur lien `nxm://`
-    /// (compte gratuit : un clic sur le site par fichier).
+    /// Picked files of a Nexus mod waiting for their `nxm://` link (free
+    /// account: one click on the site per file).
     chosen_files: SyncMutex<HashMap<(u32, String), Vec<u32>>>,
 }
 
@@ -73,14 +70,14 @@ impl Mods {
     }
 
     pub fn open(app: &AppHandle) -> Result<Self, Box<dyn std::error::Error>> {
-        // Données locales (`%LOCALAPPDATA%` sous Windows), jamais le profil
-        // itinérant : des centaines de Mo de mods n'ont pas à être
-        // synchronisés entre machines.
+        // Local data (`%LOCALAPPDATA%` on Windows), never the roaming
+        // profile: hundreds of MB of mods don't need to sync between
+        // machines.
         let data = app.path().app_local_data_dir()?;
         let cache = app.path().app_cache_dir()?;
         let roaming = app.path().app_data_dir()?;
-        // Avant toute ouverture : sous Windows, un fichier ouvert ne peut
-        // pas être remplacé.
+        // Before anything is opened: on Windows, an open file can't be
+        // replaced.
         for dir in [&roaming, &data, &cache] {
             adopt_old_dir(dir);
         }
@@ -107,19 +104,19 @@ impl Mods {
         })
     }
 
-    /// Exécutables des processus en cours.
+    /// Executables of the running processes.
     pub(crate) fn running_exes(&self) -> Vec<std::path::PathBuf> {
         self.processes.lock().unwrap().running_exes()
     }
 
-    /// Le jeu tourne-t-il en ce moment ? Vérifié à la demande, sans
-    /// attendre le prochain passage de la veille.
+    /// Is the game running right now? Checked on demand, without waiting
+    /// for the next pass of the watch.
     fn is_running(&self, game: &KnownGame) -> bool {
         let exes = self.processes.lock().unwrap().running_exes();
         launch::game_running(&game.dir, &exes, &game.profile.launchers)
     }
 
-    /// Début d'une installation : son drapeau d'annulation.
+    /// Start of an install: its cancel flag.
     fn begin(&self, app_id: u32, mod_id: &str) -> Cancel {
         let cancel = Cancel::default();
         self.cancels
@@ -136,8 +133,8 @@ impl Mods {
             .remove(&(app_id, mod_id.to_owned()));
     }
 
-    /// Pourquoi l'appli ne doit pas se fermer maintenant (mise à jour) :
-    /// une installation en cours ou en file, ou un jeu qui tourne.
+    /// Why the app must not close now (update): an install running or
+    /// queued, or a game running.
     pub fn busy(&self) -> Option<&'static str> {
         if !self.cancels.lock().unwrap().is_empty() {
             Some("wait for your mods to finish installing, then try again")
@@ -157,14 +154,14 @@ impl Mods {
     }
 }
 
-/// Lancement en cours : depuis quand, et si le launcher du jeu est ouvert.
+/// Launch in progress: since when, and whether the game's launcher is open.
 #[derive(Clone, Copy)]
 struct Starting {
     at: Instant,
-    /// Launcher vu ouvert pendant ce lancement.
+    /// Launcher seen open during this launch.
     saw_launcher: bool,
-    /// Launcher ouvert au dernier passage de la veille : on attend sans
-    /// limite que l'utilisateur lance le jeu.
+    /// Launcher open at the last pass of the watch: we wait without a limit
+    /// for the user to launch the game.
     launcher_open: bool,
 }
 
@@ -177,8 +174,8 @@ impl Starting {
         }
     }
 
-    /// Le lancement est-il fini (jeu apparu) ou abandonné (launcher fermé
-    /// sans jouer, ou rien après le délai) ?
+    /// Is the launch over (game appeared) or abandoned (launcher closed
+    /// without playing, or nothing after the delay)?
     fn over(&self, game_running: bool) -> bool {
         game_running
             || (self.saw_launcher && !self.launcher_open)
@@ -189,10 +186,10 @@ impl Starting {
 /// Identifiant de l'appli avant son nom public, Unalia Mod Manager.
 const OLD_IDENTIFIER: &str = "app.modalia.desktop";
 
-/// Reprend le dossier de l'ancien identifiant, voisin de `dir`, tant que
-/// `dir` n'existe pas encore. Un simple renommage : les liens physiques vers
-/// les jeux restent valides, et les chemins enregistrés dans la base sont
-/// ensuite réécrits (`rebase_store`).
+/// Takes over the folder of the old id, next to `dir`, as long as `dir`
+/// doesn't exist yet. A plain rename: hard links into the games stay valid,
+/// and the paths recorded in the database are rewritten afterwards
+/// (`rebase_store`).
 pub(crate) fn adopt_old_dir(dir: &Path) {
     let Some(old) = dir.parent().map(|base| base.join(OLD_IDENTIFIER)) else {
         return;
@@ -205,10 +202,10 @@ pub(crate) fn adopt_old_dir(dir: &Path) {
     }
 }
 
-/// Les premières versions rangeaient base et mods dans `%APPDATA%`
-/// (itinérant). On les déplace une fois vers le dossier local, sinon les
-/// mods déjà posés dans les jeux deviendraient des fichiers orphelins.
-/// Sous macOS et Linux, les deux dossiers sont les mêmes : rien à faire.
+/// The first versions kept the database and the mods in `%APPDATA%`
+/// (roaming). We move them once to the local folder, or the mods already
+/// placed in the games would become orphan files. On macOS and Linux, both
+/// folders are the same: nothing to do.
 fn migrate_from_roaming(roaming: &Path, local: &Path) {
     let old_db = roaming.join("modalia.db");
     let new_db = local.join("modalia.db");
@@ -239,9 +236,8 @@ fn game_key(app_id: u32) -> String {
     format!("steam:{app_id}")
 }
 
-/// Retire les mods de tous les jeux (désinstallation d'Unalia, données
-/// effacées). Un jeu introuvable est sauté : il n'a plus de fichiers à
-/// nettoyer.
+/// Removes the mods from every game (Unalia uninstalled, data deleted). A
+/// game that can't be found is skipped: it has no files left to clean.
 pub fn remove_all(data: &Path, steam_dirs: HashMap<u32, PathBuf>) {
     let db = data.join("modalia.db");
     if !db.is_file() {
@@ -250,7 +246,7 @@ pub fn remove_all(data: &Path, steam_dirs: HashMap<u32, PathBuf>) {
     let Ok(mut state) = ModState::open(&db) else {
         return;
     };
-    // Comme la bibliothèque : Steam l'emporte sur un ajout à la main.
+    // Like the library: Steam wins over a manual add.
     let mut game_dirs: HashMap<u32, PathBuf> = state
         .manual_games()
         .unwrap_or_default()
@@ -273,8 +269,8 @@ pub fn remove_all(data: &Path, steam_dirs: HashMap<u32, PathBuf>) {
 
 const UNKNOWN_GAME: &str = "This game isn't in your library anymore. Go back home to rescan it.";
 
-/// Résultat d'une action sur les mods : faite tout de suite, ou mise en
-/// attente parce que le jeu tourne.
+/// Result of an action on mods: done right away, or queued because the game
+/// is running.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase", tag = "status")]
 pub enum Outcome<T> {
@@ -282,31 +278,31 @@ pub enum Outcome<T> {
         value: T,
     },
     Queued,
-    /// Le site doit donner son accord (Nexus, compte gratuit) : l'interface
-    /// ouvre `url`, le lien `nxm://` du bouton « Mod Manager Download »
-    /// revient à Modalia qui termine l'installation.
+    /// The site must give its consent (Nexus, free account): the UI opens
+    /// `url`, the `nxm://` link of the "Mod Manager Download" button comes
+    /// back to Modalia, which finishes the install.
     Browser {
         url: String,
     },
-    /// Annulée par l'utilisateur : rien n'a changé dans le jeu.
+    /// Canceled by the user: nothing changed in the game.
     Cancelled,
-    /// Mod Nexus à plusieurs fichiers (variantes, options) : l'interface
-    /// les montre, l'installation reprend avec ceux choisis.
+    /// Nexus mod with several files (variants, options): the UI shows them,
+    /// the install resumes with the picked ones.
     Choose {
         files: Vec<nexus_source::ModFile>,
     },
 }
 
-// ---------------------------------------------------------------- état
+// ---------------------------------------------------------------- state
 
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PendingInfo {
     #[serde(flatten)]
     op: PendingOp,
-    /// Nom à afficher (nom installé, sinon tiré de l'identifiant).
+    /// Name to display (installed name, else taken from the id).
     name: String,
-    /// Installation déjà téléchargée pendant la partie.
+    /// Install already downloaded during the session.
     ready: bool,
 }
 
@@ -366,7 +362,7 @@ pub async fn game_status(app: AppHandle, app_id: u32) -> Result<GameStatus, Stri
     Ok(status(&app, app_id).await)
 }
 
-/// Met `op` en attente : le jeu tourne.
+/// Queues `op`: the game is running.
 async fn queue(app: &AppHandle, app_id: u32, op: PendingOp) -> Result<(), String> {
     let mods = app.state::<Mods>();
     let key = game_key(app_id);
@@ -375,14 +371,14 @@ async fn queue(app: &AppHandle, app_id: u32, op: PendingOp) -> Result<(), String
         let next = launch::enqueue(&state.pending(&key).map_err(crate::support::logged)?, op);
         state.set_pending(&key, &next).map_err(crate::support::logged)?;
     }
-    // Le jeu tourne : la veille doit le savoir pour appliquer la file à sa
-    // fermeture, même s'il a été lancé hors de Modalia.
+    // The game runs: the watch must know it to apply the queue when it
+    // closes, even if it was launched outside Modalia.
     mods.running.lock().unwrap().insert(app_id);
     emit_status(app, app_id).await;
     Ok(())
 }
 
-/// Retire de la file le changement en attente pour ce mod.
+/// Removes the pending change for this mod from the queue.
 #[tauri::command]
 pub async fn cancel_pending(app: AppHandle, app_id: u32, mod_id: String) -> Result<(), String> {
     {
@@ -416,8 +412,8 @@ pub async fn installed_mods(
         .map_err(crate::support::logged)
 }
 
-/// Mises à jour disponibles pour les mods du jeu. Rien n'est installé :
-/// l'utilisateur choisit (SPEC §3.5). Mettre à jour = `install_mod`.
+/// Updates available for the game's mods. Nothing is installed: the user
+/// picks. Updating = `install_mod`.
 #[tauri::command]
 pub async fn check_updates(
     library: State<'_, Library>,
@@ -426,7 +422,7 @@ pub async fn check_updates(
     app_id: u32,
 ) -> Result<Vec<Update>, String> {
     let game = library.game(app_id).ok_or(UNKNOWN_GAME)?;
-    // La base n'est pas gardée pendant les appels réseau.
+    // The database is not held during network calls.
     let installed = mods
         .state
         .lock()
@@ -454,9 +450,9 @@ struct InstallEvent {
     progress: Progress,
 }
 
-/// Installe un mod et ses dépendances, ou l'installation est mise en
-/// attente si le jeu tourne. La progression arrive par l'événement
-/// `install-progress`.
+/// Installs a mod and its dependencies, or the install is queued if the
+/// game is running. Progress comes through the `install-progress`
+/// event.
 #[tauri::command]
 pub async fn install_mod(
     app: AppHandle,
@@ -482,7 +478,7 @@ pub async fn install_mod(
                 Ok(Outcome::Done { value: done.mods })
             }
             Err(NexusFailure::Website(url) | NexusFailure::NextFile(url)) => {
-                // Les liens `nxm://` du site reprendront avec ce choix.
+                // The site's `nxm://` links will resume with this choice.
                 if let Some(ids) = files {
                     mods.chosen_files.lock().unwrap().insert(pending, ids);
                 }
@@ -502,8 +498,8 @@ pub async fn install_mod(
             },
         )
         .await?;
-        // Le jeu tourne, mais rien n'empêche de télécharger : seul le
-        // déploiement attend sa fermeture.
+        // The game runs, but nothing prevents downloading: only the
+        // deployment waits for it to close.
         tauri::async_runtime::spawn(prefetch(app.clone(), app_id, game, mod_id));
         return Ok(Outcome::Queued);
     }
@@ -514,15 +510,15 @@ pub async fn install_mod(
     }
 }
 
-/// Télécharge et extrait en arrière-plan une installation mise en attente.
-/// Un échec ici n'est pas grave : l'installation réessaiera à la fermeture
-/// du jeu et signalera alors l'erreur.
+/// Downloads and extracts a queued install in the background. A failure
+/// here is no big deal: the install tries again when the game closes and
+/// reports the error then.
 async fn prefetch(app: AppHandle, app_id: u32, game: KnownGame, mod_id: String) {
     let catalog = app.state::<Catalog>();
     let mods = app.state::<Mods>();
     let games_catalog = catalog.games(&app).await;
     let key = game_key(app_id);
-    // Liste des mods installés, sans garder la base pendant le téléchargement.
+    // List of installed mods, without holding the database during the download.
     let existing = mods.state.lock().await.list(&key).unwrap_or_default();
     let installer = Installer {
         source: &catalog.thunderstore,
@@ -556,7 +552,7 @@ async fn run_install(
     let catalog = app.state::<Catalog>();
     let mods = app.state::<Mods>();
     let games_catalog = catalog.games(app).await;
-    // Avant d'attendre son tour : on peut annuler une installation en file.
+    // Before waiting its turn: a queued install can be canceled.
     let cancel = mods.begin(app_id, mod_id);
     let installer = Installer {
         source: &catalog.thunderstore,
@@ -588,7 +584,7 @@ async fn run_install(
     result
 }
 
-/// Événements de progression, pas plus d'un par 1 %.
+/// Progress events, no more than one per 1%.
 fn progress_emitter<'a>(
     app: &'a AppHandle,
     app_id: u32,
@@ -617,8 +613,8 @@ fn progress_emitter<'a>(
             return;
         }
         last = step;
-        // Noté sur disque : si l'appli est quittée, le téléchargement
-        // apparaîtra « en pause » au prochain lancement.
+        // Written to disk: if the app is closed, the download shows up as
+        // "paused" at the next launch.
         if let Progress::Downloading {
             name,
             received,
@@ -649,21 +645,21 @@ fn progress_emitter<'a>(
     }
 }
 
-/// Téléchargement interrompu (appli quittée, réseau perdu) : affiché « en
-/// pause » avec de quoi reprendre là où il en était, ou le jeter.
+/// Interrupted download (app closed, network lost): shown as "paused" with
+/// enough to resume where it was, or to throw it away.
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PausedDownload {
     app_id: u32,
     mod_id: String,
-    /// Paquet en cours au moment de l'arrêt.
+    /// Package in progress when it stopped.
     name: String,
     received: u64,
     total: Option<u64>,
 }
 
-/// Journal des téléchargements en cours, gardé dans `downloads.json`. Hors
-/// de la base : celle-ci reste verrouillée pendant toute une installation.
+/// Journal of running downloads, kept in `downloads.json`. Outside the
+/// database: it stays locked during a whole install.
 struct Paused {
     file: std::path::PathBuf,
     entries: HashMap<(u32, String), PausedDownload>,
@@ -697,7 +693,7 @@ impl Paused {
         self.saved_at = Some(Instant::now());
     }
 
-    /// Avancement d'un téléchargement : sur disque toutes les 2 s au plus.
+    /// Progress of a download: to disk every 2 s at most.
     fn track(&mut self, download: PausedDownload) {
         let fresh = !self
             .entries
@@ -720,9 +716,9 @@ impl Paused {
     }
 }
 
-/// Fin d'une installation : une coupure réseau laisse le téléchargement en
-/// pause (de quoi reprendre) ; le reste (réussite, annulation, erreur) le
-/// sort du journal.
+/// End of an install: a network drop leaves the download paused (enough to
+/// resume); the rest (success, cancel, error) takes it out of the
+/// journal.
 fn settle_download(mods: &Mods, app_id: u32, mod_id: &str, error: Option<&InstallError>) {
     let interrupted = matches!(
         error,
@@ -736,7 +732,7 @@ fn settle_download(mods: &Mods, app_id: u32, mod_id: &str, error: Option<&Instal
     }
 }
 
-/// Téléchargements du jeu en pause, dont le début est toujours en cache.
+/// The game's paused downloads, whose partial file is still cached.
 #[tauri::command]
 pub async fn paused_downloads(
     mods: State<'_, Mods>,
@@ -760,7 +756,7 @@ pub async fn paused_downloads(
     let mut kept = Vec::new();
     for download in candidates {
         if installer::partial_downloads(&mods.paths, &download.mod_id).is_empty() {
-            // Plus rien en cache : rien à reprendre.
+            // Nothing cached anymore: nothing to resume.
             paused.forget(app_id, &download.mod_id);
         } else {
             kept.push(download);
@@ -769,7 +765,7 @@ pub async fn paused_downloads(
     Ok(kept)
 }
 
-/// Jette un téléchargement en pause et ce qu'il avait déjà reçu.
+/// Throws away a paused download and what it already received.
 #[tauri::command]
 pub async fn discard_download(
     mods: State<'_, Mods>,
@@ -782,12 +778,12 @@ pub async fn discard_download(
 }
 
 enum NexusFailure {
-    /// Compte gratuit : il faut passer par le site, à cette adresse.
+    /// Free account: go through the site, at this URL.
     Website(String),
-    /// Compte gratuit, plusieurs fichiers : celui-ci est arrivé, le suivant
-    /// se télécharge sur le site, à cette adresse.
+    /// Free account, several files: this one arrived, the next one
+    /// downloads on the site, at this URL.
     NextFile(String),
-    /// Plusieurs fichiers : à l'utilisateur de choisir.
+    /// Several files: the user picks.
     Choose(Vec<nexus_source::ModFile>),
     Cancelled,
     Error(String),
@@ -800,8 +796,8 @@ fn close_first(game: &KnownGame) -> String {
     )
 }
 
-/// Jeux Bethesda : `plugins.txt` suit les mods posés. Un échec n'annule
-/// pas le changement : il est journalisé, le suivant réessaie.
+/// Bethesda games: `plugins.txt` follows the placed mods. A failure doesn't
+/// undo the change: it is logged, the next one tries again.
 fn sync_plugins(state: &ModState, app_id: u32, game: &KnownGame) {
     let Some(list) = game.profile.plugins_file() else {
         return;
@@ -813,7 +809,7 @@ fn sync_plugins(state: &ModState, app_id: u32, game: &KnownGame) {
     }
 }
 
-/// Installe un mod Nexus (et ses frameworks, depuis GitHub).
+/// Installs a Nexus mod (and its frameworks, from GitHub).
 async fn run_nexus_install(
     app: &AppHandle,
     app_id: u32,
@@ -877,9 +873,9 @@ async fn run_nexus_install(
     }
 }
 
-/// Page de téléchargement du fichier à installer sur Nexus (le principal,
-/// ou celui d'avant pour une ancienne version du jeu) : son bouton
-/// « Slow download » ouvre le lien `nxm://` qui revient à Modalia.
+/// Download page on Nexus of the file to install (the main one, or the one
+/// from before for an old version of the game): its "Slow download" button
+/// opens the `nxm://` link that comes back to Modalia.
 async fn website_download_url(
     catalog: &Catalog,
     game: &KnownGame,
@@ -904,8 +900,8 @@ async fn website_download_url(
     }
 }
 
-/// Arrête une installation en cours ou en file. Ce qui est déjà téléchargé
-/// reste en cache pour une prochaine fois ; le jeu n'est pas touché.
+/// Stops a running or queued install. What is already downloaded stays
+/// cached for next time; the game is not touched.
 #[tauri::command]
 pub async fn cancel_install(
     mods: State<'_, Mods>,
@@ -970,14 +966,14 @@ pub async fn uninstall_mod(
     Ok(Outcome::Done { value: () })
 }
 
-/// Libère le stockage d'un mod retiré, si « Undo » n'a pas servi.
+/// Frees the storage of a removed mod, if "Undo" wasn't used.
 async fn purge_later(app: AppHandle, key: String, mod_id: String, at: Instant) {
     tokio::time::sleep(UNDO_FOR).await;
     let mods = app.state::<Mods>();
     let entry = (key, mod_id);
     {
         let mut removed = mods.removed.lock().unwrap();
-        // Restauré, ou retiré à nouveau depuis : ce n'est plus ce retrait-là.
+        // Restored, or removed again since: it is no longer this removal.
         if removed.get(&entry).is_none_or(|(when, _)| *when != at) {
             return;
         }
@@ -990,7 +986,7 @@ async fn purge_later(app: AppHandle, key: String, mod_id: String, at: Instant) {
     }
 }
 
-/// Annule une désinstallation récente.
+/// Undoes a recent uninstall.
 #[tauri::command]
 pub async fn restore_mod(
     library: State<'_, Library>,
@@ -1015,8 +1011,8 @@ pub async fn restore_mod(
     Ok(restored)
 }
 
-/// Revient à une version précédente d'un mod (`package`, l'une de ses
-/// `previousVersions`), sans rien retélécharger.
+/// Goes back to a previous version of a mod (`package`, one of its
+/// `previousVersions`), downloading nothing again.
 #[tauri::command]
 pub async fn revert_mod(
     library: State<'_, Library>,
@@ -1036,9 +1032,9 @@ pub async fn revert_mod(
     Ok(reverted)
 }
 
-/// Au démarrage : passe l'ancien stockage au stockage par empreinte (une
-/// seule fois, sans rien retélécharger), puis fait le ménage. Les commandes
-/// qui touchent aux mods attendent la fin.
+/// At startup: moves the old storage to the hash-based storage (only once,
+/// downloading nothing again), then cleans up. Commands that touch mods
+/// wait for it to finish.
 pub fn tidy_storage(app: &AppHandle) {
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
@@ -1061,10 +1057,10 @@ pub fn tidy_storage(app: &AppHandle) {
     });
 }
 
-// ------------------------------------------------- jeu réinstallé ou parti
+// ------------------------------------------------- game reinstalled or gone
 
-/// Mods actifs effacés du dossier du jeu (jeu réinstallé, fichiers vérifiés
-/// par Steam) : leurs noms.
+/// Enabled mods deleted from the game folder (game reinstalled, files
+/// verified by Steam): their names.
 #[tauri::command]
 pub async fn missing_mods(
     library: State<'_, Library>,
@@ -1077,8 +1073,8 @@ pub async fn missing_mods(
     Ok(missing.into_iter().map(|m| m.name).collect())
 }
 
-/// Repose depuis le stockage les mods effacés du jeu, sans rien
-/// retélécharger. Renvoie leur nombre.
+/// Places the mods deleted from the game again from the storage, downloading
+/// nothing again. Returns their count.
 #[tauri::command]
 pub async fn put_back_mods(
     library: State<'_, Library>,
@@ -1100,19 +1096,19 @@ pub async fn put_back_mods(
     Ok(missing.len())
 }
 
-/// Jeu désinstallé dont Unalia garde encore les mods dans son stockage.
+/// Uninstalled game whose mods Unalia still keeps in its storage.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ForgottenGame {
     app_id: u32,
     name: String,
     mods: usize,
-    /// Octets du stockage libérés en l'oubliant.
+    /// Storage bytes freed by forgetting it.
     size: u64,
 }
 
-/// Le jeu n'est plus nulle part : ni dans Steam, ni dans son dossier
-/// ajouté à la main. Steam illisible : seuls les ajouts à la main comptent.
+/// The game is nowhere anymore: neither in Steam nor in its manually added
+/// folder. Steam unreadable: only manual adds count.
 fn game_gone(app_id: u32, steam: Option<&HashMap<u32, PathBuf>>, manual: &[ManualGame]) -> bool {
     match manual.iter().find(|g| g.app_id == app_id) {
         Some(game) => !Path::new(&game.path).is_dir() && steam.is_none_or(|s| !s.contains_key(&app_id)),
@@ -1160,7 +1156,7 @@ pub async fn forgotten_games(
     Ok(forgotten)
 }
 
-/// Oublie un jeu désinstallé et libère le stockage de ses mods.
+/// Forgets an uninstalled game and frees the storage of its mods.
 #[tauri::command]
 pub async fn forget_game(mods: State<'_, Mods>, app_id: u32) -> Result<(), String> {
     let steam = tauri::async_runtime::spawn_blocking(crate::steam_dirs)
@@ -1169,8 +1165,8 @@ pub async fn forget_game(mods: State<'_, Mods>, app_id: u32) -> Result<(), Strin
     let _fetching = mods.fetching.lock().await;
     let mut state = mods.state.lock().await;
     let manual = state.manual_games().map_err(crate::support::logged)?;
-    // Revérifié ici : oublier un jeu encore là laisserait ses mods dans son
-    // dossier sans plus aucun moyen de les retirer.
+    // Checked again here: forgetting a game still there would leave its
+    // mods in its folder with no way left to remove them.
     if !game_gone(app_id, steam.as_ref(), &manual) {
         return Err("This game is installed again: open it to manage its mods.".into());
     }
@@ -1183,10 +1179,10 @@ pub async fn forget_game(mods: State<'_, Mods>, app_id: u32) -> Result<(), Strin
     Ok(())
 }
 
-/// Retire un jeu ajouté à la main : ses mods quittent son dossier, qui
-/// retrouve son état d'origine, puis il disparaît d'Unalia avec ses
-/// réglages et son stockage. Le jeu lui-même reste installé. Renvoie le
-/// nombre de mods retirés.
+/// Removes a manually added game: its mods leave its folder, which gets its
+/// original state back, then it disappears from Unalia with its settings
+/// and its storage. The game itself stays installed. Returns the number of
+/// removed mods.
 #[tauri::command]
 pub async fn remove_manual_game(
     library: State<'_, Library>,
@@ -1213,19 +1209,19 @@ pub async fn remove_manual_game(
     for setting in [crate::launch_setting(app_id), crate::version_setting(app_id)] {
         state.set_setting(&setting, None).map_err(crate::support::logged)?;
     }
-    // Plus d'« Undo » possible pour les mods retirés juste avant.
+    // No more "Undo" for the mods removed just before.
     mods.removed.lock().unwrap().retain(|(game, _), _| *game != key);
     log::info!("removed {key} and its {count} mods");
     Ok(count)
 }
 
-/// Ce qu'une remise à zéro retirerait du jeu.
+/// What a reset would remove from the game.
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ResetPreview {
-    /// Mods installés par Unalia.
+    /// Mods installed by Unalia.
     mods: usize,
-    /// Fichiers de mods posés par d'autres outils.
+    /// Mod files placed by other tools.
     foreign: Vec<Foreign>,
 }
 
@@ -1244,10 +1240,9 @@ pub async fn reset_preview(
     Ok(ResetPreview { mods: count, foreign })
 }
 
-/// Remet le jeu à zéro côté mods : ceux d'Unalia le quittent, ce que
-/// d'autres outils ont laissé part à la corbeille s'il est dans `foreign`
-/// (cochés dans la fenêtre). Les fichiers du jeu et les sauvegardes ne
-/// sont pas touchés.
+/// Resets the game's mods: Unalia's leave it, what other tools left goes to
+/// the Recycle Bin if it is in `foreign` (ticked in the dialog). The game's
+/// files and the saves are not touched.
 #[tauri::command]
 pub async fn reset_game(
     library: State<'_, Library>,
@@ -1273,7 +1268,7 @@ pub async fn reset_game(
     )
     .map_err(|e| error_message(&e))?;
     sync_plugins(&state, app_id, &game);
-    // Plus d'« Undo » possible pour les mods retirés juste avant.
+    // No more "Undo" for the mods removed just before.
     mods.removed.lock().unwrap().retain(|(game, _), _| *game != key);
     log::info!(
         "reset {key}: {} mods, {} leftovers from other tools, {} left",
@@ -1284,10 +1279,10 @@ pub async fn reset_game(
     Ok(reset)
 }
 
-// ---------------------------------------------------------------- jeu
+// ---------------------------------------------------------------- game
 
-/// Lance le jeu : par Steam, ou par son exécutable pour un jeu ajouté à la
-/// main.
+/// Launches the game: through Steam, or through its executable for a
+/// manually added game.
 #[tauri::command]
 pub async fn play_game(
     app: AppHandle,
@@ -1299,10 +1294,10 @@ pub async fn play_game(
     if mods.is_running(&game) {
         return Ok(());
     }
-    // Un plugin retiré à la main depuis : la liste est remise d'accord.
+    // A plugin removed by hand since: the list is brought back in line.
     sync_plugins(&*mods.state.lock().await, app_id, &game);
     let target = if let Some(url) = &game.steam_shortcut {
-        // Jeu hors Steam ajouté à Steam : par Steam, pour son overlay.
+        // Non-Steam game added to Steam: through Steam, for its overlay.
         LaunchTarget::Steam(url.clone())
     } else if game.manual {
         launch::executable_target(&game.dir, &game.exe_names)
@@ -1316,8 +1311,8 @@ pub async fn play_game(
             .open_url(url, None::<&str>)
             .map_err(|e| format!("Couldn't open Steam.\n{e}"))?,
         LaunchTarget::Executable(exe) => {
-            // `open_path` passe par le système (comme un double-clic) : le
-            // jeu démarre détaché de Modalia, dans son propre dossier.
+            // `open_path` goes through the system (like a double click): the
+            // game starts detached from Modalia, in its own folder.
             app.opener()
                 .open_path(exe.to_string_lossy(), None::<&str>)
                 .map_err(|e| format!("Couldn't start the game.\n{e}"))?
@@ -1331,8 +1326,8 @@ pub async fn play_game(
     Ok(())
 }
 
-/// Arrête d'attendre un jeu en démarrage (lancement abandonné dans son
-/// launcher, ou jeu qui ne s'ouvre pas).
+/// Stops waiting for a starting game (launch abandoned in its launcher, or
+/// a game that doesn't open).
 #[tauri::command]
 pub async fn cancel_starting(
     app: AppHandle,
@@ -1344,8 +1339,8 @@ pub async fn cancel_starting(
     Ok(())
 }
 
-/// Veille des processus : repère le démarrage et la fermeture des jeux, et
-/// applique la file d'attente quand un jeu se ferme.
+/// Process watch: spots games starting and closing, and applies the queue
+/// when a game closes.
 pub async fn watch(app: AppHandle) {
     loop {
         tokio::time::sleep(WATCH_EVERY).await;
@@ -1380,8 +1375,8 @@ pub async fn watch(app: AppHandle) {
                 }
                 over
             };
-            // Jeu fermé avec une file en attente, même sans transition vue
-            // (Modalia fermé pendant la partie, puis relancé) : on applique.
+            // Game closed with a pending queue, even without a seen
+            // transition (Modalia closed during the session, then restarted): apply.
             if !now && !before && has_pending(&app, app_id).await {
                 apply_pending(&app, app_id, &game).await;
                 emit_status(&app, app_id).await;
@@ -1427,7 +1422,7 @@ struct Failure {
     message: String,
 }
 
-/// Applique, dans l'ordre, les changements demandés pendant la partie.
+/// Applies, in order, the changes requested during the session.
 async fn apply_pending(app: &AppHandle, app_id: u32, game: &KnownGame) {
     let mods = app.state::<Mods>();
     let key = game_key(app_id);
@@ -1470,8 +1465,8 @@ async fn apply_pending(app: &AppHandle, app_id: u32, game: &KnownGame) {
                     .map_err(|e| error_message(&e))
             }
             PendingOp::Uninstall { mod_id } => {
-                // Pas de « Undo » pour un retrait appliqué à la fermeture du
-                // jeu : le stockage est libéré tout de suite.
+                // No "Undo" for a removal applied when the game closes: the
+                // storage is freed right away.
                 let mut state = mods.state.lock().await;
                 installer::uninstall(&mut state, &mods.paths, &key, &game.dir, mod_id)
                     .and_then(|_| installer::purge(&mut state, &mods.paths, &key, mod_id))
@@ -1497,9 +1492,9 @@ async fn apply_pending(app: &AppHandle, app_id: u32, game: &KnownGame) {
     );
 }
 
-/// Message principal (ce qui bloque, puis quoi faire), puis la chaîne
-/// technique après un retour à la ligne : l'interface affiche la première
-/// ligne et replie le reste.
+/// Main message (what is blocking, then what to do), then the technical
+/// chain after a line break: the UI shows the first line and folds the
+/// rest.
 fn error_message(error: &(dyn std::error::Error + 'static)) -> String {
     let mut message = mod_engine::advice::explain(error);
     let mut source = error.source();
@@ -1512,17 +1507,17 @@ fn error_message(error: &(dyn std::error::Error + 'static)) -> String {
         message.push('\n');
         message.push_str(&details.join(": "));
     }
-    // Erreur montrée à l'utilisateur : notée aussi dans le journal.
+    // Error shown to the user: also written to the log.
     log::warn!("{}", message.replace('\n', " | "));
     message
 }
 
 // ---------------------------------------------------------------- Nexus
 
-/// Réglage où vit la clé API Nexus de l'utilisateur.
+/// Setting where the user's Nexus API key lives.
 const NEXUS_KEY: &str = "nexus_api_key";
 
-/// Dernier compte reconnu par Nexus : affiché tel quel hors ligne.
+/// Last account recognized by Nexus: shown as is when offline.
 const NEXUS_ACCOUNT: &str = "nexus_account";
 
 async fn remember_account(mods: &Mods, account: Option<&Account>) {
@@ -1530,8 +1525,8 @@ async fn remember_account(mods: &Mods, account: Option<&Account>) {
     let _ = mods.state.lock().await.set_setting(NEXUS_ACCOUNT, value.as_deref());
 }
 
-/// Au démarrage : clé Nexus enregistrée (en dev, repli sur `NEXUS_API_KEY`
-/// du `.env` à la racine du dépôt), et liens `nxm://`.
+/// At startup: saved Nexus key (in dev, falls back on `NEXUS_API_KEY` from
+/// the `.env` at the repo root), and `nxm://` links.
 pub fn nexus_setup(app: &AppHandle) {
     let saved = tauri::async_runtime::block_on(async {
         app.state::<Mods>()
@@ -1542,8 +1537,8 @@ pub fn nexus_setup(app: &AppHandle) {
             .ok()
             .flatten()
     });
-    // Une chaîne vide : l'utilisateur s'est déconnecté, la clé du `.env` de
-    // dev ne doit pas revenir.
+    // An empty string: the user logged out, the dev `.env` key must not
+    // come back.
     let key = match saved {
         Some(saved) if saved.is_empty() => None,
         Some(saved) => Some(saved),
@@ -1561,7 +1556,7 @@ pub fn nexus_setup(app: &AppHandle) {
             tauri::async_runtime::spawn(handle_nxm(handle.clone(), url.to_string()));
         }
     });
-    // Modalia lancé par un lien `nxm://`.
+    // Modalia started by an `nxm://` link.
     if let Ok(Some(urls)) = app.deep_link().get_current() {
         for url in urls {
             tauri::async_runtime::spawn(handle_nxm(app.clone(), url.to_string()));
@@ -1569,8 +1564,8 @@ pub fn nexus_setup(app: &AppHandle) {
     }
 }
 
-/// Valeur de développement (variable d'environnement, sinon `.env` à la
-/// racine du dépôt), jamais lue dans un build de release.
+/// Development value (environment variable, else `.env` at the repo root),
+/// never read in a release build.
 pub fn dev_env(name: &str) -> Option<String> {
     if !cfg!(debug_assertions) {
         return None;
@@ -1587,8 +1582,8 @@ pub fn dev_env(name: &str) -> Option<String> {
     })
 }
 
-/// Modalia devient l'appli qui ouvre les liens « Mod Manager Download » de
-/// Nexus (Windows, Linux ; macOS le fait à l'installation de l'appli).
+/// Modalia becomes the app that opens Nexus "Mod Manager Download" links
+/// (Windows, Linux; macOS does it when the app is installed).
 fn register_nxm(app: &AppHandle) {
     #[cfg(any(windows, target_os = "linux"))]
     if let Err(error) = app.deep_link().register("nxm") {
@@ -1598,19 +1593,19 @@ fn register_nxm(app: &AppHandle) {
     let _ = app;
 }
 
-/// Identifiant d'application que Nexus attribue aux gestionnaires de mods
-/// qu'il approuve, pour la connexion en un clic (SSO). En attente : tant
-/// qu'il manque, la connexion passe par la clé API personnelle.
+/// Application id that Nexus gives to the mod managers it approves, for
+/// one-click login (SSO). Pending: while it is missing, login goes through
+/// the personal API key.
 const NEXUS_SSO_APP: Option<&str> = None;
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct NexusStatus {
     account: Option<Account>,
-    /// Connexion en un clic disponible (Modalia approuvé par Nexus).
+    /// One-click login available (Modalia approved by Nexus).
     sso: bool,
-    /// Clé enregistrée mais Nexus injoignable : `account` est le dernier
-    /// compte reconnu (absent s'il n'a jamais été vérifié).
+    /// Key saved but Nexus unreachable: `account` is the last recognized
+    /// account (missing if it was never checked).
     offline: bool,
 }
 
@@ -1642,8 +1637,8 @@ pub async fn nexus_status(
     Ok(status)
 }
 
-/// Connexion en un clic : la page d'autorisation de Nexus s'ouvre dans le
-/// navigateur, la clé revient toute seule.
+/// One-click login: Nexus's authorization page opens in the browser, the
+/// key comes back by itself.
 #[tauri::command]
 pub async fn nexus_login(
     app: AppHandle,
@@ -1664,7 +1659,7 @@ pub async fn nexus_login(
     save_nexus_key(&app, &catalog, &mods, key).await
 }
 
-/// Garde une clé seulement si Nexus la reconnaît.
+/// Keeps a key only if Nexus recognizes it.
 async fn save_nexus_key(
     app: &AppHandle,
     catalog: &Catalog,
@@ -1692,7 +1687,7 @@ async fn save_nexus_key(
     Ok(account)
 }
 
-/// Vérifie la clé auprès de Nexus, puis l'enregistre sur cette machine.
+/// Checks the key with Nexus, then saves it on this machine.
 #[tauri::command]
 pub async fn nexus_connect(
     app: AppHandle,
@@ -1714,8 +1709,8 @@ pub async fn nexus_disconnect(
 ) -> Result<(), String> {
     catalog.nexus.set_api_key(None);
     remember_account(&mods, None).await;
-    // Vide plutôt qu'absent : une déconnexion voulue tient, même en dev
-    // avec une clé dans le `.env`.
+    // Empty rather than missing: a deliberate logout holds, even in dev
+    // with a key in the `.env`.
     mods.state
         .lock()
         .await
@@ -1728,24 +1723,24 @@ pub async fn nexus_disconnect(
 struct NexusInstalled {
     app_id: u32,
     mod_id: String,
-    /// Annulée par l'utilisateur (pas une erreur à afficher).
+    /// Canceled by the user (not an error to show).
     cancelled: bool,
-    /// Nom du mod installé, s'il l'a été.
+    /// Name of the installed mod, if it was installed.
     name: Option<String>,
     missing: Vec<Requirement>,
     error: Option<String>,
-    /// Fichier suivant d'un choix multiple : sa page de téléchargement,
-    /// déjà ouverte dans le navigateur.
+    /// Next file of a multiple choice: its download page, already open in
+    /// the browser.
     website: Option<String>,
 }
 
-/// Lien `nxm://` venu du site : installe le fichier choisi, dans le jeu
-/// qui correspond.
+/// `nxm://` link from the site: installs the picked file, in the matching
+/// game.
 async fn handle_nxm(app: AppHandle, url: String) {
     let Some(link) = NxmLink::parse(&url) else {
         return;
     };
-    // Lancé par le lien : la bibliothèque se remplit au premier affichage.
+    // Started by the link: the library fills in at the first display.
     let mut found = None;
     for _ in 0..60 {
         found = app
@@ -1786,8 +1781,8 @@ async fn handle_nxm(app: AppHandle, url: String) {
         return;
     };
     let mods = app.state::<Mods>();
-    // Un des fichiers choisis dans Unalia : l'installation reprend avec
-    // tout le choix.
+    // One of the files picked in Unalia: the install resumes with the whole
+    // choice.
     let pending = (app_id, mod_id.clone());
     let chosen = mods
         .chosen_files
@@ -1824,7 +1819,7 @@ async fn handle_nxm(app: AppHandle, url: String) {
     if result.is_ok() {
         mods.chosen_files.lock().unwrap().remove(&pending);
     }
-    // Fichier suivant : sa page s'ouvre, l'interface attend son lien.
+    // Next file: its page opens, the UI waits for its link.
     if let Some(url) = &website {
         use tauri_plugin_opener::OpenerExt;
         let _ = app.opener().open_url(url, None::<&str>);

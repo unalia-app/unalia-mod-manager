@@ -1,5 +1,5 @@
 "use client";
-// beui.dev/components/motion/select, adapté aux tokens de @modalia/ui.
+// beui.dev/components/motion/select, adapted to the @modalia/ui tokens.
 
 import { Check, ChevronDown } from "lucide-react";
 import {

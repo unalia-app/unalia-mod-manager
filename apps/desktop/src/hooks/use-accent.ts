@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 
 import { gameAccent } from "@/lib/engine";
 
-/** Accent CSS du jeu (`null` : neutre), calculé par le moteur. */
+/** CSS accent of the game (`null`: neutral), computed by the engine. */
 export function useAccent(appId: number | null): string | null {
 	const [accent, setAccent] = useState<string | null>(null);
 

@@ -4,7 +4,7 @@ import { type RefObject, useEffect, useLayoutEffect, useRef, useState } from "re
 
 const WORD = "UNALIA";
 
-/** Moments clés, en ms depuis l'ouverture. */
+/** Key moments, in ms since opening. */
 const T = {
 	letters: 80,
 	letterStagger: 45,
@@ -12,7 +12,7 @@ const T = {
 	flyDuration: 620,
 };
 
-/** L'intro ne se joue qu'une fois par lancement de l'appli. */
+/** The intro only plays once per app launch. */
 let played = false;
 
 export function introPlayed(): boolean {
@@ -20,28 +20,28 @@ export function introPlayed(): boolean {
 }
 
 /**
- * Animation de lancement :
- * 1. les lettres d'UNALIA apparaissent une à une : fondu, légère montée,
- *    du flou au net ;
- * 2. un reflet irisé les traverse, un halo s'ouvre, une ligne se trace ;
- * 3. le logo s'envole vers sa place dans l'en-tête pendant que l'accueil
- *    apparaît dessous.
+ * Launch animation:
+ * 1. the letters of UNALIA appear one by one: fade, slight rise, from blur
+ *    to sharp;
+ * 2. an iridescent sheen crosses them, a glow opens, a line draws itself;
+ * 3. the logo flies to its place in the header while the home screen
+ *    appears below.
  *
- * `transform` et `opacity`, plus le flou des lettres et le reflet, limités
- * au mot (petite surface).
- * Un clic ou une touche passe directement à l'envol. Si le système demande
- * moins d'animations, simple fondu.
+ * `transform` and `opacity`, plus the blur of the letters and the sheen,
+ * limited to the word (small surface).
+ * A click or a key jumps straight to the flight. If the system asks for
+ * reduced motion, a simple fade.
  */
 export function Intro({
 	target,
 	onReveal,
 	onDone,
 }: {
-	/** Logo de l'en-tête, destination de l'envol. */
+	/** Header logo, destination of the flight. */
 	target: RefObject<HTMLElement | null>;
-	/** Début de l'envol : l'accueil peut lancer ses entrées. */
+	/** Start of the flight: the home screen can start its entrances. */
 	onReveal: () => void;
-	/** Fin : l'intro peut être retirée. */
+	/** End: the intro can be removed. */
 	onDone: () => void;
 }) {
 	const word = useRef<HTMLSpanElement>(null);
@@ -115,17 +115,17 @@ export function Intro({
 			<div ref={backdrop} className="absolute inset-0 bg-bg" />
 
 			<div ref={decor} className="absolute inset-0">
-				{/* Halo qui s'ouvre derrière le logo (centré par sa keyframe : pas
-				    de classe translate, elle s'ajouterait au transform) */}
+				{/* Glow that opens behind the logo (centered by its keyframe: no
+				    translate class, it would add to the transform) */}
 				<div className="intro-bloom absolute top-1/2 left-1/2 size-[70vmin] rounded-full bg-[radial-gradient(closest-side,rgb(255_255_255/0.09),transparent)]" />
-				{/* Le produit, en petit sous la marque */}
+				{/* The product, small under the brand */}
 				<p
 					className="absolute top-[calc(50%+4.4rem)] left-0 w-full text-center font-tight text-xs font-medium tracking-[0.35em] text-fg-subtle uppercase"
 					style={{ animation: "fade-up 500ms var(--ease-out) 520ms both" }}
 				>
 					Mod manager
 				</p>
-				{/* Ligne qui se trace sous le logo */}
+				{/* Line that draws itself under the logo */}
 				<div className="absolute top-[calc(50%+3.4rem)] left-1/2 h-px w-56 -translate-x-1/2 overflow-hidden">
 					<div className="intro-line h-full w-full bg-gradient-to-r from-transparent via-white/60 to-transparent" />
 				</div>
@@ -147,7 +147,7 @@ export function Intro({
 							</span>
 						))}
 					</span>
-					{/* Reflet irisé, découpé à la forme des lettres */}
+					{/* Iridescent sheen, clipped to the shape of the letters */}
 					<span className="absolute inset-0 block">
 						{WORD.split("").map((letter, i) => (
 							<span key={`${letter}-${i}`} className="intro-sheen inline-block bg-clip-text text-transparent">

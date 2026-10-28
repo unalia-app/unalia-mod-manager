@@ -7,7 +7,7 @@ repository.workspace = true
 description = "Appli de bureau Modalia"
 
 [lib]
-# Le suffixe `_lib` évite un conflit de nom avec le binaire sous Windows.
+# The `_lib` suffix avoids a name clash with the binary on Windows.
 name = "modalia_desktop_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
@@ -26,9 +26,9 @@ tauri-plugin-dialog = "2.8"
 tauri-plugin-log = { version = "2", default-features = false }
 tauri-plugin-opener = "2.7"
 tauri-plugin-single-instance = { version = "2.5.4", features = ["deep-link"] }
-# Sans la fonctionnalité `zip` : elle ne sert qu'aux anciens artefacts `.zip`
-# (updater v1) et tire `zip` 4, vulnérable (RUSTSEC-2026-0367 à 0369). Sous
-# Windows, l'artefact est l'installeur NSIS lui-même. À remettre pour macOS
-# et Linux (`.tar.gz`).
+# Without the `zip` feature: it only serves the old `.zip` artifacts
+# (updater v1) and pulls `zip` 4, which is vulnerable (RUSTSEC-2026-0367 to
+# 0369). On Windows, the artifact is the NSIS installer itself. Put it back
+# for macOS and Linux (`.tar.gz`).
 tauri-plugin-updater = { version = "2.14", default-features = false, features = ["rustls-tls", "system-proxy"] }
 tokio = { version = "1", features = ["macros", "time"] }

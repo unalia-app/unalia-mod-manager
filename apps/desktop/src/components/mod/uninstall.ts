@@ -8,9 +8,9 @@ function fail(error: unknown) {
 }
 
 /**
- * Retire un mod, partout de la même façon (Mes mods, page du mod, carte) :
- * un toast offre « Undo » (SPEC §3.5). Jeu lancé : le retrait attend sa
- * fermeture, et le bandeau d'attente le montre déjà, avec de quoi annuler.
+ * Removes a mod, the same way everywhere (My mods, mod page, card): a
+ * toast offers "Undo". Game running: the removal waits for it to close,
+ * and the pending banner already shows it, with a way to cancel.
  */
 export async function uninstallWithUndo(appId: number, modId: string, name: string): Promise<void> {
 	try {

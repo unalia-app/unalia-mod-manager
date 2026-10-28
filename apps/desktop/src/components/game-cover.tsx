@@ -6,7 +6,7 @@ import { useState } from "react";
 import { type SteamGame, artworkUrl } from "@/lib/engine";
 import { initials } from "@/lib/text";
 
-/** Jaquette du cache de Steam ; initiales tant qu'elle charge ou si elle manque. */
+/** Cover from Steam's cache; initials while it loads or if it is missing. */
 export function GameCover({
 	game,
 	dimmed = false,
@@ -14,7 +14,7 @@ export function GameCover({
 }: {
 	game: SteamGame;
 	dimmed?: boolean;
-	/** Taille : `h-12 w-8` par défaut, toujours au format 2:3. */
+	/** Size: `h-12 w-8` by default, always 2:3. */
 	className?: string;
 }) {
 	const [status, setStatus] = useState<"loading" | "loaded" | "missing">("loading");

@@ -26,14 +26,14 @@ function dismiss(appId: number, lastUpdated: number) {
 		const all = JSON.parse(localStorage.getItem(DISMISSED) ?? "{}") as Record<string, number>;
 		localStorage.setItem(DISMISSED, JSON.stringify({ ...all, [appId]: lastUpdated }));
 	} catch {
-		// Stockage bloqué : le bandeau reviendra, sans gravité.
+		// Storage blocked: the banner comes back, no big deal.
 	}
 }
 
 /**
- * Le jeu a été mis à jour après l'installation de certains mods : ils
- * peuvent l'empêcher de démarrer (scripts, frameworks). On le dit, on
- * cherche les mises à jour, et on propose de jouer sans eux.
+ * The game was updated after some mods were installed: they may prevent it
+ * from starting (scripts, frameworks). We say so, look for updates, and
+ * offer to play without them.
  */
 export function GameUpdatedBanner({ game }: { game: SteamGame }) {
 	const mods = useInstalled(game.appId) ?? [];

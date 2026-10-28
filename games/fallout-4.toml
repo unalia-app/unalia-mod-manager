@@ -1,10 +1,10 @@
-# Fallout 4 (Creation Engine) : mods sur Nexus Mods, placés par
-# l'adaptateur Bethesda (`crates/mod-engine/src/loaders/bethesda.rs`). Tout
-# va dans `Data/`.
+# Fallout 4 (Creation Engine): mods on Nexus Mods, placed by the Bethesda
+# adapter (`crates/mod-engine/src/loaders/bethesda.rs`). Everything goes
+# into `Data/`.
 #
-# Le jeu ne charge que les plugins listés dans
-# `%LOCALAPPDATA%\<plugins>\plugins.txt` : Modalia y ajoute ceux qu'il pose.
-# Version Steam seulement (GOG et Epic ont leur propre dossier).
+# The game only loads the plugins listed in
+# `%LOCALAPPDATA%\<plugins>\plugins.txt`: Modalia adds the ones it places.
+# Steam version only (GOG and Epic have their own folder).
 
 id = "fallout-4"
 name = "Fallout 4"
@@ -12,7 +12,7 @@ steam_app_ids = [377160]
 exe_names = ["Fallout4.exe"]
 loader = "bethesda"
 plugins = "Fallout4"
-# Launcher de Bethesda : s'ouvre avant le jeu.
+# Bethesda's launcher: opens before the game.
 launchers = ["Fallout4Launcher.exe"]
 
 [nexus]

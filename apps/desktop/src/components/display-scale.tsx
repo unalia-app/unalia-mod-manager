@@ -7,14 +7,14 @@ import { useEffect } from "react";
 import { applyInterfaceSize } from "@/lib/display";
 
 /**
- * Applique la taille d'interface choisie dès l'ouverture (voir `lib/display`),
- * puis à chaque changement d'écran : la taille automatique dépend de l'écran.
+ * Applies the chosen interface size at startup (see `lib/display`), then at
+ * each screen change: the automatic size depends on the screen.
  */
 export function DisplayScale() {
 	useEffect(() => {
 		void applyInterfaceSize();
 		if (!isTauri()) return;
-		// Déplacer la fenêtre envoie un événement par pixel : on attend la fin.
+		// Moving the window sends an event per pixel: wait for the end.
 		let timer: ReturnType<typeof setTimeout> | undefined;
 		const settle = () => {
 			clearTimeout(timer);

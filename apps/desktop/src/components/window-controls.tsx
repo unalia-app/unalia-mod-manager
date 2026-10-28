@@ -6,9 +6,9 @@ import { cn } from "@modalia/ui";
 import { useEffect, useState } from "react";
 
 /**
- * Boutons de fenêtre maison (Windows, Linux) : la barre de titre native est
- * retirée (`tauri.windows.conf.json`), Modalia dessine les siens. Sous
- * macOS, les feux tricolores du système restent intégrés à l'en-tête.
+ * Custom window buttons (Windows, Linux): the native title bar is removed
+ * (`tauri.windows.conf.json`), Modalia draws its own. On macOS, the
+ * system's traffic lights stay built into the header.
  */
 export function WindowControls() {
 	const [maximized, setMaximized] = useState(false);
@@ -65,7 +65,7 @@ function ControlButton({
 			onClick={onClick}
 			className={cn(
 				"flex h-9 w-11 cursor-pointer items-center justify-center rounded-md text-fg-muted transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-accent/60 focus-visible:outline-none",
-				// Rouge de fermeture de Windows : le geste attendu, gardé tel quel.
+				// Windows close red: the expected cue, kept as is.
 				danger ? "hover:bg-[#c42b1c] hover:text-white" : "hover:bg-surface-strong hover:text-fg",
 			)}
 		>

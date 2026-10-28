@@ -1,29 +1,29 @@
-# Cyberpunk 2077 : mods sur Nexus Mods, placés par l'adaptateur REDengine.
+# Cyberpunk 2077: mods on Nexus Mods, placed by the REDengine adapter.
 #
-# Échelle de sources : un mod Nexus dont l'auteur publie le même fichier
-# sur GitHub s'installe depuis GitHub, sans clic sur le site. Le dépôt vient
-# de la description du mod, ou de `mirrors` ci-dessous quand la description
-# ne le cite pas. Dans les deux cas, Nexus doit reconnaître l'empreinte du
-# fichier comme celle de ce mod : une liste fausse ne peut rien installer.
+# Source ladder: a Nexus mod whose author publishes the same file on GitHub
+# installs from GitHub, without a click on the site. The repo comes from
+# the mod's description, or from `mirrors` below when the description
+# doesn't mention it. Either way, Nexus must recognize the file's hash as
+# this mod's: a wrong list can't install anything.
 #
-# Les frameworks sont publiés par leurs auteurs à la fois sur Nexus et sur
-# GitHub : Modalia les installe depuis GitHub, sans clic sur Nexus, dès
-# qu'un mod en a besoin. Un framework est requis quand un fichier du mod
-# commence par un des `needed_by_prefix` ou finit par un des
-# `needed_by_ext`, ou quand Nexus le déclare comme prérequis.
+# The frameworks are published by their authors both on Nexus and on
+# GitHub: Modalia installs them from GitHub, without a click on Nexus, as
+# soon as a mod needs one. A framework is required when a file of the mod
+# starts with one of the `needed_by_prefix` or ends with one of the
+# `needed_by_ext`, or when Nexus declares it as a requirement.
 
 id = "cyberpunk-2077"
 name = "Cyberpunk 2077"
 steam_app_ids = [1091500]
 exe_names = ["bin/x64/Cyberpunk2077.exe"]
 loader = "redengine"
-# Le launcher de CD Projekt s'ouvre avant le jeu : fermé sans jouer, le
-# lancement est abandonné.
+# CD Projekt's launcher opens before the game: closed without playing, the
+# launch is abandoned.
 launchers = ["REDprelauncher.exe", "REDlauncher.exe"]
 
-# Grandes versions du jeu. Resté sur une ancienne (retour en arrière par
-# Steam ou GOG), on reçoit les fichiers des mods et les releases des
-# frameworks publiés avant la suivante : la 2.5 a cassé beaucoup de mods.
+# Major versions of the game. Stayed on an old one (rolled back through
+# Steam or GOG)? You get the mod files and framework releases published
+# before the next one: 2.5 broke a lot of mods.
 [[versions]]
 name = "2.31"
 released = "2025-09-11"

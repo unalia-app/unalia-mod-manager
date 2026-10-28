@@ -3,16 +3,16 @@
 import { cn } from "@modalia/ui";
 import { type PointerEvent, useCallback, useEffect, useRef, useState } from "react";
 
-/** Délai après le dernier défilement avant d'effacer la barre. */
+/** Delay after the last scroll before hiding the bar. */
 const HIDE_AFTER = 1000;
-/** Hauteur de l'en-tête collant : la barre commence dessous. */
+/** Height of the sticky header: the bar starts below it. */
 const TOP = 56;
 const MIN_THUMB = 32;
 
 /**
- * Barre de défilement de la page, en surimpression : elle ne prend aucune
- * place (la barre native est masquée, voir `styles.css`), n'apparaît que
- * pendant le défilement ou au survol du bord droit, et se laisse attraper.
+ * Page scrollbar, as an overlay: it takes no space (the native bar is
+ * hidden, see `styles.css`), only shows while scrolling or when hovering
+ * the right edge, and can be grabbed.
  */
 export function OverlayScrollbar() {
 	const [metrics, setMetrics] = useState({ size: 0, offset: 0, scrollable: false });
@@ -46,7 +46,7 @@ export function OverlayScrollbar() {
 		measure();
 		window.addEventListener("scroll", onScroll, { passive: true });
 		window.addEventListener("resize", measure);
-		// La hauteur change sans défilement (chargement de cartes, onglets).
+		// The height changes without scrolling (cards loading, tabs).
 		const observer = new ResizeObserver(measure);
 		observer.observe(document.body);
 		return () => {

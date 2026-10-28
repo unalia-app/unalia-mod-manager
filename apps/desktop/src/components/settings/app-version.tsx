@@ -8,7 +8,7 @@ import { useEffect, useState } from "react";
 
 import { checkForUpdate, installUpdate, useAppUpdate } from "@/lib/app-update";
 
-/** Version installée, et la mise à jour de l'appli à portée de clic. */
+/** Installed version, and the app update one click away. */
 export function AppVersion() {
 	const update = useAppUpdate();
 	const [version, setVersion] = useState<string | null>(null);
@@ -21,7 +21,7 @@ export function AppVersion() {
 		};
 	}, []);
 
-	// Les erreurs restent affichées dans la carte : rien d'autre à faire ici.
+	// Errors stay shown in the card: nothing else to do here.
 	const check = () => checkForUpdate().catch(() => {});
 	const install = () => installUpdate().catch(() => {});
 

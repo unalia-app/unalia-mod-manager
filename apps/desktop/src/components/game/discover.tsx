@@ -25,7 +25,7 @@ type Results = {
 	hasMore: boolean;
 };
 
-/** Onglet Découvrir : recherche, tri et grille qui se charge au défilement. */
+/** Discover tab: search, sort and a grid that loads on scroll. */
 export function Discover({ community, appId }: { community: string; appId: number }) {
 	const [text, setText] = useState("");
 	const query = useDebounced(text.trim(), 250);
@@ -34,7 +34,7 @@ export function Discover({ community, appId }: { community: string; appId: numbe
 	const [loadingMore, setLoadingMore] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 	const [attempt, setAttempt] = useState(0);
-	// Chaque nouvelle recherche invalide les réponses encore en vol.
+	// Each new search invalidates the answers still in flight.
 	const generation = useRef(0);
 
 
@@ -59,7 +59,7 @@ export function Discover({ community, appId }: { community: string; appId: numbe
 					if (current !== generation.current) return;
 					setResults((r) => {
 						if (!r) return r;
-						// Le classement peut bouger entre deux pages : pas de doublon.
+						// The ranking can move between two pages: no duplicates.
 						const seen = new Set(r.items.map((m) => m.id));
 						return {
 							items: [...r.items, ...page.items.filter((m) => !seen.has(m.id))],
@@ -75,7 +75,7 @@ export function Discover({ community, appId }: { community: string; appId: numbe
 	};
 
 	const sentinel = useInView<HTMLDivElement>(loadMore, results?.items.length);
-	// Taille de la première page : seules ses cartes ont l'entrée en cascade.
+	// Size of the first page: only its cards get the staggered entrance.
 	const firstPage = useRef(0);
 	if (results?.page === 1) firstPage.current = results.items.length;
 	const firstPageSize = firstPage.current;
@@ -145,8 +145,8 @@ export function Discover({ community, appId }: { community: string; appId: numbe
 							{results.items.map((mod, i) => (
 								<ModCard key={mod.id} mod={mod} index={i} appId={appId} animated={i < firstPageSize} />
 							))}
-							{/* Toujours là tant qu'il reste des pages : les nouvelles cartes
-							    s'insèrent avant elles, rien n'apparaît ni ne disparaît. */}
+							{/* Always there while pages remain: new cards are inserted
+							    before it, nothing appears or disappears. */}
 							{results.hasMore &&
 								Array.from({ length: 4 }, (_, i) => <ModCardSkeleton key={`more-${i}`} />)}
 						</div>
@@ -177,9 +177,9 @@ function useDebounced<T>(value: T, delay: number): T {
 }
 
 /**
- * Appelle `onVisible` quand l'élément approche de l'écran (600 px d'avance).
- * L'observateur est recréé quand `version` change : si l'élément est resté
- * visible après un chargement, il se redéclenche quand même.
+ * Calls `onVisible` when the element gets close to the screen (600 px
+ * ahead). The observer is recreated when `version` changes: if the element
+ * stayed visible after a load, it fires again anyway.
  */
 function useInView<T extends Element>(onVisible: () => void, version: unknown) {
 	const callback = useRef(onVisible);

@@ -1,6 +1,6 @@
 import { cn } from "./cn";
 
-/** Interrupteur instantané (activer / désactiver un mod, SPEC §3.5). */
+/** Instant switch (enable / disable a mod). */
 export function Switch({
 	checked,
 	onChange,
