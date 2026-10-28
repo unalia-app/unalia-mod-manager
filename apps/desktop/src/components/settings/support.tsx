@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 
 import { AppVersion } from "@/components/settings/app-version";
 import { Licenses } from "@/components/settings/licenses";
+import { Uninstall } from "@/components/settings/uninstall";
 import { toast } from "@/components/toaster";
 import { openLogsFolder, splitError } from "@/lib/engine";
 import { buildReport } from "@/lib/report";
@@ -92,6 +93,8 @@ export function Support() {
 			</div>
 
 			<Licenses />
+
+			<Uninstall />
 		</>
 	);
 }

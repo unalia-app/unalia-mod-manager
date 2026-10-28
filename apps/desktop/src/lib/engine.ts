@@ -529,6 +529,17 @@ export function openLicense(license: "app" | "thirdParty"): Promise<void> {
 	return invoke("open_license", { license });
 }
 
+/** Faux en dev et hors Windows : pas de désinstalleur. */
+export function canUninstall(): Promise<boolean> {
+	if (!isTauri()) return Promise.resolve(false);
+	return invoke("can_uninstall");
+}
+
+/** Ouvre le désinstalleur de Windows, puis l'appli se ferme. */
+export function uninstallApp(): Promise<void> {
+	return invoke("uninstall_app");
+}
+
 // Mises à jour de l'appli (moteur : app_update).
 
 export type AvailableUpdate = { version: string; notes: string | null };

@@ -831,6 +831,8 @@ pub fn run() {
             support::diagnostics,
             support::open_logs_folder,
             support::open_license,
+            support::can_uninstall,
+            support::uninstall_app,
             app_update::check_app_update,
             app_update::install_app_update,
         ])

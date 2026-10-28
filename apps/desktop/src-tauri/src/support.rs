@@ -115,6 +115,35 @@ pub fn open_license(app: AppHandle, license: License) -> Result<(), String> {
         .map_err(logged)
 }
 
+/// Désinstalleur posé par l'installeur NSIS à côté de l'exe. Absent en dev.
+fn uninstaller() -> Option<PathBuf> {
+    let file = std::env::current_exe()
+        .ok()?
+        .parent()?
+        .join("uninstall.exe");
+    file.is_file().then_some(file)
+}
+
+/// L'appli installée peut se désinstaller depuis Settings.
+#[tauri::command]
+pub fn can_uninstall() -> bool {
+    cfg!(windows) && uninstaller().is_some()
+}
+
+/// Ouvre le désinstalleur de Windows puis ferme l'appli : il refuse de
+/// continuer tant qu'elle tourne. Sa case « supprimer les données » retire
+/// aussi les mods des jeux (`--remove-all-mods`, `windows/hooks.nsh`).
+#[tauri::command]
+pub fn uninstall_app(app: AppHandle) -> Result<(), String> {
+    let file = uninstaller().ok_or_else(|| {
+        "The uninstaller is missing. Use Windows Settings > Apps instead.".to_owned()
+    })?;
+    std::process::Command::new(&file).spawn().map_err(logged)?;
+    log::info!("uninstaller started, closing the app");
+    app.exit(0);
+    Ok(())
+}
+
 fn log_file(app: &AppHandle) -> Option<PathBuf> {
     Some(app.path().app_log_dir().ok()?.join(format!("{LOG_NAME}.log")))
 }
