@@ -99,6 +99,16 @@
 	}
 }
 
+/* Temps restant d'un toast : durée et pause posées par `ToastStack`. */
+@keyframes toast-timer {
+	from {
+		transform: scaleX(1);
+	}
+	to {
+		transform: scaleX(0);
+	}
+}
+
 /*
  * Accent : seule couleur qui change selon le jeu actif (SPEC §4). Un
  * conteneur définit `--accent` ; `inline` fait résoudre la variable sur

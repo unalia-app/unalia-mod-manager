@@ -8,6 +8,7 @@ export { Segmented, type SegmentedItem } from "./segmented";
 export { Skeleton } from "./skeleton";
 export { Spinner } from "./spinner";
 export { Switch } from "./switch";
+export { ToastStack, type ToastStackItem, type ToastTone } from "./toast-stack";
 export {
 	Select,
 	SelectContent,
