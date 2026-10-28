@@ -622,7 +622,7 @@ async fn parse<T: DeserializeOwned>(response: reqwest::Response) -> Result<T, So
     })
 }
 
-const MOD_FIELDS: &str = "modId name summary author thumbnailUrl pictureUrl downloads \
+const MOD_FIELDS: &str = "modId name summary author thumbnailUrl thumbnailLargeUrl pictureUrl downloads \
     updatedAt createdAt version adultContent status modCategory { name }";
 
 impl ModSource for Nexus {
@@ -964,6 +964,9 @@ struct ModNode {
     summary: Option<String>,
     author: Option<String>,
     thumbnail_url: Option<String>,
+    /// 622 × 349 (la vignette simple fait 385 × 216) : nette sur les cartes.
+    #[serde(default)]
+    thumbnail_large_url: Option<String>,
     picture_url: Option<String>,
     downloads: Option<u64>,
     updated_at: Option<String>,
@@ -983,7 +986,7 @@ impl ModNode {
             name: self.name,
             author: self.author.unwrap_or_default(),
             summary: self.summary.unwrap_or_default(),
-            icon_url: self.thumbnail_url,
+            icon_url: self.thumbnail_large_url.or(self.thumbnail_url),
             categories: self.mod_category.map(|c| c.name).into_iter().collect(),
             downloads: self.downloads.unwrap_or_default(),
             updated_at: self.updated_at.unwrap_or_default(),

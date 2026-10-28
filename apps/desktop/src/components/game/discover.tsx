@@ -16,7 +16,7 @@ const SORTS: { value: ModSort; label: string }[] = [
 	{ value: "updated", label: "Updated" },
 ];
 
-const GRID = "grid grid-cols-[repeat(auto-fill,minmax(11.5rem,1fr))] gap-4";
+const GRID = "grid grid-cols-[repeat(auto-fill,minmax(15rem,1fr))] gap-4";
 
 type Results = {
 	items: ModSummary[];
