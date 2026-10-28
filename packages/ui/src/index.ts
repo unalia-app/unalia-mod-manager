@@ -1,4 +1,5 @@
 export { Badge, type BadgeProps, badgeVariants } from "./badge";
+export { DiscordIcon, GitHubIcon } from "./brand-icons";
 export { Button, type ButtonProps, buttonVariants } from "./button";
 export { cn } from "./cn";
 export { Dialog, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "./dialog";
