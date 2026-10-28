@@ -19,10 +19,13 @@ const CATEGORY: Record<string, string> = {
 };
 
 /**
- * Choix des fichiers d'un mod Nexus qui en a plusieurs (variantes de
- * couleur, options). Le fichier conseillé est coché d'office ; les fichiers
- * se posent dans l'ordre de la liste, chacun par-dessus le précédent. Dans
- * un portail : `fixed` ne doit dépendre d'aucun parent transformé.
+ * Choix des fichiers d'un mod Nexus qui en a plusieurs (versions, options).
+ * Plusieurs fichiers principaux sont des versions du même mod : un seul se
+ * choisit (le moteur met en tête celui qui marche avec ce qu'Unalia
+ * installe). Les options s'y ajoutent. Le fichier conseillé est coché
+ * d'office ; les fichiers se posent dans l'ordre de la liste, chacun
+ * par-dessus le précédent. Dans un portail : `fixed` ne doit dépendre
+ * d'aucun parent transformé.
  */
 export function FilePicker() {
 	const choice = useFileChoice();
@@ -47,8 +50,14 @@ export function FilePicker() {
 
 	if (!choice) return null;
 
+	const mains = choice.files.filter((f) => f.category === "MAIN").map((f) => f.fileId);
+	const versions = mains.length > 1;
 	const toggle = (id: number) =>
-		setPicked((current) => (current.includes(id) ? current.filter((f) => f !== id) : [...current, id]));
+		setPicked((current) => {
+			// Une seule version : en choisir une remplace l'autre.
+			if (versions && mains.includes(id)) return [id, ...current.filter((f) => !mains.includes(f))];
+			return current.includes(id) ? current.filter((f) => f !== id) : [...current, id];
+		});
 	// L'ordre de pose est celui de la liste, pas celui des clics.
 	const ordered = choice.files.map((f) => f.fileId).filter((id) => picked.includes(id));
 
@@ -74,8 +83,9 @@ export function FilePicker() {
 				<div className="px-5 pt-5">
 					<h3 className="text-base font-semibold text-fg">Choose what to install</h3>
 					<p className="mt-1 text-xs leading-relaxed text-fg-subtle">
-						This mod comes in several files. They install in this order, each on top of the previous one: a color
-						variant replaces the look of the main file.
+						{versions
+							? "This mod comes in several versions: pick one. The recommended one works with what Unalia installs for you. Optional files add to it."
+							: "This mod comes in several files. They install in this order, each on top of the previous one."}
 					</p>
 				</div>
 
@@ -84,6 +94,8 @@ export function FilePicker() {
 						<FileRow
 							key={file.fileId}
 							file={file}
+							single={versions && file.category === "MAIN"}
+							recommended={versions && file.fileId === choice.files[0]?.fileId && file.category === "MAIN"}
 							checked={picked.includes(file.fileId)}
 							order={ordered.length > 1 ? ordered.indexOf(file.fileId) + 1 : 0}
 							onToggle={() => toggle(file.fileId)}
@@ -112,11 +124,16 @@ export function FilePicker() {
 
 function FileRow({
 	file,
+	single,
+	recommended,
 	checked,
 	order,
 	onToggle,
 }: {
 	file: NexusModFile;
+	/** Une version parmi d'autres : choix unique (bouton radio). */
+	single: boolean;
+	recommended: boolean;
 	checked: boolean;
 	/** Rang de pose quand plusieurs fichiers sont cochés, sinon 0. */
 	order: number;
@@ -127,7 +144,7 @@ function FileRow({
 		<li>
 			<button
 				type="button"
-				role="checkbox"
+				role={single ? "radio" : "checkbox"}
 				aria-checked={checked}
 				onClick={onToggle}
 				className={cn(
@@ -135,18 +152,30 @@ function FileRow({
 					checked ? "border-accent/35 bg-accent/8" : "border-line bg-surface hover:border-line-strong",
 				)}
 			>
-				<span
-					className={cn(
-						"mt-0.5 flex size-4 shrink-0 items-center justify-center rounded border text-[10px] font-semibold",
-						checked ? "border-accent bg-accent text-bg" : "border-line-strong",
-					)}
-				>
-					{checked && (order ? order : <Check className="size-3" strokeWidth={3} />)}
-				</span>
+				{single ? (
+					<span
+						className={cn(
+							"mt-0.5 flex size-4 shrink-0 items-center justify-center rounded-full border",
+							checked ? "border-accent" : "border-line-strong",
+						)}
+					>
+						{checked && <span className="size-2 rounded-full bg-accent" />}
+					</span>
+				) : (
+					<span
+						className={cn(
+							"mt-0.5 flex size-4 shrink-0 items-center justify-center rounded border text-[10px] font-semibold",
+							checked ? "border-accent bg-accent text-bg" : "border-line-strong",
+						)}
+					>
+						{checked && (order ? order : <Check className="size-3" strokeWidth={3} />)}
+					</span>
+				)}
 				<span className="min-w-0 flex-1">
 					<span className="flex items-center gap-2">
 						<span className="truncate text-sm font-medium text-fg">{file.name}</span>
-						<Badge>{CATEGORY[file.category] ?? file.category}</Badge>
+						<Badge>{single ? "Version" : (CATEGORY[file.category] ?? file.category)}</Badge>
+						{recommended && <Badge tone="success">Recommended</Badge>}
 					</span>
 					{meta && <span className="mt-0.5 block font-mono text-[11px] text-fg-muted">{meta}</span>}
 					{file.description && (

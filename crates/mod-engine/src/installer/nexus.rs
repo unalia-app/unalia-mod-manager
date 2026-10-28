@@ -128,7 +128,8 @@ impl Installer<'_, Nexus> {
                             }
                         }
                         if kept.is_empty() {
-                            let choices = info.choices(before);
+                            let mut choices = info.choices(before);
+                            recommend(&mut choices, &frameworks);
                             if choices.len() > 1 && previous.is_none() {
                                 return Err(InstallError::ChooseFiles(
                                     choices.into_iter().cloned().collect(),
@@ -553,6 +554,23 @@ fn combine(parts: &[(Manifest, Vec<Placement>)]) -> Manifest {
     combined
 }
 
+/// Plusieurs fichiers principaux : ce sont des versions du même mod, une
+/// seule à installer. En tête (cochée d'office), celle qui cite un
+/// framework que Modalia installe (« UE4SS_… ») : elle marche telle quelle,
+/// l'autre peut dépendre d'un loader absent. Sinon l'ordre ne change pas.
+fn recommend(choices: &mut [&ModFile], frameworks: &[Framework]) {
+    if choices.iter().filter(|f| f.category == "MAIN").count() < 2 {
+        return;
+    }
+    let mentions = |file: &ModFile| {
+        let text = format!("{} {}", file.name, file.description).to_lowercase();
+        frameworks
+            .iter()
+            .any(|f| text.contains(&f.name.to_lowercase()))
+    };
+    choices.sort_by_key(|f| !(f.category == "MAIN" && mentions(f)));
+}
+
 /// Release d'un framework : celle de son tag s'il en a un, sinon la
 /// dernière stable (d'avant `before` pour une ancienne version du jeu).
 async fn framework_release(
@@ -694,4 +712,57 @@ pub async fn available_updates_nexus(
         }
     }
     updates
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn file(id: u32, category: &str, name: &str, description: &str) -> ModFile {
+        ModFile {
+            file_id: id,
+            name: name.into(),
+            version: "1".into(),
+            category: category.into(),
+            primary: false,
+            size: None,
+            uploaded_at: 0,
+            description: description.into(),
+        }
+    }
+
+    fn ue4ss() -> Framework {
+        Framework {
+            name: "UE4SS".into(),
+            nexus_id: None,
+            github: "UE4SS-RE/RE-UE4SS".into(),
+            release: None,
+            asset: "UE4SS_v*.zip".into(),
+            marker: "ue4ss/UE4SS.dll".into(),
+            needed_by_prefix: vec![],
+            needed_by_ext: vec![],
+        }
+    }
+
+    #[test]
+    fn the_main_file_that_names_a_framework_comes_first() {
+        // Skip Start Screen (Hogwarts Legacy) : deux versions du même mod.
+        let apparate = file(
+            3280,
+            "MAIN",
+            "Apparate_SkipStartScreen",
+            "Blueprint Apparate Modloader Version",
+        );
+        let lua = file(3279, "MAIN", "UE4SS_SkipStartScreen", "UE4SS Version");
+        let extra = file(3281, "OPTIONAL", "Extra", "");
+        let mut choices = vec![&apparate, &extra, &lua];
+        recommend(&mut choices, &[ue4ss()]);
+        let ids: Vec<u32> = choices.iter().map(|f| f.file_id).collect();
+        assert_eq!(ids, [3279, 3280, 3281]);
+
+        // Un seul fichier principal : l'ordre ne change pas.
+        let mut choices = vec![&apparate, &extra];
+        recommend(&mut choices, &[ue4ss()]);
+        assert_eq!(choices[0].file_id, 3280);
+    }
 }
