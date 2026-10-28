@@ -1,11 +1,12 @@
 "use client";
 
 import { Badge, Skeleton, Spinner, cn } from "@modalia/ui";
-import { ArrowUp, Download, ExternalLink, Package, RotateCw, X } from "lucide-react";
+import { ArrowUp, Download, ExternalLink, Package, RotateCw, Trash2, X } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
 
 import { InstallStateBadge } from "@/components/mod/install-button";
+import { uninstallWithUndo } from "@/components/mod/uninstall";
 import type { ModSummary } from "@/lib/engine";
 import { compactNumber, relativeDate } from "@/lib/format";
 import { usePendingOp } from "@/lib/game-status";
@@ -120,17 +121,39 @@ export function ModCard({
  * Petit bouton « Install » au survol de la carte (SPEC §3.4) : un
  * clic installe le mod avec ses dépendances et le loader. Pendant
  * l'installation, il montre juste l'avancement ; une fois installé, il
- * laisse la place au badge « Installed ».
+ * devient « Uninstall » (badge « Installed » en haut de la carte).
  */
 function QuickInstall({ appId, modId, name }: { appId: number; modId: string; name: string }) {
 	const installed = useInstalled(appId)?.some((m) => m.id === modId);
 	const update = useModUpdate(appId, modId);
 	const active = useActiveInstall(appId, modId);
 	const pending = usePendingOp(appId, modId);
+	const [removing, setRemoving] = useState(false);
 
 	if (pending) return null;
 	const busy = active?.status === "queued" || active?.status === "running";
-	if (installed && !update && !busy) return null;
+	if (installed && !update && !busy) {
+		return (
+			<button
+				type="button"
+				aria-label={`Uninstall ${name}`}
+				disabled={removing}
+				onClick={async () => {
+					setRemoving(true);
+					await uninstallWithUndo(appId, modId, name);
+					setRemoving(false);
+				}}
+				className={cn(
+					"liquid-glass absolute right-2 bottom-2 z-20 flex h-7 min-w-[4.5rem] cursor-pointer items-center justify-center gap-1.5 rounded-full px-2.5 font-tight text-[11px] font-semibold shadow-lg transition-[opacity,translate,color] duration-200 ease-out hover:text-danger",
+					!removing &&
+						"translate-y-1 opacity-0 group-hover:translate-y-0 group-hover:opacity-100 focus-visible:translate-y-0 focus-visible:opacity-100",
+				)}
+			>
+				{removing ? <Spinner className="size-3 border-[1.5px]" /> : <Trash2 className="size-3" strokeWidth={2.5} />}
+				Uninstall
+			</button>
+		);
+	}
 
 	const failed = active?.status === "error";
 	// Compte Nexus gratuit : la page de téléchargement attend un clic.

@@ -18,6 +18,7 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
 import { progressDetail, progressLabel } from "@/components/mod/install-button";
+import { uninstallWithUndo } from "@/components/mod/uninstall";
 import { Notice } from "@/components/notice";
 import { toast } from "@/components/toaster";
 import { type InstalledMod, type PausedDownload, discardDownload, pausedDownloads, splitError } from "@/lib/engine";
@@ -30,8 +31,6 @@ import {
 	cancel,
 	install,
 	overallProgress,
-	remove,
-	restore,
 	revert,
 	toggle,
 	updateAll,
@@ -274,21 +273,8 @@ function ModRow({ mod: m, appId }: { mod: InstalledMod; appId: number }) {
 
 	const onRemove = async () => {
 		setBusy(true);
-		try {
-			const outcome = await remove(appId, m.id);
-			// En attente (jeu lancé) : le bandeau d'attente le montre déjà, avec
-			// de quoi annuler. Sinon, le toast offre « Undo » (SPEC §3.5).
-			if (outcome === "done") {
-				toast({
-					title: `${m.name} removed`,
-					action: { label: "Undo", onClick: () => restore(appId, m.id).catch(fail) },
-				});
-			}
-		} catch (error) {
-			fail(error);
-		} finally {
-			setBusy(false);
-		}
+		await uninstallWithUndo(appId, m.id, m.name);
+		setBusy(false);
 	};
 
 	return (

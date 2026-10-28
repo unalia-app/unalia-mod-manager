@@ -1,8 +1,10 @@
 "use client";
 
 import { Button, cn } from "@modalia/ui";
-import { ArrowUp, Check, Clock, Download, ExternalLink, RotateCw, X } from "lucide-react";
+import { ArrowUp, Check, Clock, Download, ExternalLink, RotateCw, Trash2, X } from "lucide-react";
+import { useState } from "react";
 
+import { uninstallWithUndo } from "@/components/mod/uninstall";
 import { type InstallProgress, cancelPending } from "@/lib/engine";
 import { bytes, timeLeft } from "@/lib/format";
 import { usePendingOp } from "@/lib/game-status";
@@ -120,7 +122,7 @@ export function InstallButton({
 	}
 
 	// Pas de mise à jour automatique (SPEC §3.5) : on propose, on n'impose pas.
-	if (installed && update) {
+	if (installed && update && pending?.type !== "uninstall") {
 		return (
 			<div className="flex flex-col items-end gap-2">
 				<Button size="lg" leftIcon={<ArrowUp className="size-4" />} onClick={start}>
@@ -131,18 +133,29 @@ export function InstallButton({
 		);
 	}
 
-	if (installed) {
+	// Le jeu tourne : le retrait attend sa fermeture.
+	if (pending?.type === "uninstall") {
 		return (
 			<div className="flex flex-col items-end gap-2">
-				<Button size="lg" variant="outline" disabled leftIcon={<Check className="size-4 text-success" />} className="disabled:opacity-100">
-					Installed
+				<Button size="lg" variant="outline" disabled leftIcon={<Clock className="size-4 text-danger" />} className="disabled:opacity-100">
+					Uninstall queued
 				</Button>
 				<span className="text-[11px] text-fg-subtle">
-					v{installed.version}
-					{installed.enabled ? "" : " · turned off"}
+					Removed when you close the game ·{" "}
+					<button
+						type="button"
+						className="cursor-pointer text-fg-muted underline-offset-2 hover:underline"
+						onClick={() => void cancelPending(appId, modId)}
+					>
+						Cancel
+					</button>
 				</span>
 			</div>
 		);
+	}
+
+	if (installed) {
+		return <InstalledButton appId={appId} modId={modId} modName={modName} version={installed.version} enabled={installed.enabled} />;
 	}
 
 	if (active?.status === "error") {
@@ -180,6 +193,59 @@ export function InstallButton({
 				</span>
 			)}
 			{hint && <span className="max-w-64 text-right text-[11px] leading-snug text-fg-faint">{hint}</span>}
+		</div>
+	);
+}
+
+/** « Installed », qui devient « Uninstall » au survol (retrait avec Undo). */
+function InstalledButton({
+	appId,
+	modId,
+	modName,
+	version,
+	enabled,
+}: {
+	appId: number;
+	modId: string;
+	modName: string;
+	version: string;
+	enabled: boolean;
+}) {
+	const [removing, setRemoving] = useState(false);
+
+	const uninstall = async () => {
+		setRemoving(true);
+		await uninstallWithUndo(appId, modId, modName);
+		setRemoving(false);
+	};
+
+	return (
+		<div className="flex flex-col items-end gap-2">
+			<Button
+				size="lg"
+				variant="outline"
+				isLoading={removing}
+				aria-label={`Uninstall ${modName}`}
+				onClick={() => void uninstall()}
+				className="group/installed hover:border-danger/30 hover:bg-danger/10 hover:text-danger focus-visible:border-danger/30 focus-visible:bg-danger/10 focus-visible:text-danger"
+			>
+				{/* Les deux libellés dans la même case : largeur fixe, rien ne bouge
+				    au survol. */}
+				<span className="grid">
+					<span className="col-start-1 row-start-1 flex items-center justify-center gap-2.5 group-hover/installed:invisible group-focus-visible/installed:invisible">
+						<Check className="size-4 text-success" />
+						Installed
+					</span>
+					<span className="invisible col-start-1 row-start-1 flex items-center justify-center gap-2.5 group-hover/installed:visible group-focus-visible/installed:visible">
+						<Trash2 className="size-4" />
+						Uninstall
+					</span>
+				</span>
+			</Button>
+			<span className="text-[11px] text-fg-subtle">
+				v{version}
+				{enabled ? "" : " · turned off"}
+			</span>
 		</div>
 	);
 }
