@@ -1,19 +1,19 @@
-//! Adaptateur **Bethesda** (Creation Engine : Skyrim Special Edition,
-//! Fallout 4), pour les jeux dont les mods viennent de Nexus.
+//! **Bethesda** adapter (Creation Engine: Skyrim Special Edition,
+//! Fallout 4), for games whose mods come from Nexus.
 //!
-//! Tout mod va dans `Data/`. D'après le contenu de l'archive, sans deviner
-//! au hasard :
-//! - `Data/…` se pose tel quel ;
-//! - un dossier de `Data` (`meshes/`, `textures/`, `SKSE/`…) va sous `Data/` ;
-//! - un plugin (`.esp`, `.esm`, `.esl`) ou une archive de ressources
-//!   (`.bsa`, `.ba2`) à la racine du paquet va dans `Data/`.
+//! Every mod goes into `Data/`. From the archive content, never by a random
+//! guess:
+//! - `Data/…` is placed as is;
+//! - a `Data` folder (`meshes/`, `textures/`, `SKSE/`…) goes under `Data/`;
+//! - a plugin (`.esp`, `.esm`, `.esl`) or a resource archive (`.bsa`,
+//!   `.ba2`) at the package root goes into `Data/`.
 //!
-//! Le reste (readme, captures, dossiers d'options) n'est pas installé. Une
-//! archive avec un installateur FOMOD (`fomod/ModuleConfig.xml`) propose
-//! des choix : elle n'est pas posée à l'aveugle (`has_fomod`).
+//! The rest (readme, screenshots, option folders) is not installed. An
+//! archive with a FOMOD installer (`fomod/ModuleConfig.xml`) offers
+//! choices: it is not placed blindly (`has_fomod`).
 //!
-//! Le jeu ne charge que les plugins listés dans son `plugins.txt` :
-//! `sync_plugins` le tient à jour d'après ce que Modalia a posé.
+//! The game only loads the plugins listed in its `plugins.txt`:
+//! `sync_plugins` keeps it up to date with what Modalia placed.
 
 use std::collections::{HashMap, HashSet};
 use std::fs;
@@ -22,7 +22,7 @@ use std::path::Path;
 
 use super::{Loader, PackageKind, Placement};
 
-/// Dossiers que le jeu lit dans `Data/`.
+/// Folders the game reads in `Data/`.
 const DATA_FOLDERS: [&str; 20] = [
     "f4se",
     "grass",
@@ -46,10 +46,10 @@ const DATA_FOLDERS: [&str; 20] = [
     "vis",
 ];
 
-/// Plugins : chargés seulement s'ils sont listés dans `plugins.txt`.
+/// Plugins: only loaded if they are listed in `plugins.txt`.
 const PLUGINS: [&str; 3] = [".esp", ".esm", ".esl"];
 
-/// Archives de ressources, chargées avec le plugin du même nom.
+/// Resource archives, loaded with the plugin of the same name.
 const ARCHIVES: [&str; 2] = [".bsa", ".ba2"];
 
 pub struct Bethesda;
@@ -60,7 +60,7 @@ impl Loader for Bethesda {
     }
 
     fn installed_manually(&self, _game_dir: &Path) -> bool {
-        // Pas de loader unique : le script extender est un framework.
+        // No single loader: the script extender is a framework.
         false
     }
 
@@ -82,9 +82,9 @@ impl Loader for Bethesda {
     }
 }
 
-/// L'archive est-elle un installateur FOMOD, avec des choix à faire ? Un
-/// dossier `fomod/` qui ne contient que `info.xml` (la fiche du mod) ne
-/// compte pas.
+/// Is the archive a FOMOD installer, with choices to make? A `fomod/`
+/// folder that only holds `info.xml` (the mod's info sheet) doesn't
+/// count.
 pub fn has_fomod(files: &[String]) -> bool {
     files.iter().any(|f| {
         let lower = f.to_ascii_lowercase();
@@ -92,9 +92,9 @@ pub fn has_fomod(files: &[String]) -> bool {
     })
 }
 
-/// Dossiers d'emballage à ignorer : `Mon Mod v1.2/meshes/…`. On descend
-/// tant que tout le paquet est dans un seul dossier qui n'est ni `Data`,
-/// ni un de ses dossiers.
+/// Wrapper folders to skip: `My Mod v1.2/meshes/…`. We go down as long as
+/// the whole package sits in a single folder that is neither `Data` nor
+/// one of its folders.
 fn wrapper_depth(files: &[String]) -> usize {
     let mut depth = 0;
     loop {
@@ -145,25 +145,25 @@ fn target(parts: &[&str]) -> Option<String> {
     }
 }
 
-/// Plugin posé dans le jeu : son nom, s'il est directement dans `Data/`.
+/// Plugin placed in the game: its name, if it sits directly in `Data/`.
 fn plugin_name(target: &str) -> Option<&str> {
     let (dir, name) = target.split_once('/')?;
     (is_data(dir) && !name.contains('/') && has_ext(name, &PLUGINS)).then_some(name)
 }
 
-/// Une ligne de `plugins.txt` : `*Mod.esp` (actif) ou `Mod.esp`.
+/// A line of `plugins.txt`: `*Mod.esp` (active) or `Mod.esp`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct Entry {
     name: String,
     active: bool,
 }
 
-/// Met `plugins.txt` (`list`) d'accord avec les plugins du jeu. Les
-/// plugins que Modalia a posés (`deployed`, chemins relatifs au jeu) sont
-/// ajoutés, actifs ; les lignes dont le fichier n'est plus dans `Data/`
-/// partent (le jeu les ignorait déjà). Le reste, posé à la main ou par un
-/// autre outil, garde sa ligne et son état. Chaque plugin passe après ses
-/// masters, sans bouger sinon. Renvoie `true` si le fichier a changé.
+/// Brings `plugins.txt` (`list`) in line with the game's plugins. The
+/// plugins Modalia placed (`deployed`, paths relative to the game) are
+/// added, active; lines whose file is no longer in `Data/` go (the game
+/// already ignored them). The rest, placed by hand or by another tool,
+/// keeps its line and its state. Each plugin comes after its masters, and
+/// nothing moves otherwise. Returns `true` if the file changed.
 pub fn sync_plugins(game_dir: &Path, list: &Path, deployed: &[String]) -> io::Result<bool> {
     let data = game_dir.join("Data");
     let present: HashSet<String> = match fs::read_dir(&data) {
@@ -171,7 +171,7 @@ pub fn sync_plugins(game_dir: &Path, list: &Path, deployed: &[String]) -> io::Re
             .flatten()
             .map(|e| e.file_name().to_string_lossy().to_ascii_lowercase())
             .collect(),
-        // Jeu déplacé ou disque débranché : on ne touche à rien.
+        // Game moved or drive unplugged: touch nothing.
         Err(_) => return Ok(false),
     };
 
@@ -204,7 +204,7 @@ pub fn sync_plugins(game_dir: &Path, list: &Path, deployed: &[String]) -> io::Re
     }
     for name in deployed.iter().filter_map(|t| plugin_name(t)) {
         let listed = entries.iter().any(|e| e.name.eq_ignore_ascii_case(name));
-        // Nom hors de l'encodage du fichier : impossible à écrire.
+        // Name outside the file's encoding: impossible to write.
         if !listed
             && present.contains(&name.to_ascii_lowercase())
             && name.chars().all(|c| u32::from(c) <= 0xFF)
@@ -241,15 +241,15 @@ pub fn sync_plugins(game_dir: &Path, list: &Path, deployed: &[String]) -> io::Re
     Ok(true)
 }
 
-/// `plugins.txt` est en Windows-1252 : lu octet par octet, il se réécrit à
-/// l'identique.
+/// `plugins.txt` is in Windows-1252: read byte by byte, it is written back
+/// unchanged.
 fn latin1(bytes: &[u8]) -> String {
     bytes.iter().map(|&b| char::from(b)).collect()
 }
 
-/// Ordre de chargement où chaque plugin suit ses masters listés. Un master
-/// placé trop bas remonte juste avant le premier plugin qui en a besoin ;
-/// rien d'autre ne bouge.
+/// Load order where each plugin follows its listed masters. A master placed
+/// too low moves up just before the first plugin that needs it; nothing
+/// else moves.
 fn masters_first(entries: Vec<Entry>, masters_of: impl Fn(&str) -> Vec<String>) -> Vec<Entry> {
     let index: HashMap<String, usize> = entries
         .iter()
@@ -283,19 +283,19 @@ fn masters_first(entries: Vec<Entry>, masters_of: impl Fn(&str) -> Vec<String>) 
     order.into_iter().map(|i| entries[i].clone()).collect()
 }
 
-/// Taille maximale de l'en-tête lu : bien au-delà d'une vraie liste de
-/// masters, une protection contre un fichier abîmé.
+/// Maximum size of the header read: far above a real list of masters, a
+/// guard against a damaged file.
 const MAX_HEADER: u32 = 1 << 20;
 
-/// Masters d'un plugin (sous-enregistrements `MAST` de son en-tête `TES4`).
-/// Illisible : aucun, l'ordre reste celui du fichier.
+/// Masters of a plugin (`MAST` subrecords of its `TES4` header).
+/// Unreadable: none, the order stays the file's.
 fn masters(plugin: &Path) -> Vec<String> {
     read_masters(plugin).unwrap_or_default()
 }
 
 fn read_masters(plugin: &Path) -> io::Result<Vec<String>> {
     let mut file = fs::File::open(plugin)?;
-    // En-tête d'enregistrement de Skyrim SE et Fallout 4 : 24 octets.
+    // Record header of Skyrim SE and Fallout 4: 24 bytes.
     let mut head = [0u8; 24];
     file.read_exact(&mut head)?;
     if &head[..4] != b"TES4" {
@@ -398,7 +398,7 @@ mod tests {
             .is_empty()
         );
         assert!(has_fomod(&["Cool/fomod/ModuleConfig.xml".into()]));
-        // La fiche seule ne propose aucun choix.
+        // The info sheet alone offers no choice.
         assert_eq!(
             place(&["fomod/info.xml", "Cool.esp"]),
             pairs(&[("Cool.esp", "Data/Cool.esp")])

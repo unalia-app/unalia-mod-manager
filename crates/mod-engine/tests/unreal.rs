@@ -1,6 +1,6 @@
-//! Phantom Blade Zero (Unreal Engine 5) de bout en bout, préparé avant la
-//! sortie : mods `.pak` et mods UE4SS depuis un faux Nexus, UE4SS installé
-//! tout seul depuis la build expérimentale d'un faux GitHub.
+//! Phantom Blade Zero (Unreal Engine 5) end to end, prepared before the
+//! release: `.pak` mods and UE4SS mods from a fake Nexus, UE4SS installed by
+//! itself from the experimental build of a fake GitHub.
 
 use std::fs;
 use std::io::Write;
@@ -19,8 +19,8 @@ use zip::write::SimpleFileOptions;
 
 const GAME: &str = "steam:4115450";
 const COMMUNITY: &str = "nexus:phantombladezero";
-/// Nom du dossier du projet, inconnu avant la sortie : on en prend un autre
-/// que celui du jeu pour vérifier qu'il est bien trouvé sur le disque.
+/// Name of the project folder, unknown before release: we take a different
+/// one from the game's to check that it is really found on disk.
 const PROJECT: &str = "PBZ";
 const UE4SS_PATH: &str = "/repos/UE4SS-RE/RE-UE4SS/releases/tags/experimental-latest";
 
@@ -83,7 +83,7 @@ impl World {
         world
     }
 
-    /// La build expérimentale d'UE4SS, avec la disposition de sa vraie
+    /// The experimental build of UE4SS, with the layout of its real
     /// archive.
     async fn publish_ue4ss(&mut self, build: &str) {
         let asset = format!("UE4SS_v{build}.zip");
@@ -259,9 +259,9 @@ async fn a_lua_mod_brings_ue4ss_from_its_experimental_build() {
     );
 }
 
-/// La vraie build expérimentale d'UE4SS, depuis GitHub : sa disposition
-/// est toujours celle que l'installation attend. Hors de la suite normale
-/// (réseau) : `cargo test -p mod-engine --test unreal -- --ignored`.
+/// The real experimental build of UE4SS, from GitHub: its layout is still
+/// the one the install expects. Outside the normal suite (network):
+/// `cargo test -p mod-engine --test unreal -- --ignored`.
 #[tokio::test]
 #[ignore]
 async fn the_real_ue4ss_build_lands_in_the_right_place() {
@@ -331,7 +331,7 @@ async fn a_new_ue4ss_build_is_an_update() {
     .await;
     w.install(8000).await.unwrap();
 
-    // Même numéro, nouvelle build : c'est une mise à jour.
+    // Same number, new build: it is an update.
     let mut newer = mockito::Server::new_async().await;
     newer
         .mock("GET", UE4SS_PATH)

@@ -1,6 +1,5 @@
-//! Lecture du schéma d'écosystème de Thunderstore. On ne garde que ce dont
-//! Modalia se sert ; tout le reste est ignoré pour rester tolérant aux
-//! évolutions du schéma.
+//! Reads Thunderstore's ecosystem schema. We only keep what Modalia uses;
+//! everything else is ignored to stay tolerant of schema changes.
 
 use std::collections::HashMap;
 
@@ -9,7 +8,7 @@ use serde::Deserialize;
 use super::{GameProfile, LoaderPackage, SUPPORTED_LOADERS};
 use crate::loaders::rules::{InstallRule, InstallRules, Tracking};
 
-/// Les chemins d'images du schéma sont relatifs à ce CDN.
+/// Image paths in the schema are relative to this CDN.
 const ASSET_BASE: &str = "https://gcdn.thunderstore.io/live/community/";
 
 #[derive(Debug, thiserror::Error)]
@@ -71,7 +70,7 @@ struct RawRule {
     is_default_location: bool,
 }
 
-/// Règles aplaties : une sous-route devient `route/sous-route`.
+/// Flattened rules: a subroute becomes `route/subroute`.
 fn flatten(rules: Vec<RawRule>, parent: &str, out: &mut Vec<InstallRule>) {
     for rule in rules {
         let route = if parent.is_empty() {
@@ -123,7 +122,7 @@ pub(super) fn parse(json: &str) -> Result<(Vec<GameProfile>, Vec<LoaderPackage>)
         .into_values()
         .filter_map(|game| profile(game, &schema.communities))
         .collect();
-    // Ordre stable, indépendant de celui de la table de hachage.
+    // Stable order, independent of the hash table's.
     games.sort_by(|a, b| a.id.cmp(&b.id));
 
     let loaders = schema
@@ -139,8 +138,8 @@ pub(super) fn parse(json: &str) -> Result<(Vec<GameProfile>, Vec<LoaderPackage>)
     Ok((games, loaders))
 }
 
-/// Un jeu sans entrée r2modman de type « game » n'est pas installable : on
-/// l'écarte (serveurs dédiés, entrées incomplètes).
+/// A game without an r2modman entry of type "game" can't be installed: we
+/// drop it (dedicated servers, incomplete entries).
 fn profile(game: Game, communities: &HashMap<String, Community>) -> Option<GameProfile> {
     let entry = game
         .r2modman?
@@ -160,7 +159,7 @@ fn profile(game: Game, communities: &HashMap<String, Community>) -> Option<GameP
         rules,
         exclusions: entry.relative_file_exclusions.unwrap_or_default(),
     };
-    // Jeux MelonLoader sans règles détaillées : conventions de MelonLoader.
+    // MelonLoader games without detailed rules: MelonLoader conventions.
     if install_rules.rules.is_empty() && loader == "recursive-melonloader" {
         install_rules.rules = InstallRules::melonloader_defaults().rules;
     }
@@ -194,7 +193,7 @@ fn profile(game: Game, communities: &HashMap<String, Community>) -> Option<GameP
     })
 }
 
-/// `https://thunderstore.io/c/<communauté>/api/v1/...` → `<communauté>`.
+/// `https://thunderstore.io/c/<community>/api/v1/...` gives `<community>`.
 fn community_from_index(url: &str) -> Option<String> {
     let rest = url.split("/c/").nth(1)?;
     let community = rest.split('/').next()?;

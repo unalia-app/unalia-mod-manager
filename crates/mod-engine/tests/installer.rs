@@ -1,5 +1,5 @@
-//! Installation en un clic de bout en bout, contre un faux Thunderstore qui
-//! sert de vraies archives, sur le faux Silksong de `fixtures/steam`.
+//! One-click install end to end, against a fake Thunderstore that serves
+//! real archives, on the fake Silksong of `fixtures/steam`.
 
 use std::collections::BTreeMap;
 use std::fs;
@@ -58,8 +58,8 @@ impl World {
         }
     }
 
-    /// Publie un paquet sur le faux Thunderstore. Renvoie la route de
-    /// téléchargement, pour compter les appels.
+    /// Publishes a package on the fake Thunderstore. Returns the download
+    /// route, to count the calls.
     async fn publish(&mut self, id: &str, version: &str, deps: &[&str], archive: Vec<u8>) -> Mock {
         let (namespace, name) = id.split_once('-').unwrap();
         let download = format!("/dl/{id}-{version}.zip");
@@ -217,7 +217,7 @@ async fn one_click_installs_the_loader_and_dependencies_in_order() {
     assert!(plugin(&w.game, PREPATCHER, "Prepatcher.dll").is_file());
     assert!(plugin(&w.game, KNIGHT, "Knight.dll").is_file());
 
-    // Loader en tête de liste, puis par nom.
+    // Loader first, then by name.
     let ids: Vec<_> = installed.iter().map(|m| m.id.as_str()).collect();
     assert_eq!(ids, [LOADER, KNIGHT, PREPATCHER]);
     let knight = installed.iter().find(|m| m.id == KNIGHT).unwrap();
@@ -239,7 +239,7 @@ async fn one_click_installs_the_loader_and_dependencies_in_order() {
             .is_loader()
     );
 
-    // Progression : on résout, puis chaque paquet est téléchargé puis installé.
+    // Progress: we resolve, then each package is downloaded then installed.
     assert_eq!(events.first(), Some(&Progress::Resolving));
     let installing: Vec<_> = events
         .iter()
@@ -263,7 +263,7 @@ async fn reinstalling_does_nothing_and_cached_archives_are_reused() {
     w.install(KNIGHT).await.0.unwrap();
     let before = snapshot(&w.game);
 
-    // Déjà installé : aucun nouveau téléchargement, rien ne bouge.
+    // Already installed: no new download, nothing moves.
     let (again, events) = w.install(KNIGHT).await;
     assert_eq!(again.unwrap().len(), 3);
     assert!(
@@ -281,8 +281,8 @@ async fn reinstalling_does_nothing_and_cached_archives_are_reused() {
 async fn a_failing_dependency_rolls_back_the_whole_install() {
     let mut w = World::new().await;
     w.publish(LOADER, "1.0.3", &[], loader_zip()).await;
-    // Archive abîmée pour la dépendance du milieu.
-    w.publish(PREPATCHER, "1.4.0", &[], b"PK pas un zip".to_vec())
+    // Damaged archive for the middle dependency.
+    w.publish(PREPATCHER, "1.4.0", &[], b"PK not a zip".to_vec())
         .await;
     w.publish(
         KNIGHT,
@@ -304,11 +304,11 @@ async fn a_failing_dependency_rolls_back_the_whole_install() {
     assert_eq!(
         snapshot(&w.game),
         original,
-        "le loader déjà posé doit avoir été retiré"
+        "the loader already placed must have been removed"
     );
     assert!(
         w.state.list("steam:1030300").unwrap().is_empty(),
-        "rien ne doit être enregistré"
+        "nothing must be recorded"
     );
 }
 
@@ -321,7 +321,7 @@ async fn toggling_and_uninstalling_everything_restores_the_game() {
     let game = "steam:1030300";
     let knight_dll = plugin(&w.game, KNIGHT, "Knight.dll");
 
-    // Désactiver / réactiver (SPEC §9, scénario 2).
+    // Disable / enable again.
     let off = installer::set_enabled(&mut w.state, &w.paths, game, &w.game, KNIGHT, false).unwrap();
     assert!(!off.enabled && !knight_dll.exists());
     installer::set_enabled(&mut w.state, &w.paths, game, &w.game, KNIGHT, true).unwrap();
@@ -331,23 +331,23 @@ async fn toggling_and_uninstalling_everything_restores_the_game() {
         Err(InstallError::LoaderToggle)
     ));
 
-    // Le loader part en dernier.
+    // The loader goes last.
     assert!(matches!(
         installer::uninstall(&mut w.state, &w.paths, game, &w.game, LOADER),
         Err(InstallError::LoaderInUse)
     ));
 
-    // Désinstaller, puis annuler (toast « Undo »).
+    // Uninstall, then undo ("Undo" toast).
     let removed = installer::uninstall(&mut w.state, &w.paths, game, &w.game, KNIGHT).unwrap();
     assert!(!knight_dll.exists());
     installer::restore(&mut w.state, &w.paths, &w.game, removed).unwrap();
     assert!(knight_dll.is_file());
     assert!(w.state.get(game, KNIGHT).unwrap().unwrap().explicit);
 
-    // BepInEx a tourné et écrit ses journaux.
+    // BepInEx ran and wrote its logs.
     fs::write(w.game.join("BepInEx/LogOutput.log"), "log").unwrap();
 
-    // Tout retirer (SPEC §9, scénario 4) : retour exact à l'état d'origine.
+    // Remove everything: exact return to the original state.
     for id in [KNIGHT, PREPATCHER, LOADER] {
         installer::uninstall(&mut w.state, &w.paths, game, &w.game, id).unwrap();
     }
@@ -380,7 +380,7 @@ async fn mods_wiped_by_a_game_reinstall_are_put_back_from_storage() {
     let installed = snapshot(&w.game);
     assert!(installer::missing(&w.state, game, &w.game).unwrap().is_empty());
 
-    // Steam désinstalle puis réinstalle le jeu : un dossier neuf.
+    // Steam uninstalls then reinstalls the game: a fresh folder.
     fs::remove_dir_all(&w.game).unwrap();
     copy_dir(&Path::new(env!("CARGO_MANIFEST_DIR")).join(GAME), &w.game);
     let missing: Vec<_> = installer::missing(&w.state, game, &w.game)
@@ -457,7 +457,7 @@ async fn updates_are_detected_then_applied_in_one_click() {
     let old_dll = plugin(&w.game, KNIGHT, "Knight.dll");
     assert!(old_dll.is_file());
 
-    // Rien de neuf : aucune mise à jour.
+    // Nothing new: no update.
     let installed = w.state.list(game).unwrap();
     assert!(
         installer::available_updates(&w.source, COMMUNITY, &installed)
@@ -465,7 +465,7 @@ async fn updates_are_detected_then_applied_in_one_click() {
             .is_empty()
     );
 
-    // L'auteur publie la 0.7.0, avec un fichier renommé.
+    // The author publishes 0.7.0, with a renamed file.
     w.server.reset();
     w.publish(LOADER, "1.0.3", &[], loader_zip()).await;
     w.publish(
@@ -496,7 +496,7 @@ async fn updates_are_detected_then_applied_in_one_click() {
         }]
     );
 
-    // Mettre à jour = installer à nouveau : l'ancienne version quitte le jeu.
+    // Update = install again: the old version leaves the game.
     let (result, _) = w.install(KNIGHT).await;
     let after = result.unwrap();
     let knight = after.iter().find(|m| m.id == KNIGHT).unwrap();
@@ -504,20 +504,20 @@ async fn updates_are_detected_then_applied_in_one_click() {
     assert!(knight.explicit);
     assert!(
         !old_dll.exists(),
-        "les fichiers de l'ancienne version doivent avoir été retirés"
+        "the old version's files must have been removed"
     );
     assert!(plugin(&w.game, KNIGHT, "KnightV7.dll").is_file());
-    assert_eq!(after.len(), 3, "les dépendances à jour ne bougent pas");
+    assert_eq!(after.len(), 3, "up-to-date dependencies don't move");
 
-    // L'ancienne version reste dans le stockage, pour y revenir.
+    // The old version stays in the storage, to go back to it.
     let store = w.paths.store.join("packages/steam-1030300").join(KNIGHT);
     assert_eq!(names(&store), ["0.6.7.json", "0.7.0.json"]);
     let previous: Vec<_> = knight.previous_versions.iter().map(|v| v.version.as_str()).collect();
     assert_eq!(previous, ["0.6.7"]);
-    assert!(names(&w.paths.downloads).is_empty(), "archives rangées puis retirées");
+    assert!(names(&w.paths.downloads).is_empty(), "archives stored then removed");
 
-    // Retour à la 0.6.7 : rien n'est retéléchargé (le serveur ne sert plus
-    // rien), la 0.7.0 devient la version précédente.
+    // Back to 0.6.7: nothing is downloaded again (the server serves nothing
+    // anymore), 0.7.0 becomes the previous version.
     w.server.reset();
     let old = &knight.previous_versions[0].package;
     let back = installer::revert(&mut w.state, &w.paths, game, &w.game, KNIGHT, old).unwrap();
@@ -528,7 +528,7 @@ async fn updates_are_detected_then_applied_in_one_click() {
     let previous: Vec<_> = back.previous_versions.iter().map(|v| v.version.as_str()).collect();
     assert_eq!(previous, ["0.7.0"]);
 
-    // Et retour à la 0.7.0.
+    // And back to 0.7.0.
     let new = &back.previous_versions[0].package;
     let again = installer::revert(&mut w.state, &w.paths, game, &w.game, KNIGHT, new).unwrap();
     assert_eq!(again.version, "0.7.0");
@@ -560,9 +560,9 @@ async fn purging_a_removed_mod_frees_its_storage_but_not_the_others() {
     w.install(KNIGHT).await.0.unwrap();
     let game = "steam:1030300";
     let store = w.paths.store.join("packages/steam-1030300");
-    assert!(names(&w.paths.downloads).is_empty(), "archives rangées puis retirées");
+    assert!(names(&w.paths.downloads).is_empty(), "archives stored then removed");
 
-    // Réinstallé avant la purge (« Undo ») : rien ne part.
+    // Reinstalled before the purge ("Undo"): nothing goes.
     let removed = installer::uninstall(&mut w.state, &w.paths, game, &w.game, KNIGHT).unwrap();
     installer::restore(&mut w.state, &w.paths, &w.game, removed).unwrap();
     installer::purge(&mut w.state, &w.paths, game, KNIGHT).unwrap();
@@ -572,7 +572,7 @@ async fn purging_a_removed_mod_frees_its_storage_but_not_the_others() {
     installer::purge(&mut w.state, &w.paths, game, KNIGHT).unwrap();
     assert!(!store.join(KNIGHT).exists());
     assert_eq!(names(&store), [LOADER, PREPATCHER]);
-    // Les fichiers des autres mods restent.
+    // The other mods' files stay.
     let stored = w.paths.store();
     for m in w.state.list(game).unwrap() {
         for entry in stored.manifest(&m.package).unwrap().files.values() {
@@ -580,7 +580,7 @@ async fn purging_a_removed_mod_frees_its_storage_but_not_the_others() {
         }
     }
 
-    // Un identifiant qui sortirait du stockage est ignoré.
+    // An id that would escape the storage is ignored.
     installer::purge(&mut w.state, &w.paths, game, "..").unwrap();
     assert!(w.paths.store.is_dir());
 }
@@ -590,7 +590,7 @@ async fn files_stay_stored_while_another_game_uses_them() {
     let mut w = World::new().await;
     w.publish_knight().await;
     w.install(KNIGHT).await.0.unwrap();
-    // Le même mod dans un autre jeu : son paquet a le même contenu.
+    // The same mod in another game: its package has the same content.
     let mut other = w.state.get("steam:1030300", KNIGHT).unwrap().unwrap();
     let packages = w.paths.store.join("packages");
     let theirs = format!("steam-42/{KNIGHT}/0.6.7");
@@ -636,7 +636,7 @@ async fn prefetch_downloads_without_touching_the_game() {
     let downloads = w.publish_knight().await;
     let original = snapshot(&w.game);
 
-    // Pendant la partie : tout est téléchargé et extrait, rien n'est posé.
+    // During the session: everything is downloaded and extracted, nothing is placed.
     let installer = Installer {
         source: &w.source,
         catalog: Some(&w.catalog),
@@ -654,11 +654,11 @@ async fn prefetch_downloads_without_touching_the_game() {
     assert_eq!(
         snapshot(&w.game),
         original,
-        "le jeu ne doit pas être touché"
+        "the game must not be touched"
     );
     assert!(w.state.list("steam:1030300").unwrap().is_empty());
 
-    // À la fermeture du jeu : l'installation ne retélécharge rien.
+    // When the game closes: the install downloads nothing again.
     let (result, events) = w.install(KNIGHT).await;
     assert_eq!(result.unwrap().len(), 3);
     assert!(
@@ -714,7 +714,7 @@ async fn melonloader_games_install_through_their_rules() {
     assert!(w.game.join("MelonLoader/net6/MelonLoader.dll").is_file());
     assert!(w.game.join("Mods/CoolMod.dll").is_file());
     assert!(w.game.join("UserLibs/Shared.lib.dll").is_file());
-    // Pas de route `UserData` chez ce jeu : route par défaut, chemin gardé.
+    // No `UserData` route for this game: default route, path kept.
     assert!(
         w.game
             .join("UserData/ModManager")
@@ -724,14 +724,14 @@ async fn melonloader_games_install_through_their_rules() {
     );
     assert!(!w.game.join("manifest.json").exists());
 
-    // Désactiver puis réactiver suit les placements enregistrés.
+    // Disable then enable again follows the recorded placements.
     let game = "steam:1030300";
     installer::set_enabled(&mut w.state, &w.paths, game, &w.game, COOL, false).unwrap();
     assert!(!w.game.join("Mods/CoolMod.dll").exists());
     installer::set_enabled(&mut w.state, &w.paths, game, &w.game, COOL, true).unwrap();
     assert!(w.game.join("Mods/CoolMod.dll").is_file());
 
-    // Tout retirer rend le jeu intact.
+    // Removing everything leaves the game intact.
     installer::uninstall(&mut w.state, &w.paths, game, &w.game, COOL).unwrap();
     installer::uninstall(&mut w.state, &w.paths, game, &w.game, MELON).unwrap();
     assert_eq!(snapshot(&w.game), before);
@@ -758,8 +758,8 @@ async fn a_cancelled_install_leaves_the_game_untouched() {
         game_dir: &w.game,
         community: COMMUNITY,
     };
-    // Le loader est déjà posé quand l'utilisateur annule, pendant le
-    // paquet suivant : tout est retiré.
+    // The loader is already placed when the user cancels, during the next
+    // package: everything is removed.
     let err = installer
         .install(&mut w.state, &target, KNIGHT, |p| {
             if matches!(p, Progress::Installing { index: 1, .. }) {
@@ -804,7 +804,7 @@ fn partial_downloads_are_found_per_mod_and_discarded() {
 
     discard_partial_downloads(&paths, "nexus-4198");
     assert!(partial_downloads(&paths, "nexus-4198").is_empty());
-    // Les autres mods et l'archive complète ne bougent pas.
+    // The other mods and the complete archive don't move.
     assert!(paths.downloads.join("nexus-4198-1.27.4.zip").is_file());
     assert!(paths.downloads.join("nexus-41980-1.0.part").is_file());
     assert_eq!(partial_downloads(&paths, "Author-Mod").len(), 1);
@@ -818,7 +818,7 @@ async fn the_old_storage_moves_to_packages_without_downloading() {
     let mut w = World::new().await;
     let game = "steam:1030300";
 
-    // Ancien stockage : un dossier extrait par version, lié dans le jeu.
+    // Old storage: one extracted folder per version, linked into the game.
     let legacy = w.paths.store.join("steam-1030300").join(KNIGHT).join("0.6.7");
     fs::create_dir_all(legacy.join("plugins")).unwrap();
     fs::write(legacy.join("plugins/Knight.dll"), "knight").unwrap();
@@ -865,7 +865,7 @@ async fn the_old_storage_moves_to_packages_without_downloading() {
             previous_versions: Vec::new(),
         })
         .unwrap();
-    // Restes : une vieille version, un mod retiré, une archive en cache.
+    // Leftovers: an old version, a removed mod, a cached archive.
     let old = w.paths.store.join("steam-1030300").join(KNIGHT).join("0.6.0");
     fs::create_dir_all(&old).unwrap();
     fs::write(old.join("Knight.dll"), "old").unwrap();
@@ -882,21 +882,21 @@ async fn the_old_storage_moves_to_packages_without_downloading() {
     assert_eq!(names(&w.paths.downloads), [format!("{KNIGHT}-0.7.0.part")]);
     assert_eq!(fs::read_to_string(plugins.join("Knight.dll")).unwrap(), "knight");
 
-    // La config liée ne partage plus son contenu avec le stockage.
+    // The linked config no longer shares its content with the storage.
     fs::write(&config, "speed = 9").unwrap();
     let store = w.paths.store();
     let manifest = store.manifest(&knight.package).unwrap();
     let stored = store.blob(&manifest.files["plugins/knight.cfg"].hash);
     assert_eq!(fs::read_to_string(stored).unwrap(), "speed = 1");
 
-    // Le mod se désactive et revient depuis le stockage, config comprise.
+    // The mod is disabled and comes back from the storage, config included.
     installer::set_enabled(&mut w.state, &w.paths, game, &w.game, KNIGHT, false).unwrap();
     assert!(!plugins.join("Knight.dll").exists());
     installer::set_enabled(&mut w.state, &w.paths, game, &w.game, KNIGHT, true).unwrap();
     assert_eq!(fs::read_to_string(plugins.join("Knight.dll")).unwrap(), "knight");
     assert_eq!(fs::read_to_string(&config).unwrap(), "speed = 9");
 
-    // Une seule fois.
+    // Only once.
     assert_eq!(installer::migrate_store(&mut w.state, &w.paths).unwrap(), 0);
 }
 
@@ -918,15 +918,15 @@ fn identical_files_are_stored_once_and_freed_when_unused() {
     assert_eq!(one.files["same.dll"], two.files["same.dll"]);
     let hashes = [&one.files["same.dll"], &one.files["a.dll"], &two.files["a.dll"]].map(|e| e.hash.clone());
     let blobs = |store: &Store| hashes.iter().filter(|h| store.blob(h).is_file()).count();
-    assert_eq!(blobs(&store), 3, "le fichier commun n'est rangé qu'une fois");
+    assert_eq!(blobs(&store), 3, "the shared file is only stored once");
     assert_eq!(store.size_of("g"), 4 + 3 + 3);
 
-    // Paquets récents gardés même sans mod qui les utilise (délai de grâce).
+    // Recent packages kept even without a mod using them (grace period).
     let keep: HashSet<String> = HashSet::from(["g/a/2".to_owned()]);
     store.gc(&keep, &HashSet::new()).unwrap();
     assert_eq!(blobs(&store), 3);
 
-    // Retiré : ses fichiers propres partent, le fichier commun reste.
+    // Removed: its own files go, the shared file stays.
     fs::remove_file(tmp.path().join("packages/g/a/1.json")).unwrap();
     let freed = store.gc(&keep, &HashSet::new()).unwrap();
     assert_eq!(freed.files, 1);
@@ -945,12 +945,12 @@ async fn removing_a_game_puts_its_folder_back_and_frees_everything() {
 
     let removed = installer::remove_game(&mut w.state, &w.paths, game, Some(&w.game)).unwrap();
     assert_eq!(removed, 3);
-    assert_eq!(snapshot(&w.game), original, "le dossier du jeu revient à l'identique");
+    assert_eq!(snapshot(&w.game), original, "the game folder comes back unchanged");
     assert!(w.state.list(game).unwrap().is_empty());
     assert_eq!(installer::storage_size(&w.paths, game), 0);
     assert!(names(&w.paths.store.join("files")).is_empty());
 
-    // Dossier déjà parti : seuls la base et le stockage sont nettoyés.
+    // Folder already gone: only the database and the storage are cleaned.
     w.install(KNIGHT).await.0.unwrap();
     fs::remove_dir_all(&w.game).unwrap();
     assert_eq!(installer::remove_game(&mut w.state, &w.paths, game, None).unwrap(), 3);
@@ -962,20 +962,20 @@ async fn removing_a_game_puts_its_folder_back_and_frees_everything() {
 async fn resetting_a_game_clears_mods_from_unalia_and_other_tools() {
     let mut w = World::new().await;
     w.publish_knight().await;
-    // `Plugins/` plein, sans MelonLoader : peut être au jeu, il reste.
+    // Full `Plugins/` without MelonLoader: may belong to the game, it stays.
     fs::create_dir_all(w.game.join("Plugins")).unwrap();
     fs::write(w.game.join("Plugins/native.dll"), "game").unwrap();
     let original = snapshot(&w.game);
     w.install(KNIGHT).await.0.unwrap();
     let game = "steam:1030300";
 
-    // Restes d'autres outils, comme dans un vrai Silksong passé par Vortex.
+    // Other tools' leftovers, as in a real Silksong that went through Vortex.
     fs::create_dir_all(w.game.join("BepInEx/plugins/OldMod")).unwrap();
     fs::write(w.game.join("BepInEx/plugins/OldMod/Old.dll"), "old").unwrap();
     fs::create_dir(w.game.join("UserData")).unwrap();
     fs::write(w.game.join("vortex.deployment.hollowknightsilksong-bepinex.json"), "{}").unwrap();
-    // Noms communs sans leur loader : peuvent servir au jeu (une DLL qu'il
-    // lui faut, un runtime à lui), même à côté du BepInEx d'Unalia.
+    // Common names without their loader: may serve the game (a DLL it
+    // needs, its own runtime), even next to Unalia's BepInEx.
     fs::write(w.game.join("version.dll"), "game needs it").unwrap();
     fs::create_dir(w.game.join("dotnet")).unwrap();
     fs::write(w.game.join("dotnet/runtime.dll"), "game").unwrap();
@@ -991,14 +991,14 @@ async fn resetting_a_game_clears_mods_from_unalia_and_other_tools() {
             ("UserData", 0, true),
             ("vortex.deployment.hollowknightsilksong-bepinex.json", 1, true),
         ],
-        "les fichiers d'Unalia ne comptent pas, ni comme restes ni comme preuves"
+        "Unalia's files count neither as leftovers nor as proofs"
     );
     let mut original = original;
     original.insert("dotnet".into(), None);
     for kept in ["dotnet/runtime.dll", "version.dll"] {
         original.insert(kept.into(), Some(fs::read(w.game.join(kept)).unwrap()));
     }
-    // Ce qui est coché d'office, comme la fenêtre « Reset mods ».
+    // What is ticked by default, like the "Reset mods" dialog.
     let remove = found.iter().filter(|f| f.sure).map(|f| f.path.clone()).collect();
 
     let trashed = std::cell::RefCell::new(Vec::new());
@@ -1013,8 +1013,8 @@ async fn resetting_a_game_clears_mods_from_unalia_and_other_tools() {
     let reset = installer::reset(&mut w.state, &w.paths, game, &w.game, "bepinex", &remove, discard).unwrap();
     assert_eq!((reset.mods, reset.foreign), (3, 3));
     assert!(reset.left.is_empty());
-    assert!(trashed.borrow().contains(&w.game.join("BepInEx")), "le plugin glissé à la main part à la corbeille");
-    assert_eq!(snapshot(&w.game), original, "le jeu revient à l'identique, avec ce qui n'était pas coché");
+    assert!(trashed.borrow().contains(&w.game.join("BepInEx")), "the plugin slipped in by hand goes to the Recycle Bin");
+    assert_eq!(snapshot(&w.game), original, "the game comes back unchanged, with what wasn't ticked");
     assert!(w.state.list(game).unwrap().is_empty());
     assert_eq!(installer::storage_size(&w.paths, game), 0);
 }

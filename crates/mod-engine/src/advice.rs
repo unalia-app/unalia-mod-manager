@@ -1,9 +1,9 @@
-//! Ce que l'utilisateur peut faire après une erreur (DESIGN, « Textes » :
-//! ce qui s'est passé, puis quoi faire).
+//! What the user can do after an error (DESIGN, "Copy": what happened, then
+//! what to do).
 //!
-//! Une erreur arrive souvent emballée : « couldn't download X », avec la vraie
-//! raison (« not enough disk space ») plus bas dans la chaîne. On remonte
-//! cette raison dans la phrase, et on y ajoute une action.
+//! An error often comes wrapped: "couldn't download X", with the real reason
+//! ("not enough disk space") further down the chain. We bring that reason up
+//! into the sentence and add an action to it.
 
 use std::error::Error;
 
@@ -22,8 +22,8 @@ const BLOCKED: &str = "Unalia blocked it to protect your PC. Tell the mod author
 const REPORT: &str = "Restart Unalia. If it keeps happening, copy a report from Settings > Support.";
 const LATER: &str = "Try again in a few minutes.";
 
-/// Message d'une ligne : l'erreur, sa raison utile si elle est plus bas
-/// dans la chaîne, et l'action conseillée.
+/// One-line message: the error, its useful reason if it is further down the
+/// chain, and the advised action.
 pub fn explain(error: &(dyn Error + 'static)) -> String {
     let mut message = error.to_string();
     let mut action = None;
@@ -36,7 +36,7 @@ pub fn explain(error: &(dyn Error + 'static)) -> String {
             message = format!("{message}: {e}");
             cause_shown = true;
         }
-        // L'action la plus précise est la plus profonde.
+        // The most precise action is the deepest one.
         if advice.action.is_some() {
             action = advice.action;
         }
@@ -51,7 +51,7 @@ pub fn explain(error: &(dyn Error + 'static)) -> String {
 
 #[derive(Default)]
 struct Advice {
-    /// Le message de cette erreur dit à lui seul ce qui bloque.
+    /// The message of this error alone says what is blocking.
     show_cause: bool,
     action: Option<String>,
 }
@@ -90,7 +90,7 @@ fn advise(e: &(dyn Error + 'static)) -> Advice {
 
 fn install(e: &InstallError) -> Advice {
     match e {
-        // Variantes transparentes : le message est déjà celui de la source.
+        // Transparent variants: the message is already the source's.
         InstallError::Resolve(e) => resolve(e),
         InstallError::Source(e) => source(e),
         InstallError::State(_) => advice(true, REPORT),
@@ -133,7 +133,7 @@ fn source(e: &SourceError) -> Advice {
         SourceError::NotConnected { .. } => advice(true, "Link it in Settings > Connections."),
         SourceError::Unauthorized { .. } => advice(true, "Link your account again in Settings > Connections."),
         SourceError::Unexpected { .. } => advice(true, LATER),
-        // Le message dit déjà quoi faire, ou il n'y a rien à faire.
+        // The message already says what to do, or there is nothing to do.
         SourceError::NotFound { .. } | SourceError::RateLimited { .. } | SourceError::WebsiteOnly { .. } => Advice {
             show_cause: true,
             action: None,
@@ -143,7 +143,7 @@ fn source(e: &SourceError) -> Advice {
 
 fn download(e: &DownloadError) -> Advice {
     match e {
-        // « the download failed » n'apprend rien : l'action suffit.
+        // "the download failed" teaches nothing: the action is enough.
         DownloadError::Network(_) => Advice {
             show_cause: false,
             action: Some(CONNECTION.into()),

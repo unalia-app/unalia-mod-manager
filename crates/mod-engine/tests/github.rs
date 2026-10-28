@@ -1,5 +1,5 @@
-//! Releases GitHub : cache, revalidation par ETag et limite horaire, contre
-//! un faux GitHub. Sans compte, GitHub n'accorde que 60 requêtes par heure.
+//! GitHub releases: cache, ETag revalidation and hourly limit, against a
+//! fake GitHub. Without an account, GitHub only grants 60 requests per hour.
 
 use std::time::Duration;
 
@@ -88,7 +88,7 @@ async fn the_hourly_limit_serves_the_last_known_release_or_says_when_to_retry() 
         .create_async()
         .await;
 
-    // Rien en cache : on dit quand réessayer.
+    // Nothing cached: we say when to try again.
     let github = GitHub::with_url(reqwest::Client::new(), &server.url()).with_ttl(Duration::ZERO);
     let err = github.latest_release("wopss/RED4ext").await.unwrap_err();
     match err {
@@ -98,7 +98,7 @@ async fn the_hourly_limit_serves_the_last_known_release_or_says_when_to_retry() 
         other => panic!("{other:?}"),
     }
 
-    // Une release connue (sur disque) : elle sert en attendant.
+    // A known release (on disk): it serves in the meantime.
     let dir = tempfile::tempdir().unwrap();
     let file = dir.path().join("github.json");
     let mut healthy = mockito::Server::new_async().await;

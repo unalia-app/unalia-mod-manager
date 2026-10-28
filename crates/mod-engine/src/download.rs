@@ -1,18 +1,17 @@
-//! Téléchargement d'une archive de mod, rapide et robuste aux gros fichiers.
+//! Downloads a mod archive, fast and robust with big files.
 //!
-//! - **Plusieurs connexions** : si le serveur accepte les requêtes de plage
-//!   (`Range`), un gros fichier est découpé en morceaux téléchargés en
-//!   parallèle, comme le font les gestionnaires de téléchargement. Sinon,
-//!   une seule connexion.
-//! - **Reprise** : l'avancement de chaque morceau est noté à côté du fichier
-//!   (`.part.json`). Une coupure réseau est retentée automatiquement, et un
-//!   téléchargement interrompu (Modalia fermé) reprend où il en était.
-//! - **Annulable** : un drapeau partagé (`Cancel`) arrête tout au prochain
-//!   bloc reçu. Ce qui est déjà arrivé est gardé pour reprendre plus tard.
-//! - **Espace disque** vérifié avant de commencer.
-//! - **Empreinte SHA-256** toujours calculée et conservée, vérifiée si la
-//!   source en publie une (SPEC §7). Le fichier n'apparaît sous son nom final
-//!   qu'une fois complet et vérifié.
+//! - **Several connections**: if the server accepts range requests
+//!   (`Range`), a big file is split into chunks downloaded in parallel, as
+//!   download managers do. Otherwise, a single connection.
+//! - **Resume**: the progress of each chunk is written next to the file
+//!   (`.part.json`). A network drop is retried automatically, and an
+//!   interrupted download (Modalia closed) resumes where it was.
+//! - **Cancelable**: a shared flag (`Cancel`) stops everything at the next
+//!   received block. What already arrived is kept to resume later.
+//! - **Disk space** checked before starting.
+//! - **SHA-256 hash** always computed and kept, checked if the source
+//!   publishes one. The file only shows up under its final name
+//!   once complete and checked.
 
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Read, Seek, SeekFrom, Write};
@@ -28,7 +27,7 @@ use sha2::{Digest, Sha256};
 
 use crate::HttpClient;
 
-/// Drapeau d'annulation partagé entre l'interface et le travail en cours.
+/// Cancel flag shared between the UI and the running work.
 #[derive(Debug, Clone, Default)]
 pub struct Cancel(Arc<AtomicBool>);
 
@@ -49,23 +48,23 @@ fn check(cancel: Option<&Cancel>) -> Result<(), DownloadError> {
     }
 }
 
-/// Aucune archive de mod légitime n'approche cette taille.
+/// No legitimate mod archive comes close to this size.
 pub const MAX_DOWNLOAD_BYTES: u64 = 128 * 1024 * 1024 * 1024;
 
 #[derive(Debug, Clone)]
 pub struct Options {
     pub expected_sha256: Option<String>,
     pub max_bytes: u64,
-    /// Connexions simultanées au plus (1 : jamais de parallèle).
+    /// Maximum simultaneous connections (1: never parallel).
     pub connections: usize,
-    /// En dessous, une seule connexion suffit.
+    /// Below this, a single connection is enough.
     pub parallel_from: u64,
-    /// Espace libre exigé, en multiple de la taille de l'archive (l'archive,
-    /// son extraction, une marge).
+    /// Free space required, as a multiple of the archive size (the archive,
+    /// its extraction, a margin).
     pub space_factor: f64,
-    /// Nouvelles tentatives par morceau après une coupure.
+    /// Retries per chunk after a drop.
     pub retries: u32,
-    /// Annulation demandée par l'utilisateur.
+    /// Cancel requested by the user.
     pub cancel: Option<Cancel>,
 }
 
@@ -108,8 +107,8 @@ pub enum DownloadError {
     Cancelled,
 }
 
-/// Télécharge `url` vers `dest`. `on_progress(reçu, total)` est appelé au
-/// fil de l'eau (`total` : taille annoncée par le serveur, si connue).
+/// Downloads `url` to `dest`. `on_progress(received, total)` is called as
+/// data arrives (`total`: size announced by the server, if known).
 pub async fn download(
     client: &HttpClient,
     url: &str,
@@ -124,8 +123,8 @@ pub async fn download(
     let partial = dest.with_extension("part");
     let journal = dest.with_extension("part.json");
 
-    // Sonde : le premier octet suffit à savoir si le serveur découpe, et la
-    // taille totale. Les redirections (CDN) sont suivies une fois ici.
+    // Probe: the first byte is enough to know whether the server splits,
+    // and the total size. Redirects (CDN) are followed once here.
     let probe = client
         .get(url)
         .header(RANGE, "bytes=0-0")
@@ -173,8 +172,8 @@ pub async fn download(
             )
             .await
         }
-        // Pas de découpage possible : la réponse de la sonde est déjà le
-        // fichier entier, on la lit d'une traite.
+        // No splitting possible: the probe's response is already the whole
+        // file, read it in one go.
         _ => {
             let _ = fs::remove_file(&partial);
             single(probe, &partial, total, options, &mut on_progress).await
@@ -182,8 +181,7 @@ pub async fn download(
     };
     let size = match outcome {
         Ok(size) => size,
-        // Coupure ou annulation : on garde `.part` et son journal pour
-        // reprendre.
+        // Drop or cancel: keep `.part` and its journal to resume.
         Err(error @ (DownloadError::Network(_) | DownloadError::Cancelled)) => return Err(error),
         Err(error) => {
             let _ = fs::remove_file(&partial);
@@ -217,7 +215,7 @@ pub async fn download(
     })
 }
 
-/// Réponse sans découpage : un seul flux, du début à la fin.
+/// Response without splitting: a single stream, start to end.
 async fn single(
     mut response: reqwest::Response,
     partial: &Path,
@@ -230,7 +228,7 @@ async fn single(
     while let Some(chunk) = response.chunk().await? {
         check(options.cancel.as_ref())?;
         received += chunk.len() as u64;
-        // On ne croit pas Content-Length : on compte ce qui arrive.
+        // Don't trust Content-Length: count what arrives.
         if received > options.max_bytes {
             return Err(DownloadError::TooLarge);
         }
@@ -241,7 +239,7 @@ async fn single(
     Ok(received)
 }
 
-/// Une connexion, mais qui reprend là où elle s'est arrêtée.
+/// One connection, but one that resumes where it stopped.
 async fn resumable(
     client: &HttpClient,
     url: &str,
@@ -267,7 +265,7 @@ async fn resumable(
                 .await?
                 .error_for_status()?;
             let mut file = OpenOptions::new().create(true).append(true).open(partial)?;
-            // Le serveur ignore la plage et renvoie tout : on repart de zéro.
+            // The server ignores the range and sends everything: start over.
             if response.status() != StatusCode::PARTIAL_CONTENT {
                 file.set_len(0)?;
             }
@@ -301,7 +299,7 @@ async fn resumable(
     }
 }
 
-/// Journal de reprise d'un téléchargement en morceaux.
+/// Resume journal of a chunked download.
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 struct Journal {
     total: u64,
@@ -310,9 +308,9 @@ struct Journal {
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 struct Segment {
-    /// Prochain octet à écrire.
+    /// Next byte to write.
     next: u64,
-    /// Dernier octet du morceau (inclus).
+    /// Last byte of the chunk (inclusive).
     end: u64,
 }
 
@@ -351,8 +349,8 @@ impl Journal {
     }
 }
 
-/// Plusieurs connexions, chacune sur son morceau, écrivant directement à sa
-/// place dans le fichier.
+/// Several connections, each on its chunk, writing straight to its place in
+/// the file.
 async fn parallel(
     client: &HttpClient,
     url: &str,
@@ -369,7 +367,7 @@ async fn parallel(
     let journal = match resumed {
         Some(journal) => journal,
         None => {
-            // Fichier réservé à sa taille finale : chaque morceau écrit chez lui.
+            // File reserved at its final size: each chunk writes in its own spot.
             File::create(partial)?.set_len(total)?;
             Journal::new(total, options.connections)
         }
@@ -406,7 +404,7 @@ async fn parallel(
     }
     drop(tx);
 
-    // Progression et journal tenus à jour au fil des morceaux reçus.
+    // Progress and journal kept up to date as chunks arrive.
     let mut since_save = 0u64;
     while let Some(bytes) = rx.recv().await {
         received += bytes;
@@ -465,8 +463,8 @@ async fn fetch_segment(
             let mut position = next;
             while let Some(chunk) = response.chunk().await? {
                 check(cancel)?;
-                // Un serveur qui en envoie plus que demandé n'écrase pas le
-                // morceau voisin.
+                // A server that sends more than asked doesn't overwrite the
+                // next chunk.
                 let room = (end + 1 - position) as usize;
                 let chunk = &chunk[..chunk.len().min(room)];
                 file.write_all(chunk)?;
@@ -517,7 +515,7 @@ fn total_from_content_range(response: &reqwest::Response) -> Option<u64> {
 
 fn ensure_space(dest: &Path, needed: u64) -> Result<(), DownloadError> {
     let dir = dest.parent().unwrap_or(dest);
-    // Impossible à mesurer (système exotique) : on tente quand même.
+    // Can't be measured (exotic system): try anyway.
     let Ok(available) = fs4::available_space(dir) else {
         return Ok(());
     };
@@ -546,7 +544,7 @@ pub fn human_size(bytes: u64) -> String {
     }
 }
 
-/// Empreinte d'un fichier déjà présent (archive en cache).
+/// Hash of a file already present (cached archive).
 pub fn sha256_file(path: &Path) -> io::Result<String> {
     let mut file = File::open(path)?;
     let mut hasher = Sha256::new();
@@ -560,9 +558,9 @@ pub fn sha256_file(path: &Path) -> io::Result<String> {
     Ok(hex(&hasher.finalize()))
 }
 
-/// Empreinte MD5 d'un fichier : celle que Nexus sait retrouver
-/// (`md5_search`). Jamais utilisée pour la sécurité, seulement pour
-/// reconnaître un fichier identique publié ailleurs.
+/// MD5 hash of a file: the one Nexus can look up (`md5_search`). Never used
+/// for security, only to recognize an identical file published
+/// elsewhere.
 pub fn md5_file(path: &Path) -> io::Result<String> {
     use md5::{Digest as _, Md5};
     let mut file = File::open(path)?;

@@ -1,17 +1,15 @@
-//! Extraction sûre des archives de mods (SPEC §7). Formats : `.zip`, `.7z`
-//! et `.rar`, reconnus à leur signature et non à leur extension.
+//! Safe extraction of mod archives. Formats: `.zip`, `.7z` and
+//! `.rar`, recognized by their signature, not their extension.
 //!
-//! Une archive téléchargée est une donnée hostile jusqu'à preuve du
-//! contraire. On refuse :
-//! - les chemins qui sortent du dossier cible (« zip slip ») : `..`, chemins
-//!   absolus, lettres de lecteur, y compris écrits avec des antislashs ;
-//! - les liens symboliques ;
-//! - les archives bombes : taille totale, nombre d'entrées et ratio de
-//!   compression sont mesurés pendant l'extraction, jamais crus sur parole ;
-//! - toute archive qui échoue en cours de route : rien n'est laissé à moitié
-//!   extrait.
+//! A downloaded archive is hostile data until proven otherwise. We refuse:
+//! - paths that escape the target folder ("zip slip"): `..`, absolute
+//!   paths, drive letters, including ones written with backslashes;
+//! - symbolic links;
+//! - archive bombs: total size, entry count and compression ratio are
+//!   measured during extraction, never taken on trust;
+//! - any archive that fails halfway: nothing is left half extracted.
 //!
-//! Rien n'est jamais exécuté : on écrit des fichiers, c'est tout.
+//! Nothing is ever executed: we write files, that's all.
 
 use std::fs::{self, File};
 use std::io::{self, Read};
@@ -21,17 +19,17 @@ use crate::download::Cancel;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Limits {
-    /// Taille décompressée totale maximale.
+    /// Maximum total uncompressed size.
     pub max_total_bytes: u64,
     pub max_entries: usize,
-    /// Ratio décompressé / compressé maximal par entrée.
+    /// Maximum uncompressed / compressed ratio per entry.
     pub max_ratio: u64,
 }
 
 impl Default for Limits {
     fn default() -> Self {
-        // Assez pour les plus gros mods (textures 4K, gros packs), le ratio
-        // de compression reste la vraie défense contre les archives bombes.
+        // Enough for the biggest mods (4K textures, big packs); the
+        // compression ratio stays the real defense against archive bombs.
         Self {
             max_total_bytes: 256 * 1024 * 1024 * 1024,
             max_entries: 500_000,
@@ -66,18 +64,18 @@ pub enum ArchiveError {
     Cancelled,
 }
 
-/// Extrait `archive` dans `dest`, qui ne doit pas exister. Renvoie les
-/// fichiers extraits, en chemins relatifs avec des `/`.
+/// Extracts `archive` into `dest`, which must not exist. Returns the
+/// extracted files, as relative paths with `/`.
 ///
-/// L'extraction se fait dans un dossier temporaire voisin, renommé en `dest`
-/// seulement si tout a réussi.
+/// Extraction happens in a temporary sibling folder, renamed to `dest` only
+/// if everything succeeded.
 pub fn extract(archive: &Path, dest: &Path, limits: Limits) -> Result<Vec<String>, ArchiveError> {
     extract_with_progress(archive, dest, limits, |_, _| {})
 }
 
-/// Comme `extract`, avec `on_progress(octets extraits, total annoncé)` :
-/// le total vient de l'archive (pour l'affichage seulement, les limites se
-/// fondent sur ce qui est réellement écrit).
+/// Like `extract`, with `on_progress(extracted bytes, announced total)`:
+/// the total comes from the archive (for display only; the limits rely on
+/// what is actually written).
 pub fn extract_with_progress(
     archive: &Path,
     dest: &Path,
@@ -87,8 +85,8 @@ pub fn extract_with_progress(
     extract_cancellable(archive, dest, limits, None, on_progress)
 }
 
-/// Comme `extract_with_progress`, arrêtée au prochain fichier si `cancel`
-/// est levé : rien n'est laissé à moitié extrait.
+/// Like `extract_with_progress`, stopped at the next file if `cancel` is
+/// raised: nothing is left half extracted.
 pub fn extract_cancellable(
     archive: &Path,
     dest: &Path,
@@ -121,7 +119,7 @@ enum Format {
     Rar,
 }
 
-/// Format d'après les premiers octets du fichier.
+/// Format from the first bytes of the file.
 fn format(archive: &Path) -> Result<Format, ArchiveError> {
     let mut magic = [0u8; 6];
     let read = File::open(archive)?.read(&mut magic)?;
@@ -129,7 +127,7 @@ fn format(archive: &Path) -> Result<Format, ArchiveError> {
         [b'P', b'K', ..] => Ok(Format::Zip),
         [b'7', b'z', 0xBC, 0xAF, 0x27, 0x1C] => Ok(Format::SevenZip),
         [b'R', b'a', b'r', b'!', ..] => Ok(Format::Rar),
-        // Inconnu : on laisse le lecteur zip le refuser comme abîmé.
+        // Unknown: let the zip reader refuse it as damaged.
         _ => Ok(Format::Zip),
     }
 }
@@ -174,7 +172,7 @@ fn extract_zip(
             return Err(ArchiveError::Cancelled);
         }
         let mut entry = zip.by_index(i)?;
-        // Un nom illisible (pas UTF-8) : archive considérée comme abîmée.
+        // An unreadable name (not UTF-8): the archive counts as damaged.
         let raw = entry.name()?.into_owned();
         if entry.is_symlink() {
             return Err(ArchiveError::Link(raw));
@@ -192,8 +190,8 @@ fn extract_zip(
             fs::create_dir_all(parent)?;
         }
 
-        // On compte ce qui sort vraiment du décompresseur, borné juste
-        // au-dessus de ce qui reste autorisé.
+        // We count what really comes out of the decompressor, capped just
+        // above what is still allowed.
         let remaining = limits.max_total_bytes.saturating_sub(total);
         let mut out = File::create(&target)?;
         let written = io::copy(
@@ -204,7 +202,7 @@ fn extract_zip(
             return Err(ArchiveError::TooLarge);
         }
         let compressed = entry.compressed_size().max(1);
-        // Les tout petits fichiers ont des ratios extrêmes sans danger.
+        // Tiny files have extreme ratios with no danger.
         if written > 1024 * 1024 && written / compressed > limits.max_ratio {
             return Err(ArchiveError::SuspiciousRatio(raw));
         }
@@ -213,17 +211,17 @@ fn extract_zip(
         files.push(to_slash(&relative));
     }
     files.sort();
-    // Une archive peut contenir deux fois le même nom : le dernier gagne.
+    // An archive can hold the same name twice: the last one wins.
     files.dedup();
     Ok(files)
 }
 
-/// Attribut Windows des points d'analyse (liens symboliques, jonctions).
+/// Windows attribute of reparse points (symbolic links, junctions).
 const REPARSE_POINT: u32 = 0x400;
 
-/// Un `.7z` est souvent « solide » : les fichiers sont compressés d'un seul
-/// bloc, sans taille compressée par fichier. Le ratio se mesure donc sur
-/// l'archive entière.
+/// A `.7z` is often "solid": files are compressed as a single block, with no
+/// compressed size per file. The ratio is therefore measured on the whole
+/// archive.
 fn extract_7z(
     archive: &Path,
     dir: &Path,
@@ -241,8 +239,8 @@ fn extract_7z(
 
     let mut files = Vec::new();
     let mut total: u64 = 0;
-    // L'erreur de sécurité est gardée à part : le lecteur ne transporte que
-    // les siennes.
+    // The security error is kept aside: the reader only carries its own
+    // errors.
     let mut refused: Option<ArchiveError> = None;
     let result = reader.for_each_entries(|entry, data| {
         if cancelled(cancel) {
@@ -294,11 +292,11 @@ fn extract_7z(
     Ok(files)
 }
 
-/// `.rar` par la bibliothèque UnRAR officielle. Elle écrit elle-même chaque
-/// fichier, au chemin choisi ici : la taille se vérifie avant (annoncée par
-/// l'en-tête, que le décompresseur ne dépasse pas) et après (sur le disque).
-/// Les tailles compressées n'étant pas exposées, le ratio se mesure sur
-/// l'archive entière, comme pour un `.7z`.
+/// `.rar` through the official UnRAR library. It writes each file itself,
+/// at the path chosen here: the size is checked before (announced by the
+/// header, which the decompressor doesn't exceed) and after (on disk).
+/// Compressed sizes are not exposed, so the ratio is measured on the whole
+/// archive, as for a `.7z`.
 fn extract_rar(
     archive: &Path,
     dir: &Path,
@@ -354,8 +352,8 @@ fn extract_rar(
             fs::create_dir_all(parent)?;
         }
         reader = header.extract_to(&target)?;
-        // Un lien Unix (ou une jonction) ne porte pas l'attribut Windows : ce
-        // qui a été écrit fait foi.
+        // A Unix link (or a junction) doesn't carry the Windows attribute:
+        // what was written is what counts.
         let written = fs::symlink_metadata(&target)?;
         if written.file_type().is_symlink() {
             return Err(ArchiveError::Link(raw));
@@ -375,9 +373,9 @@ fn extract_rar(
     Ok(files)
 }
 
-/// Chemin relatif sûr, ou `None`. Les antislashs comptent comme séparateurs
-/// (archives créées sous Windows), et tout ce qui pourrait sortir du dossier
-/// cible est refusé.
+/// Safe relative path, or `None`. Backslashes count as separators (archives
+/// made on Windows), and anything that could escape the target folder is
+/// refused.
 pub fn safe_relative_path(name: &str) -> Option<PathBuf> {
     let normalized = name.replace('\\', "/");
     if normalized.starts_with('/') || normalized.contains(':') || normalized.contains('\0') {
@@ -391,7 +389,7 @@ pub fn safe_relative_path(name: &str) -> Option<PathBuf> {
             _ => path.push(part),
         }
     }
-    // Garde-fou : le chemin construit ne doit contenir que des noms simples.
+    // Safety net: the built path must only contain plain names.
     let only_normal = path.components().all(|c| matches!(c, Component::Normal(_)));
     (only_normal && !path.as_os_str().is_empty()).then_some(path)
 }

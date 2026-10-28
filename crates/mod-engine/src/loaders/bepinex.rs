@@ -1,15 +1,15 @@
-//! BepInEx (jeux Unity), selon les règles de l'installeur historique de
-//! Thunderstore / r2modman :
+//! BepInEx (Unity games), following the rules of the legacy Thunderstore /
+//! r2modman installer:
 //!
-//! - le loader (`BepInExPack`) : le contenu de son dossier racine va à la
-//!   racine du jeu (`winhttp.dll`, `doorstop_config.ini`, `BepInEx/`…) ;
-//! - un mod : `plugins/`, `patchers/`, `core/`, `monomod/` vont dans le
-//!   dossier BepInEx correspondant, rangés sous le nom du mod ; `config/`
-//!   va dans `BepInEx/config/` sans sous-dossier (les mods y lisent leurs
-//!   réglages par nom) ; tout le reste va dans `BepInEx/plugins/<mod>/` ;
-//! - un préfixe `BepInEx/` dans le paquet est toléré ;
-//! - les métadonnées Thunderstore à la racine (manifest, icône, README…) ne
-//!   s'installent pas.
+//! - the loader (`BepInExPack`): the content of its root folder goes to the
+//!   game root (`winhttp.dll`, `doorstop_config.ini`, `BepInEx/`…);
+//! - a mod: `plugins/`, `patchers/`, `core/`, `monomod/` go into the matching
+//!   BepInEx folder, under the mod name; `config/` goes into
+//!   `BepInEx/config/` without a subfolder (mods read their settings there
+//!   by name); everything else goes into `BepInEx/plugins/<mod>/`;
+//! - a `BepInEx/` prefix in the package is tolerated;
+//! - the Thunderstore metadata at the root (manifest, icon, README…) is not
+//!   installed.
 
 use std::path::Path;
 
@@ -17,7 +17,7 @@ use super::{Loader, PackageKind, Placement};
 
 pub struct BepInEx;
 
-/// Dossiers de BepInEx où chaque mod a son sous-dossier.
+/// BepInEx folders where each mod gets its own subfolder.
 const NAMESPACED: [&str; 4] = ["plugins", "patchers", "core", "monomod"];
 
 const METADATA: [&str; 6] = [
@@ -65,7 +65,7 @@ fn mod_target(source: &str, package_id: &str) -> Option<String> {
     if parts.len() == 1 && METADATA.contains(&parts[0].to_ascii_lowercase().as_str()) {
         return None;
     }
-    // `BepInEx/plugins/...` dans le paquet : on retire le préfixe.
+    // `BepInEx/plugins/...` in the package: strip the prefix.
     let parts = match parts.as_slice() {
         [first, rest @ ..] if first.eq_ignore_ascii_case("BepInEx") && !rest.is_empty() => rest,
         all => all,

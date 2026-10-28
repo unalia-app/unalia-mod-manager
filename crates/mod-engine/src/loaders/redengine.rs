@@ -1,19 +1,19 @@
-//! Adaptateur **REDengine** (Cyberpunk 2077).
+//! **REDengine** adapter (Cyberpunk 2077).
 //!
-//! La plupart des archives reproduisent l'arborescence du jeu (`archive/`,
-//! `bin/`, `r6/`, `red4ext/`…) : elles se posent telles quelles. Les autres
-//! sont rangées d'après leur contenu, sans jamais deviner au hasard :
-//! - `.archive` et `.xl` → `archive/pc/mod/` ;
-//! - dossier avec un `init.lua` → mod Cyber Engine Tweaks ;
-//! - dossier avec un `info.json` → mod REDmod (`mods/`) ;
-//! - `.reds` → `r6/scripts/<mod>/` ; `.yaml`, `.yml`, `.tweak` →
+//! Most archives mirror the game tree (`archive/`, `bin/`, `r6/`,
+//! `red4ext/`…): they are placed as is. The others are sorted by their
+//! content, never by a random guess:
+//! - `.archive` and `.xl` go to `archive/pc/mod/`;
+//! - a folder with an `init.lua` is a Cyber Engine Tweaks mod;
+//! - a folder with an `info.json` is a REDmod mod (`mods/`);
+//! - `.reds` go to `r6/scripts/<mod>/`; `.yaml`, `.yml`, `.tweak` go to
 //!   `r6/tweaks/<mod>/`.
 //!
-//! Le reste (readme, captures d'écran) n'est pas installé.
+//! The rest (readme, screenshots) is not installed.
 //!
-//! Les frameworks (RED4ext, Cyber Engine Tweaks, redscript…) sont décrits
-//! par le profil du jeu (`games/cyberpunk-2077.toml`, voir `framework`) : de
-//! la donnée, pas du code.
+//! The frameworks (RED4ext, Cyber Engine Tweaks, redscript…) are described
+//! by the game profile (`games/cyberpunk-2077.toml`, see `framework`): data,
+//! not code.
 
 use std::collections::HashSet;
 use std::path::Path;
@@ -21,7 +21,7 @@ use std::path::Path;
 pub use super::framework::{Framework, needed_frameworks};
 use super::{Loader, PackageKind, Placement};
 
-/// Dossiers racine du jeu qu'une archive peut reproduire.
+/// Game root folders that an archive can mirror.
 const ROOTS: [&str; 6] = ["archive", "bin", "engine", "mods", "r6", "red4ext"];
 
 const CET_MODS: &str = "bin/x64/plugins/cyber_engine_tweaks/mods";
@@ -34,7 +34,7 @@ impl Loader for RedEngine {
     }
 
     fn installed_manually(&self, _game_dir: &Path) -> bool {
-        // Pas de loader unique : chaque framework se vérifie à part.
+        // No single loader: each framework is checked on its own.
         false
     }
 
@@ -62,9 +62,9 @@ impl Loader for RedEngine {
     }
 }
 
-/// Dossiers d'emballage à ignorer : `Mon Mod v1.2/archive/pc/mod/…`. On
-/// descend tant que tout le paquet est dans un seul dossier qui n'est ni une
-/// racine du jeu, ni un mod CET ou REDmod (dont le nom compte).
+/// Wrapper folders to skip: `My Mod v1.2/archive/pc/mod/…`. We go down as
+/// long as the whole package sits in a single folder that is neither a game
+/// root nor a CET or REDmod mod (whose name matters).
 fn wrapper_depth(files: &[String]) -> usize {
     let mut depth = 0;
     loop {
@@ -102,7 +102,7 @@ fn target(parts: &[&str], all: &HashSet<String>, folder: &str) -> Option<String>
     let (name, dirs) = parts.split_last()?;
     let lower = name.to_ascii_lowercase();
 
-    // 1. Arborescence du jeu.
+    // 1. Game tree.
     if let Some(first) = dirs.first()
         && is_root(first)
     {
@@ -113,8 +113,8 @@ fn target(parts: &[&str], all: &HashSet<String>, folder: &str) -> Option<String>
         ));
     }
 
-    // 2. Mod CET ou REDmod : le dossier le plus proche qui contient le
-    //    manifeste. Manifeste à la racine du paquet : dossier au nom du mod.
+    // 2. CET or REDmod mod: the closest folder that holds the manifest.
+    //    Manifest at the package root: a folder named after the mod.
     for depth in (0..=dirs.len()).rev() {
         let base = dirs[..depth].join("/");
         let has = |manifest: &str| {
@@ -158,7 +158,7 @@ fn target(parts: &[&str], all: &HashSet<String>, folder: &str) -> Option<String>
     None
 }
 
-/// Nom de dossier sûr et lisible tiré du nom du mod.
+/// Safe, readable folder name taken from the mod name.
 fn folder_name(name: &str) -> String {
     let cleaned: String = name
         .chars()

@@ -1,7 +1,7 @@
-//! Contre les vraies API (Nexus, GitHub) : vérifie que les requêtes
-//! correspondent toujours à leurs schémas. Hors de la suite normale :
-//! `cargo test -p mod-engine --test live -- --ignored`. Le compte Nexus est
-//! testé si `NEXUS_API_KEY` est défini.
+//! Against the real APIs (Nexus, GitHub): checks that the requests still
+//! match their schemas. Outside the normal suite:
+//! `cargo test -p mod-engine --test live -- --ignored`. The Nexus account is
+//! tested if `NEXUS_API_KEY` is set.
 
 use std::path::Path;
 
@@ -38,7 +38,7 @@ async fn nexus_queries_match_the_real_schema() {
             .unwrap();
         assert_eq!(page.items.len(), 24, "{sort:?}");
         assert!(page.has_more);
-        // Les bibliothèques sont écartées (Modalia les installe seul).
+        // Libraries are left out (Modalia installs them by itself).
         assert!(
             page.items
                 .iter()
@@ -111,7 +111,7 @@ async fn nexus_account_and_free_download_rules() {
 async fn every_framework_has_a_github_release_asset() {
     let catalog = catalog();
     let github = GitHub::new(mod_engine::http_client());
-    // Tous les profils écrits à la main (Cyberpunk, Phantom Blade Zero…).
+    // Every hand-written profile (Cyberpunk, Phantom Blade Zero…).
     let frameworks = catalog.games().iter().flat_map(|g| g.frameworks.iter());
     for framework in frameworks {
         let release = github
@@ -159,8 +159,8 @@ async fn real_framework_archives_land_in_the_right_place() {
         game_dir: &game,
         community: COMMUNITY,
     };
-    // Codeware : ses scripts `.reds` demandent redscript, son dossier
-    // `red4ext/plugins` demande RED4ext.
+    // Codeware: its `.reds` scripts need redscript, its `red4ext/plugins`
+    // folder needs RED4ext.
     let done = installer
         .install_nexus(
             &mut state,
@@ -188,10 +188,10 @@ async fn real_framework_archives_land_in_the_right_place() {
     }
 }
 
-/// Échelle de sources, pour de vrai : Mod Settings (liste du profil) et
-/// Input Loader (dépôt cité par sa description) s'installent depuis GitHub
-/// avec un compte gratuit, sans lien du site. Demande `NEXUS_API_KEY`
-/// (l'empreinte est vérifiée auprès de Nexus).
+/// Source ladder, for real: Mod Settings (profile list) and Input Loader
+/// (repo mentioned by its description) install from GitHub with a free
+/// account, without a site link. Needs `NEXUS_API_KEY` (the hash is
+/// checked against Nexus).
 #[tokio::test]
 #[ignore]
 async fn verified_github_copies_spare_the_website() {

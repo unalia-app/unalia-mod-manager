@@ -1,6 +1,6 @@
-//! Interroge le vrai Thunderstore : catalogue de jeux, recherche et fiche.
+//! Queries the real Thunderstore: game catalog, search and mod page.
 //!
-//!     cargo run -p mod-engine --example mods -- [appid Steam] [recherche]
+//!     cargo run -p mod-engine --example mods -- [Steam appid] [search]
 
 use std::time::Duration;
 
@@ -19,14 +19,14 @@ async fn main() {
     let catalog = load_catalog(&client, SCHEMA_URL, &cache, Duration::from_secs(86_400))
         .await
         .expect("catalogue");
-    println!("{} jeux dans le catalogue", catalog.games().len());
+    println!("{} games in the catalog", catalog.games().len());
 
     let Some(game) = catalog.by_steam_app_id(app_id) else {
-        println!("{app_id} : jeu inconnu de Thunderstore");
+        println!("{app_id}: game unknown to Thunderstore");
         return;
     };
     println!(
-        "{} : communauté {}, loader {} (géré : {})",
+        "{}: community {}, loader {} (supported: {})",
         game.name, game.community, game.loader, game.supported
     );
 
@@ -60,7 +60,7 @@ async fn main() {
         let m = ts.get(&game.community, &first.id).await.expect("fiche");
         let v = m.latest().unwrap();
         println!(
-            "\n{} {} : {} dépendance(s)",
+            "\n{} {}: {} dependencies",
             m.name,
             v.number,
             v.dependencies.len()

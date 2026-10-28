@@ -1,11 +1,11 @@
-//! Brique **games** : ce que Modalia sait de chaque jeu moddable.
+//! **games** block: what Modalia knows about each moddable game.
 //!
-//! La base vient du schéma d'écosystème de Thunderstore (celui d'r2modman) :
-//! pour chaque jeu, ses identifiants Steam, sa communauté Thunderstore, son
-//! loader, ses exécutables. C'est de la donnée pure, jamais du code (SPEC §7).
+//! The base comes from Thunderstore's ecosystem schema (r2modman's): for
+//! each game, its Steam ids, its Thunderstore community, its loader, its
+//! executables. It is pure data, never code.
 //!
-//! Le schéma est mis en cache sur disque : l'appli démarre hors ligne avec la
-//! dernière version connue.
+//! The schema is cached on disk: the app starts offline with the last known
+//! version.
 
 pub mod auto;
 mod builtin;
@@ -26,8 +26,8 @@ pub use schema::SchemaError;
 
 pub const SCHEMA_URL: &str = "https://thunderstore.io/api/experimental/schema/dev/latest/";
 
-/// Loaders que Modalia sait installer, avec les règles de placement du
-/// schéma (`loaders::rules`).
+/// Loaders that Modalia knows how to install, with the schema's placement
+/// rules (`loaders::rules`).
 pub const SUPPORTED_LOADERS: [&str; 7] = [
     "bepinex",
     "bepisloader",
@@ -41,49 +41,48 @@ pub const SUPPORTED_LOADERS: [&str; 7] = [
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct GameProfile {
-    /// Identifiant du jeu dans le schéma, ex. `hollow-knight-silksong`.
+    /// Game id in the schema, e.g. `hollow-knight-silksong`.
     pub id: String,
     pub name: String,
-    /// Communauté Thunderstore où chercher les mods.
+    /// Thunderstore community to look for mods in.
     pub community: String,
     pub steam_app_ids: Vec<u32>,
-    /// Loader attendu par les mods de ce jeu, ex. `bepinex`, `melonloader`.
+    /// Loader expected by this game's mods, e.g. `bepinex`, `melonloader`.
     pub loader: String,
-    /// `true` si Modalia sait installer ce loader.
+    /// `true` if Modalia knows how to install this loader.
     pub supported: bool,
     pub exe_names: Vec<String>,
-    /// Dossier de données Unity, ex. `Hollow Knight Silksong_Data`.
+    /// Unity data folder, e.g. `Hollow Knight Silksong_Data`.
     pub data_folder_name: Option<String>,
-    /// Jaquette 360×480 fournie par Thunderstore pour les gestionnaires de mods.
+    /// 360×480 cover that Thunderstore provides for mod managers.
     pub cover_url: Option<String>,
-    /// Bannière 1920×620.
+    /// 1920×620 banner.
     pub hero_url: Option<String>,
-    /// Jeu dont les mods viennent de Nexus Mods (profils `games/*.toml`).
+    /// Game whose mods come from Nexus Mods (`games/*.toml` profiles).
     pub nexus: Option<NexusGame>,
-    /// Où vont les fichiers des mods de ce jeu.
+    /// Where this game's mod files go.
     #[serde(skip)]
     pub install_rules: InstallRules,
-    /// Frameworks que Modalia installe tout seul quand un mod en a besoin.
+    /// Frameworks that Modalia installs by itself when a mod needs them.
     #[serde(skip)]
     pub frameworks: Vec<Framework>,
-    /// Dépôts GitHub d'auteurs que la description de leur mod ne cite pas.
+    /// Authors' GitHub repos that their mod's description doesn't mention.
     #[serde(skip)]
     pub mirrors: Vec<Mirror>,
-    /// Launchers qui s'ouvrent avant le jeu (noms d'exécutables) : ouverts,
-    /// le jeu « démarre » ; ils ne comptent pas comme le jeu lui-même.
+    /// Launchers that open before the game (executable names): while they
+    /// run, the game is "starting"; they don't count as the game itself.
     #[serde(skip)]
     pub launchers: Vec<String>,
-    /// Grandes versions du jeu, de la plus ancienne à la plus récente :
-    /// l'utilisateur resté sur une ancienne version reçoit les mods publiés
-    /// avant la suivante.
+    /// Major versions of the game, oldest to newest: a user who stayed on an
+    /// old version gets the mods published before the next one.
     pub versions: Vec<GameVersion>,
-    /// Jeux Bethesda : dossier de `%LOCALAPPDATA%` où le jeu lit son
-    /// `plugins.txt`, ex. `Skyrim Special Edition`.
+    /// Bethesda games: folder in `%LOCALAPPDATA%` where the game reads its
+    /// `plugins.txt`, e.g. `Skyrim Special Edition`.
     #[serde(skip)]
     pub plugins: Option<String>,
 }
 
-/// Version du jeu et sa date de sortie (ISO, `2026-10-22`).
+/// Game version and its release date (ISO, `2026-10-22`).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct GameVersion {
@@ -92,15 +91,15 @@ pub struct GameVersion {
 }
 
 impl GameProfile {
-    /// Pour un jeu resté en version `name` : date avant laquelle ses mods
-    /// doivent avoir été publiés (sortie de la version suivante). `None` :
-    /// version inconnue ou la plus récente, rien à filtrer.
+    /// For a game that stayed on version `name`: date before which its mods
+    /// must have been published (release of the next version). `None`:
+    /// unknown or latest version, nothing to filter.
     pub fn mods_before(&self, name: &str) -> Option<&str> {
         let at = self.versions.iter().position(|v| v.name == name)?;
         self.versions.get(at + 1).map(|v| v.released.as_str())
     }
 
-    /// `plugins.txt` d'un jeu Bethesda (`loaders::bethesda::sync_plugins`).
+    /// `plugins.txt` of a Bethesda game (`loaders::bethesda::sync_plugins`).
     pub fn plugins_file(&self) -> Option<PathBuf> {
         let folder = self.plugins.as_deref()?;
         let local = std::env::var_os("LOCALAPPDATA")?;
@@ -108,9 +107,9 @@ impl GameProfile {
     }
 }
 
-/// Le même mod publié par son auteur sur GitHub (profil du jeu). Seulement
-/// un candidat : l'empreinte du fichier est toujours vérifiée auprès de
-/// Nexus avant de s'en servir.
+/// The same mod published by its author on GitHub (game profile). Only a
+/// candidate: the file hash is always checked against Nexus before it is
+/// used.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Mirror {
@@ -119,24 +118,24 @@ pub struct Mirror {
     pub github: String,
 }
 
-/// Le jeu chez Nexus Mods.
+/// The game on Nexus Mods.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, serde::Deserialize)]
 #[serde(rename_all(serialize = "camelCase"))]
 pub struct NexusGame {
-    /// Ex. `cyberpunk2077`, dans les URL et les liens `nxm://`.
+    /// E.g. `cyberpunk2077`, in URLs and `nxm://` links.
     pub domain: String,
-    /// Identifiant numérique (API GraphQL), ex. 3333.
+    /// Numeric id (GraphQL API), e.g. 3333.
     pub game_id: u32,
 }
 
-/// Paquet qui *est* un loader (ex. `silksong_modding-BepInExPack_Silksong`) :
-/// il s'installe à la racine du jeu au lieu du dossier des plugins.
+/// Package that *is* a loader (e.g. `silksong_modding-BepInExPack_Silksong`):
+/// it installs at the game root instead of the plugins folder.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct LoaderPackage {
     pub package_id: String,
     pub loader: String,
-    /// Dossier de l'archive dont le contenu va à la racine du jeu.
+    /// Archive folder whose content goes to the game root.
     pub root_folder: String,
 }
 
@@ -150,8 +149,8 @@ pub struct GameCatalog {
 impl GameCatalog {
     pub fn from_schema_json(json: &str) -> Result<Self, SchemaError> {
         let (mut games, loaders) = schema::parse(json)?;
-        // Profils écrits à la main : ils priment sur le schéma pour le même
-        // jeu Steam.
+        // Hand-written profiles: they win over the schema for the same
+        // Steam game.
         let builtin = builtin::profiles();
         games.retain(|g| {
             !builtin.iter().any(|b| {
@@ -185,7 +184,7 @@ impl GameCatalog {
         self.by_steam_app_id.get(&app_id).map(|&i| &self.games[i])
     }
 
-    /// Jeu d'une communauté Thunderstore.
+    /// Game of a Thunderstore community.
     pub fn by_community(&self, community: &str) -> Option<&GameProfile> {
         self.games.iter().find(|g| g.community == community)
     }
@@ -194,15 +193,14 @@ impl GameCatalog {
         self.games.iter().find(|g| g.id == id)
     }
 
-    /// Le paquet `namespace-name` est-il un loader ?
+    /// Is the package `namespace-name` a loader?
     pub fn loader_package(&self, package_id: &str) -> Option<&LoaderPackage> {
         self.loader_packages.get(package_id)
     }
 
-    /// Reconnaît un jeu installé hors de Steam à partir de son dossier : le
-    /// dossier de données Unity d'abord (quasi unique), puis les
-    /// exécutables. Une correspondance ambiguë ne renvoie rien plutôt que de
-    /// deviner.
+    /// Recognizes a game installed outside Steam from its folder: the Unity
+    /// data folder first (nearly unique), then the executables. An
+    /// ambiguous match returns nothing rather than guessing.
     pub fn identify_folder(&self, dir: &Path) -> Option<&GameProfile> {
         let names: Vec<String> = fs::read_dir(dir)
             .ok()?
@@ -219,8 +217,8 @@ impl GameCatalog {
         if !by_data.is_empty() {
             return single(by_data);
         }
-        // Un exécutable dans un sous-dossier (`bin/x64/…`) se vérifie sur
-        // le disque.
+        // An executable in a subfolder (`bin/x64/…`) is checked on
+        // disk.
         let exe_found = |exe: &String| {
             if exe.contains('/') {
                 dir.join(exe).is_file()
@@ -238,9 +236,9 @@ impl GameCatalog {
 }
 
 impl GameCatalog {
-    /// Comme `identify_folder`, en tolérant le dossier parent : on choisit
-    /// souvent `D:/Games` au lieu de `D:/Games/Silksong`. Renvoie le profil
-    /// et le vrai dossier du jeu.
+    /// Like `identify_folder`, tolerating the parent folder: people often
+    /// pick `D:/Games` instead of `D:/Games/Silksong`. Returns the profile
+    /// and the real game folder.
     pub fn locate_game(&self, dir: &Path) -> Option<(&GameProfile, PathBuf)> {
         if let Some(profile) = self.identify_folder(dir) {
             return Some((profile, dir.to_path_buf()));
@@ -255,16 +253,16 @@ impl GameCatalog {
     }
 }
 
-/// Identifiant d'un jeu ajouté à la main : son identifiant Steam s'il en a
-/// un (images et état partagés avec la version Steam), sinon un identifiant
-/// stable dérivé du profil, bit de poids fort à 1 pour ne jamais croiser un
-/// identifiant Steam réel.
+/// Id of a manually added game: its Steam id if it has one (images and
+/// state shared with the Steam version), else a stable id derived from the
+/// profile, with the high bit set so it never collides with a real Steam
+/// id.
 pub fn manual_app_id(profile: &GameProfile) -> u32 {
     if let Some(&id) = profile.steam_app_ids.first() {
         return id;
     }
-    // FNV-1a : stable d'une version de Rust à l'autre, contrairement au
-    // hachage de la bibliothèque standard.
+    // FNV-1a: stable from one Rust version to the next, unlike the
+    // standard library's hasher.
     let hash = profile.id.bytes().fold(0x811c_9dc5u32, |h, b| {
         (h ^ u32::from(b)).wrapping_mul(0x0100_0193)
     });
@@ -287,9 +285,8 @@ pub enum CatalogError {
     Cache(#[source] io::Error),
 }
 
-/// Charge le catalogue : cache s'il a moins de `max_age`, sinon
-/// téléchargement (et mise à jour du cache). Hors ligne, un cache périmé
-/// vaut mieux que rien.
+/// Loads the catalog: the cache if it is younger than `max_age`, else a
+/// download (and a cache update). Offline, a stale cache beats nothing.
 pub async fn load_catalog(
     client: &reqwest::Client,
     url: &str,
@@ -309,7 +306,7 @@ pub async fn load_catalog(
 
     match download_schema(client, url).await {
         Ok(json) => {
-            // On valide avant d'écraser un cache qui fonctionne.
+            // Validate before overwriting a cache that works.
             let catalog = GameCatalog::from_schema_json(&json)?;
             write_atomically(cache_file, &json).map_err(CatalogError::Cache)?;
             Ok(catalog)

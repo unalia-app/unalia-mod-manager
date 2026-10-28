@@ -1,12 +1,12 @@
-//! `plugins.txt` des jeux Bethesda, tenu à jour d'après les plugins que
-//! Modalia a posés (`loaders::bethesda::sync_plugins`).
+//! `plugins.txt` of Bethesda games, kept up to date with the plugins that
+//! Modalia placed (`loaders::bethesda::sync_plugins`).
 
 use std::fs;
 use std::path::Path;
 
 use mod_engine::loaders::bethesda::sync_plugins;
 
-/// Plugin minimal : en-tête `TES4` de Skyrim SE avec ses masters.
+/// Minimal plugin: Skyrim SE `TES4` header with its masters.
 fn plugin(path: &Path, masters: &[&str]) {
     let mut body = Vec::new();
     for master in masters {
@@ -44,7 +44,7 @@ fn plugins_txt_follows_the_mods() {
         .join("Skyrim Special Edition")
         .join("plugins.txt");
 
-    // Le jeu n'a jamais été lancé : le fichier est créé.
+    // The game was never launched: the file is created.
     let ours = deployed(&["Patch.esp", "Lib.esm"]);
     assert!(sync_plugins(game.path(), &list, &ours).unwrap());
     assert_eq!(
@@ -52,8 +52,8 @@ fn plugins_txt_follows_the_mods() {
         "*Lib.esm\r\n*Patch.esp\r\n"
     );
 
-    // Lignes du joueur gardées (même inactives), commentaires compris ;
-    // celles dont le fichier a disparu partent.
+    // The player's lines are kept (even inactive ones), comments included;
+    // the ones whose file is gone are dropped.
     fs::write(
         &list,
         "# This file is used by Skyrim to keep track of your downloaded content.\r\nManual.esp\r\n*Gone.esp\r\n*Patch.esp\r\n",
@@ -64,10 +64,10 @@ fn plugins_txt_follows_the_mods() {
         fs::read_to_string(&list).unwrap(),
         "# This file is used by Skyrim to keep track of your downloaded content.\r\nManual.esp\r\n*Lib.esm\r\n*Patch.esp\r\n"
     );
-    // Rien à changer : le fichier n'est pas réécrit.
+    // Nothing to change: the file is not rewritten.
     assert!(!sync_plugins(game.path(), &list, &ours).unwrap());
 
-    // Mod désactivé : son plugin quitte `Data/`, puis la liste.
+    // Mod disabled: its plugin leaves `Data/`, then the list.
     fs::remove_file(data.join("Patch.esp")).unwrap();
     assert!(sync_plugins(game.path(), &list, &deployed(&["Lib.esm"])).unwrap());
     assert_eq!(

@@ -1,6 +1,6 @@
-//! Releases **GitHub** : source officielle des auteurs qui y publient
-//! (frameworks de Cyberpunk 2077). Gratuit, sans compte, sans bridage : on
-//! la préfère à Nexus quand elle existe (échelle de sources, SPEC §2.4).
+//! **GitHub** releases: the official source of authors who publish there
+//! (Cyberpunk 2077 frameworks). Free, no account, no throttling: preferred
+//! over Nexus when it exists (source ladder).
 
 use std::collections::HashMap;
 use std::fs;
@@ -17,8 +17,8 @@ use super::SourceError;
 pub const API_URL: &str = "https://api.github.com";
 const NAME: &str = "GitHub";
 
-/// Dépôts GitHub cités dans un texte (description d'un mod), sans doublon,
-/// dans l'ordre d'apparition : `owner/repo`.
+/// GitHub repos mentioned in a text (a mod's description), without
+/// duplicates, in order of appearance: `owner/repo`.
 pub fn repos_in(text: &str) -> Vec<String> {
     let mut repos: Vec<String> = Vec::new();
     for (start, _) in text.match_indices("github.com/") {
@@ -50,7 +50,7 @@ pub fn repos_in(text: &str) -> Vec<String> {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Release {
-    /// Version sans le `v` du tag, ex. `1.30.0`.
+    /// Version without the tag's `v`, e.g. `1.30.0`.
     pub version: String,
     pub published_at: String,
     pub assets: Vec<Asset>,
@@ -65,17 +65,17 @@ pub struct Asset {
 }
 
 impl Release {
-    /// Fichier de la release d'après son modèle, `{version}` remplacé. Les
-    /// auteurs changent parfois la façon d'écrire la version dans le nom
-    /// (CET 1.38 : `cet_1_38_0.zip` après `cet_1.37.1.zip`) : points, tirets
-    /// bas et tirets sont acceptés.
+    /// Release file from its pattern, `{version}` replaced. Authors
+    /// sometimes change how they write the version in the name (CET 1.38:
+    /// `cet_1_38_0.zip` after `cet_1.37.1.zip`): dots, underscores and
+    /// dashes are accepted.
     pub fn asset(&self, pattern: &str) -> Option<&Asset> {
         self.asset_and_version(pattern).map(|(asset, _)| asset)
     }
 
-    /// Le fichier et la version qu'il porte. Avec un `*` dans le modèle
-    /// (`UE4SS_v*.zip`), la partie variable du nom est la version : une
-    /// release « experimental-latest » n'a pas de numéro dans son tag.
+    /// The file and the version it carries. With a `*` in the pattern
+    /// (`UE4SS_v*.zip`), the variable part of the name is the version: an
+    /// "experimental-latest" release has no number in its tag.
     pub fn asset_and_version(&self, pattern: &str) -> Option<(&Asset, String)> {
         if let Some((prefix, suffix)) = pattern.split_once('*') {
             return self.assets.iter().find_map(|a| {
@@ -97,31 +97,31 @@ impl Release {
     }
 }
 
-/// Réponse gardée pour un dépôt : la release (ou `None` : pas de release),
-/// et son ETag pour redemander sans tout recevoir.
+/// Answer kept for a repo: the release (or `None`: no release), and its
+/// ETag to ask again without receiving everything.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct Cached {
     release: Option<Release>,
     etag: Option<String>,
-    /// Secondes Unix de la dernière réponse.
+    /// Unix seconds of the last answer.
     fetched_at: u64,
 }
 
-/// Client des releases GitHub. Sans compte, GitHub n'accorde que 60
-/// requêtes par heure et par adresse IP : chaque réponse est gardée
-/// (`ttl`), redemandée avec son ETag (une réponse « inchangé » ne renvoie
-/// rien), et resservie si la limite est atteinte. Le cache peut vivre sur
-/// disque, pour survivre aux redémarrages.
+/// GitHub releases client. Without an account, GitHub only grants 60
+/// requests per hour per IP address: each answer is kept (`ttl`), asked
+/// again with its ETag (a "not modified" answer sends nothing back), and
+/// served again if the limit is reached. The cache can live on disk, to
+/// survive restarts.
 #[derive(Debug, Clone)]
 pub struct GitHub {
     client: Client,
     api_url: String,
-    /// Fichiers en HTTPS seulement, hors des tests.
+    /// HTTPS-only files, outside tests.
     require_https: bool,
     ttl: Duration,
     cache: Arc<Mutex<HashMap<String, Cached>>>,
     cache_file: Option<PathBuf>,
-    /// Jeton personnel facultatif : 5 000 requêtes par heure au lieu de 60.
+    /// Optional personal token: 5,000 requests per hour instead of 60.
     token: Option<String>,
 }
 
@@ -147,13 +147,13 @@ impl GitHub {
         self
     }
 
-    /// Durée pendant laquelle une réponse est resservie sans redemander.
+    /// How long an answer is served again without asking.
     pub fn with_ttl(mut self, ttl: Duration) -> Self {
         self.ttl = ttl;
         self
     }
 
-    /// Cache sur disque : relu tout de suite, réécrit à chaque réponse.
+    /// Cache on disk: read back right away, rewritten at each answer.
     pub fn with_cache_file(mut self, file: PathBuf) -> Self {
         if let Some(saved) = fs::read(&file)
             .ok()
@@ -165,12 +165,12 @@ impl GitHub {
         self
     }
 
-    /// Dernière release publiée (hors préversions) de `owner/repo`.
+    /// Latest published release (prereleases aside) of `owner/repo`.
     pub async fn latest_release(&self, repo: &str) -> Result<Release, SourceError> {
         self.release(repo, None).await
     }
 
-    /// Release `tag` de `owner/repo`, sinon la dernière stable.
+    /// Release `tag` of `owner/repo`, else the latest stable one.
     pub async fn release(&self, repo: &str, tag: Option<&str>) -> Result<Release, SourceError> {
         let valid = valid_repo(repo) && tag.is_none_or(|t| safe(t) && !t.contains('/'));
         if !valid {
@@ -193,9 +193,9 @@ impl GitHub {
         .await
     }
 
-    /// Dernière release stable de `owner/repo` publiée avant `before`
-    /// (date ISO, `2026-10-22`) : pour une version plus ancienne du jeu,
-    /// qu'une release récente ne gère plus.
+    /// Latest stable release of `owner/repo` published before `before`
+    /// (ISO date, `2026-10-22`): for an older version of the game, which a
+    /// recent release no longer supports.
     pub async fn release_before(&self, repo: &str, before: &str) -> Result<Release, SourceError> {
         if !valid_repo(repo) {
             return Err(SourceError::NotFound { source_name: NAME });
@@ -213,8 +213,8 @@ impl GitHub {
         .await
     }
 
-    /// Requête GitHub derrière le cache : `parse` tire la release de la
-    /// réponse (ou `None` : pas de release qui convienne).
+    /// GitHub request behind the cache: `parse` pulls the release out of
+    /// the answer (or `None`: no suitable release).
     async fn cached(
         &self,
         key: String,
@@ -244,7 +244,7 @@ impl GitHub {
         }
         let response = match request.send().await {
             Ok(response) => response,
-            // Hors ligne : la dernière réponse connue vaut mieux que rien.
+            // Offline: the last known answer beats nothing.
             Err(error) => {
                 return match cached {
                     Some(cached) => found(cached.release),
@@ -333,7 +333,7 @@ fn found(release: Option<Release>) -> Result<Release, SourceError> {
     release.ok_or(SourceError::NotFound { source_name: NAME })
 }
 
-/// Limite horaire atteinte : minutes avant qu'elle se lève.
+/// Hourly limit reached: minutes until it lifts.
 fn rate_limited(response: &reqwest::Response) -> Option<u64> {
     let status = response.status();
     let header = |name: &str| {

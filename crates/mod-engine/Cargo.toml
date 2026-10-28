@@ -4,7 +4,7 @@ version = "0.1.0"
 edition.workspace = true
 publish = false
 repository.workspace = true
-description = "Moteur de Modalia : détection des jeux, sources, loaders, déploiement des mods"
+description = "Modalia engine: game detection, sources, loaders, mod deployment"
 
 [dependencies]
 fs4 = "1"

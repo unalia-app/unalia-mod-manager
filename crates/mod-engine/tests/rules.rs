@@ -1,5 +1,5 @@
-//! Placement par les `installRules` du schéma Thunderstore, sur les vraies
-//! règles des jeux de `fixtures/thunderstore/schema.json`.
+//! Placement by the `installRules` of the Thunderstore schema, on the real
+//! rules of the games in `fixtures/thunderstore/schema.json`.
 
 use std::path::Path;
 
@@ -112,7 +112,7 @@ fn melonloader_games_follow_their_rules() {
         pairs(&[
             ("Mods/CoolMod.dll", "Mods/CoolMod.dll"),
             ("Loose.dll", "Mods/Loose.dll"),
-            // L'extension la plus longue gagne : `.lib.dll` avant `.dll`.
+            // The longest extension wins: `.lib.dll` before `.dll`.
             ("Shared.lib.dll", "UserLibs/Shared.lib.dll"),
             ("UserLibs/Other.lib.dll", "UserLibs/Other.lib.dll"),
             // Sous-route aplatie.
@@ -120,7 +120,7 @@ fn melonloader_games_follow_their_rules() {
                 "MelonLoader/Managed/Patch.dll",
                 "MelonLoader/Managed/Patch.dll"
             ),
-            // Route par défaut en subdir-no-flatten : chemin complet gardé.
+            // Default route in subdir-no-flatten: full path kept.
             (
                 "notes/readme.txt",
                 "UserData/ModManager/Author-Cool_Mod/notes/readme.txt"
@@ -172,7 +172,7 @@ fn unreal_shimloader_games_sort_paks_and_configs() {
 
 #[test]
 fn loader_packages_without_root_folder_go_to_the_game_root() {
-    // MelonLoader : tout le paquet, sauf les métadonnées, à la racine du jeu.
+    // MelonLoader: the whole package, except the metadata, at the game root.
     let placed = place(
         "backpack-hero",
         PackageKind::Loader {

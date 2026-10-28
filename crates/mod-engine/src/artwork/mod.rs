@@ -1,7 +1,7 @@
-//! Images des jeux, lues dans le cache local de Steam (`appcache/librarycache`).
+//! Game images, read from Steam's local cache (`appcache/librarycache`).
 //!
-//! Aucun asset officiel n'est embarqué ni téléchargé (SPEC §4) : on n'utilise
-//! que ce que Steam a déjà mis en cache sur la machine du joueur.
+//! No official asset is embedded or downloaded: we only use what
+//! Steam already cached on the player's machine.
 
 mod accent;
 
@@ -15,18 +15,18 @@ pub use accent::{Accent, accent_from_image, accent_from_path};
 pub enum ArtworkKind {
     /// Jaquette verticale 600×900.
     Cover,
-    /// Bannière large du haut de la page du jeu dans Steam.
+    /// Wide banner at the top of the game page in Steam.
     Hero,
-    /// Même bannière, déjà floutée par Steam.
+    /// Same banner, already blurred by Steam.
     HeroBlur,
     /// Capsule horizontale 460×215.
     Header,
-    /// Logo détouré (PNG).
+    /// Cut-out logo (PNG).
     Logo,
 }
 
 impl ArtworkKind {
-    /// Noms de fichier possibles, du plus au moins adapté.
+    /// Possible file names, from best to worst fit.
     fn file_names(self) -> &'static [&'static str] {
         match self {
             Self::Cover => &[
@@ -57,12 +57,11 @@ impl FromStr for ArtworkKind {
     }
 }
 
-/// Cherche une image d'un jeu dans le cache de Steam. Gère les deux
-/// dispositions connues :
+/// Looks for a game image in Steam's cache. Handles both known layouts:
 ///
-/// - actuelle : `librarycache/<appid>/<nom>`, parfois dans un sous-dossier
-///   nommé par une empreinte (`librarycache/<appid>/<hash>/<nom>`) ;
-/// - ancienne : `librarycache/<appid>_<nom>`.
+/// - current: `librarycache/<appid>/<name>`, sometimes in a subfolder named
+///   after a hash (`librarycache/<appid>/<hash>/<name>`);
+/// - old: `librarycache/<appid>_<name>`.
 pub fn find_artwork(steam_root: &Path, app_id: u32, kind: ArtworkKind) -> Option<PathBuf> {
     let cache = steam_root.join("appcache").join("librarycache");
     let app_dir = cache.join(app_id.to_string());
@@ -83,8 +82,8 @@ pub fn find_artwork(steam_root: &Path, app_id: u32, kind: ArtworkKind) -> Option
     None
 }
 
-/// Image la plus récente parmi les sous-dossiers : Steam y garde parfois
-/// plusieurs versions d'une même illustration.
+/// Most recent image among the subfolders: Steam sometimes keeps several
+/// versions of the same artwork there.
 fn newest_in_subdirs(dir: &Path, name: &str) -> Option<PathBuf> {
     fs::read_dir(dir)
         .ok()?
@@ -99,8 +98,8 @@ fn newest_in_subdirs(dir: &Path, name: &str) -> Option<PathBuf> {
         .map(|(_, p)| p)
 }
 
-/// Accent du jeu, calculé sur la première image disponible parmi la
-/// jaquette, la capsule et la bannière.
+/// The game's accent color, computed from the first available image among
+/// the cover, the capsule and the banner.
 pub fn game_accent(steam_root: &Path, app_id: u32) -> Option<Accent> {
     [ArtworkKind::Cover, ArtworkKind::Header, ArtworkKind::Hero]
         .into_iter()
@@ -108,15 +107,15 @@ pub fn game_accent(steam_root: &Path, app_id: u32) -> Option<Accent> {
         .find_map(|path| accent_from_path(&path))
 }
 
-/// Copie d'un logo sans ses marges transparentes : les logos de Steam sont
-/// posés sur une toile fixe (640×360), parfois avec beaucoup de vide autour.
-/// `false` si rien n'est à retirer (le logo d'origine convient tel quel).
+/// Copy of a logo without its transparent margins: Steam logos sit on a
+/// fixed canvas (640×360), sometimes with a lot of empty space around.
+/// `false` if there is nothing to trim (the original logo is fine as is).
 pub fn trim_logo(source: &Path, target: &Path) -> image::ImageResult<bool> {
     let image = image::open(source)?.into_rgba8();
     let (width, height) = image.dimensions();
     let (mut left, mut top, mut right, mut bottom) = (width, height, 0, 0);
     for (x, y, pixel) in image.enumerate_pixels() {
-        // Un alpha presque nul compte comme vide (ombres très légères).
+        // A near-zero alpha counts as empty (very faint shadows).
         if pixel[3] > 8 {
             left = left.min(x);
             top = top.min(y);

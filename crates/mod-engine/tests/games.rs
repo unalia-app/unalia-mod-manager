@@ -1,4 +1,4 @@
-//! Tests du catalogue de jeux sur un extrait réel du schéma Thunderstore
+//! Tests of the game catalog on a real excerpt of the Thunderstore schema
 //! (`fixtures/thunderstore/schema.json`).
 
 use std::fs;
@@ -67,19 +67,19 @@ fn loaders_with_install_rules_are_supported() {
     for (id, loader) in [
         ("backpack-hero", "melonloader"),
         ("palworld", "shimloader"),
-        // Pas de règles dans le schéma : conventions MelonLoader par défaut.
+        // No rules in the schema: MelonLoader conventions by default.
         ("dale-dawson-stationery-supplies", "recursive-melonloader"),
     ] {
         let game = catalog.by_id(id).unwrap();
         assert_eq!(game.loader, loader);
-        assert!(game.supported, "{id} devrait être pris en charge");
+        assert!(game.supported, "{id} should be supported");
         assert!(game.install_rules.installable());
     }
 }
 
 #[test]
 fn games_whose_mods_ship_as_archives_are_not_supported_yet() {
-    // Godot : l'archive est posée telle quelle (package-zip).
+    // Godot: the archive is placed as is (package-zip).
     let brotato = catalog().by_id("brotato").unwrap().clone();
     assert_eq!(brotato.loader, "godotml");
     assert!(!brotato.supported);
@@ -89,8 +89,8 @@ fn games_whose_mods_ship_as_archives_are_not_supported_yet() {
 fn games_without_an_installable_entry_are_skipped() {
     let catalog = catalog();
     assert!(catalog.by_id("107zxz-inscryption-multiplayer").is_none());
-    // 7 jeux du schéma, plus Cyberpunk 2077, Phantom Blade Zero, Skyrim SE
-    // et Fallout 4 (profils écrits à la main).
+    // 7 games from the schema, plus Cyberpunk 2077, Phantom Blade Zero,
+    // Skyrim SE and Fallout 4 (hand-written profiles).
     assert_eq!(catalog.games().len(), 11);
 }
 
@@ -113,7 +113,7 @@ fn cyberpunk_comes_from_its_handwritten_profile() {
         "{names:?}"
     );
 
-    // GOG, Epic : reconnu par son exécutable, rangé dans `bin/x64`.
+    // GOG, Epic: recognized by its executable, stored in `bin/x64`.
     let dir = tempfile::tempdir().unwrap();
     std::fs::create_dir_all(dir.path().join("bin/x64")).unwrap();
     assert!(catalog.identify_folder(dir.path()).is_none());
@@ -157,7 +157,7 @@ fn identifies_a_folder_added_by_hand() {
     let catalog = catalog();
     let dir = tempfile::tempdir().unwrap();
 
-    // Jeu Unity hors Steam : le dossier de données suffit.
+    // Unity game outside Steam: the data folder is enough.
     fs::create_dir(dir.path().join("Hollow Knight Silksong_Data")).unwrap();
     fs::write(dir.path().join("Hollow Knight Silksong.exe"), "").unwrap();
     assert_eq!(
@@ -165,7 +165,7 @@ fn identifies_a_folder_added_by_hand() {
         "hollow-knight-silksong"
     );
 
-    // Par l'exécutable seul, casse ignorée.
+    // By the executable alone, case ignored.
     let lc = tempfile::tempdir().unwrap();
     fs::write(lc.path().join("lethal company.EXE"), "").unwrap();
     assert_eq!(
@@ -216,7 +216,7 @@ async fn offline_falls_back_to_a_stale_cache() {
     let cache = dir.path().join("schema.json");
     fs::write(&cache, schema()).unwrap();
 
-    // max_age nul : le cache est périmé, le téléchargement échoue, on le garde.
+    // Zero max_age: the cache is stale, the download fails, we keep it.
     let catalog = load_catalog(
         &reqwest::Client::new(),
         &format!("{}/schema", server.url()),
@@ -233,7 +233,7 @@ async fn a_broken_download_never_overwrites_a_good_cache() {
     let mut server = Server::new_async().await;
     server
         .mock("GET", "/schema")
-        .with_body("{ pas du json")
+        .with_body("{ not json")
         .create_async()
         .await;
     let dir = tempfile::tempdir().unwrap();
@@ -286,10 +286,10 @@ fn manual_games_reuse_the_steam_id_or_get_a_stable_one() {
     let mut no_steam = catalog.by_id("valheim").unwrap().clone();
     no_steam.steam_app_ids.clear();
     let id = manual_app_id(&no_steam);
-    assert_eq!(id, manual_app_id(&no_steam), "doit être stable");
+    assert_eq!(id, manual_app_id(&no_steam), "must be stable");
     assert!(
         id & 0x8000_0000 != 0,
-        "ne doit pas pouvoir croiser un identifiant Steam"
+        "must never collide with a Steam id"
     );
 }
 
@@ -306,7 +306,7 @@ fn manual_games_are_persisted() {
     };
     let mut state = State::open(&db).unwrap();
     state.save_manual_game(&game).unwrap();
-    // Le même jeu déplacé : remplacé, pas dupliqué.
+    // The same game moved: replaced, not duplicated.
     let moved = ManualGame {
         path: "E:/Silksong".into(),
         ..game.clone()
@@ -362,7 +362,7 @@ fn store_paths_can_be_rebased_after_a_move() {
     assert_eq!(
         state.get("steam:1", "b-Two").unwrap().unwrap().legacy_store_dir,
         "D:/Elsewhere/b-Two",
-        "un chemin hors de l'ancien stockage ne bouge pas"
+        "a path outside the old storage doesn't move"
     );
 }
 
@@ -377,10 +377,10 @@ fn locating_a_game_tolerates_its_parent_folder() {
     let (profile, dir) = catalog.locate_game(games.path()).unwrap();
     assert_eq!(profile.id, "hollow-knight-silksong");
     assert_eq!(dir, silksong);
-    // Le bon dossier directement : inchangé.
+    // The right folder directly: unchanged.
     assert_eq!(catalog.locate_game(&silksong).unwrap().1, silksong);
 
-    // Deux jeux dans le parent : ambigu, on ne devine pas.
+    // Two games in the parent: ambiguous, we don't guess.
     fs::create_dir_all(games.path().join("LC")).unwrap();
     fs::write(games.path().join("LC/Lethal Company.exe"), "").unwrap();
     assert!(catalog.locate_game(games.path()).is_none());
@@ -416,13 +416,13 @@ fn pending_changes_survive_a_restart() {
 #[test]
 fn detects_a_real_running_process() {
     use mod_engine::launch::{ProcessWatcher, is_running};
-    // Le binaire de ce test tourne depuis son dossier : il doit être vu.
+    // This test's binary runs from its folder: it must be seen.
     let exe = std::env::current_exe().unwrap();
     let dir = exe.parent().unwrap();
     let running = ProcessWatcher::default().running_exes();
     assert!(
         is_running(dir, &running),
-        "{} absent de la liste des processus",
+        "{} missing from the process list",
         exe.display()
     );
     assert!(!is_running(

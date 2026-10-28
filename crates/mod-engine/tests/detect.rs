@@ -1,12 +1,12 @@
-//! Tests de la brique detect sur les faux dossiers Steam de `fixtures/steam`.
+//! Tests of the detect block on the fake Steam folders of `fixtures/steam`.
 
 use std::fs;
 use std::path::{Path, PathBuf};
 
 use mod_engine::detect::{DetectError, Engine, SteamGame, library_folders, scan_steam};
 
-/// Copie `fixtures/steam` dans un dossier temporaire et remplace `{{FIXTURE}}`
-/// dans les `.vdf` par le chemin de cette copie, échappé comme le fait Steam.
+/// Copies `fixtures/steam` into a temporary folder and replaces `{{FIXTURE}}`
+/// in the `.vdf` files with the path of that copy, escaped like Steam does.
 fn fixture() -> tempfile::TempDir {
     let source = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/steam");
     let dir = tempfile::tempdir().unwrap();
@@ -34,7 +34,7 @@ fn find(games: &[SteamGame], app_id: u32) -> &SteamGame {
     games
         .iter()
         .find(|g| g.app_id == app_id)
-        .unwrap_or_else(|| panic!("jeu {app_id} absent de {games:#?}"))
+        .unwrap_or_else(|| panic!("game {app_id} missing from {games:#?}"))
 }
 
 fn ids(games: &[SteamGame]) -> Vec<u32> {
@@ -95,12 +95,12 @@ fn skips_uninstalled_corrupt_and_trapped_manifests() {
     let games = scan_steam(&fx.path().join("root")).unwrap();
     let ids = ids(&games);
 
-    assert!(!ids.contains(&440), "jeu désinstallé listé");
-    assert!(!ids.contains(&999), "manifeste corrompu listé");
-    assert!(!ids.contains(&666), "installdir hors de common/ accepté");
+    assert!(!ids.contains(&440), "uninstalled game listed");
+    assert!(!ids.contains(&999), "corrupt manifest listed");
+    assert!(!ids.contains(&666), "installdir outside common/ accepted");
     assert!(
         !games.iter().any(|g| g.name.contains("Orphelin")),
-        "dossier sans manifeste listé"
+        "folder without a manifest listed"
     );
 }
 
@@ -134,7 +134,7 @@ fn reads_legacy_libraryfolders_format() {
     let games = scan_steam(&fx.path().join("legacy")).unwrap();
 
     assert_eq!(ids(&games), [2000002, 2000001, 1030300]);
-    // Dans cette config, Silksong n'est que dans library-d.
+    // In this config, Silksong is only in library-d.
     let silksong = find(&games, 1030300);
     assert_eq!(silksong.engine, Engine::Unity);
     assert!(silksong.library.ends_with("library-d"));
@@ -166,11 +166,11 @@ fn corrupt_libraryfolders_falls_back_to_root_library() {
 #[test]
 fn missing_steam_is_an_error() {
     let fx = fixture();
-    let nowhere: PathBuf = fx.path().join("pas-de-steam");
+    let nowhere: PathBuf = fx.path().join("no-steam");
 
     match scan_steam(&nowhere) {
         Err(DetectError::SteamNotFound(path)) => assert_eq!(path, nowhere),
-        other => panic!("attendu SteamNotFound, obtenu {other:?}"),
+        other => panic!("expected SteamNotFound, got {other:?}"),
     }
 }
 

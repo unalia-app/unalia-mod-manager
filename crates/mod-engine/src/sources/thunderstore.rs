@@ -1,9 +1,9 @@
-//! Source **Thunderstore** (thunderstore.io).
+//! **Thunderstore** source (thunderstore.io).
 //!
-//! - Recherche : `api/cyberstorm/listing/<communauté>/`, l'API paginée du site
-//!   (non documentée, mais la seule qui permette recherche et tri sans
-//!   télécharger tout le catalogue).
-//! - Fiche et description : `api/experimental/package/...` (documentée).
+//! - Search: `api/cyberstorm/listing/<community>/`, the site's paginated
+//!   API (undocumented, but the only one that allows search and sorting
+//!   without downloading the whole catalog).
+//! - Mod page and description: `api/experimental/package/...` (documented).
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -20,19 +20,19 @@ pub const BASE_URL: &str = "https://thunderstore.io";
 const NAME: &str = "Thunderstore";
 const SOURCE_ID: &str = "thunderstore";
 
-/// Gestionnaires de mods publiés comme des paquets : inutiles dans Modalia,
-/// on ne les propose pas.
+/// Mod managers published as packages: useless in Modalia, we don't offer
+/// them.
 pub const MOD_MANAGERS: [&str; 2] = ["ebkr-r2modman", "Kesomannen-GaleModManager"];
 
 #[derive(Debug, Clone)]
 pub struct Thunderstore {
     client: Client,
     base_url: String,
-    /// Identifiant de la catégorie « Libraries » de chaque communauté
-    /// (`None` : la communauté n'en a pas).
+    /// Id of the "Libraries" category of each community (`None`: the
+    /// community has none).
     library_categories: Arc<Mutex<HashMap<String, Option<u64>>>>,
-    /// Refuser les téléchargements qui ne sont pas en HTTPS. Toujours vrai
-    /// hors des tests (le faux serveur de test parle HTTP).
+    /// Refuse downloads that aren't over HTTPS. Always true outside tests
+    /// (the fake test server speaks HTTP).
     require_https: bool,
 }
 
@@ -44,8 +44,8 @@ impl Thunderstore {
         }
     }
 
-    /// Pour les tests : pointe vers un faux serveur, qui peut servir ses
-    /// archives en HTTP.
+    /// For tests: points to a fake server, which may serve its archives
+    /// over HTTP.
     pub fn with_base_url(client: Client, base_url: &str) -> Self {
         Self {
             client,
@@ -55,23 +55,23 @@ impl Thunderstore {
         }
     }
 
-    /// Impose (ou non) le HTTPS pour les téléchargements.
+    /// Enforces (or not) HTTPS for downloads.
     pub fn require_https(mut self, required: bool) -> Self {
         self.require_https = required;
         self
     }
 
-    /// Lien de don de l'équipe de l'auteur. Facultatif : une erreur ici ne
-    /// doit pas empêcher d'afficher le mod. HTTPS seulement.
+    /// Donation link of the author's team. Optional: an error here must not
+    /// prevent showing the mod. HTTPS only.
     async fn donation_url(&self, namespace: &str) -> Option<String> {
         let url = format!("{}/api/cyberstorm/team/{namespace}/", self.base_url);
         let team: Team = self.fetch(&url, &[]).await.ok()?;
         team.donation_link.filter(|l| l.starts_with("https://"))
     }
 
-    /// Les filtres de catégorie attendent des identifiants propres à chaque
-    /// communauté : on les demande une fois. En cas d'échec, pas de filtre
-    /// (et on réessaiera à la prochaine recherche).
+    /// Category filters expect ids specific to each community: we ask for
+    /// them once. On failure, no filter (and we try again at the next
+    /// search).
     async fn library_category(&self, community: &str) -> Option<u64> {
         if let Some(&cached) = self.library_categories.lock().unwrap().get(community) {
             return cached;
@@ -198,9 +198,9 @@ impl ModSource for Thunderstore {
     }
 }
 
-/// `namespace-nom` → (`namespace`, `nom`). Thunderstore n'autorise que
-/// lettres, chiffres et `_` : tout le reste est refusé avant de construire
-/// une URL.
+/// `namespace-name` to (`namespace`, `name`). Thunderstore only allows
+/// letters, digits and `_`: anything else is refused before building a
+/// URL.
 fn split_id(id: &str) -> Result<(&str, &str), SourceError> {
     id.split_once('-')
         .filter(|(ns, name)| is_identifier(ns) && is_identifier(name))
@@ -211,7 +211,7 @@ fn is_identifier(s: &str) -> bool {
     !s.is_empty() && s.chars().all(|c| c.is_ascii_alphanumeric() || c == '_')
 }
 
-/// Segment d'URL sûr (communauté, numéro de version).
+/// Safe URL segment (community, version number).
 fn segment(s: &str) -> Result<&str, SourceError> {
     let ok = !s.is_empty()
         && s.chars()
@@ -223,7 +223,7 @@ fn segment(s: &str) -> Result<&str, SourceError> {
     }
 }
 
-/// `namespace-nom-1.2.3` → dépendance `namespace-nom` ≥ 1.2.3.
+/// `namespace-name-1.2.3` gives dependency `namespace-name` ≥ 1.2.3.
 fn parse_dependency(full: &str) -> Option<Dependency> {
     let (id, version) = full.rsplit_once('-')?;
     split_id(id).ok()?;
@@ -303,7 +303,7 @@ struct Package {
     date_updated: String,
     #[serde(default)]
     is_deprecated: bool,
-    /// -1 quand Thunderstore ne le calcule pas.
+    /// -1 when Thunderstore doesn't compute it.
     total_downloads: i64,
     latest: Version,
     #[serde(default)]
@@ -341,8 +341,8 @@ impl Package {
         community: &str,
         require_https: bool,
     ) -> Result<Mod, SourceError> {
-        // L'API ne garantit pas une URL HTTPS : on refuse tout autre schéma
-        // plutôt que de télécharger en clair (SPEC §7).
+        // The API doesn't guarantee an HTTPS URL: we refuse any other scheme
+        // rather than download in clear text.
         if require_https && !self.latest.download_url.starts_with("https://") {
             return Err(SourceError::Unexpected {
                 source_name: NAME,
@@ -396,7 +396,7 @@ fn display_name(name: &str) -> String {
     name.replace('_', " ")
 }
 
-/// Retire les catégories marquées obsolètes par Thunderstore.
+/// Removes the categories Thunderstore marks as deprecated.
 fn categories(names: impl Iterator<Item = String>) -> Vec<String> {
     names.filter(|n| !n.starts_with("(Deprecated")).collect()
 }

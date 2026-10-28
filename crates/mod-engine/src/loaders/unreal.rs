@@ -1,19 +1,19 @@
-//! Adaptateur **Unreal Engine** (4 et 5), pour les jeux dont les mods
-//! viennent de Nexus : Phantom Blade Zero, Hogwarts Legacy…
+//! **Unreal Engine** adapter (4 and 5), for games whose mods come from
+//! Nexus: Phantom Blade Zero, Hogwarts Legacy…
 //!
-//! Un jeu Unreal range ses fichiers dans le dossier de son projet,
-//! `<Projet>/Content/Paks` et `<Projet>/Binaries/Win64`. Son nom n'est connu
-//! qu'une fois le jeu installé : `find_project` le trouve. Puis, d'après le
-//! contenu de l'archive, sans deviner au hasard :
-//! - `.pak`, `.utoc`, `.ucas` (et `.sig`) → `<Projet>/Content/Paks/~mods/` ;
-//! - `LogicMods/…` (mods Blueprint) → `<Projet>/Content/Paks/LogicMods/` ;
-//! - dossier avec `Scripts/main.lua` → mod UE4SS,
-//!   `<Projet>/Binaries/Win64/ue4ss/Mods/<mod>/` ;
-//! - `dwmapi.dll` et `ue4ss/` (UE4SS lui-même) → `<Projet>/Binaries/Win64/` ;
-//! - une archive qui reproduit le jeu (`<Projet>/…`) ou le projet
-//!   (`Content/…`, `Binaries/…`) se pose telle quelle.
+//! An Unreal game keeps its files in its project folder,
+//! `<Project>/Content/Paks` and `<Project>/Binaries/Win64`. Its name is only
+//! known once the game is installed: `find_project` finds it. Then, from the
+//! archive content, never by a random guess:
+//! - `.pak`, `.utoc`, `.ucas` (and `.sig`) go to `<Project>/Content/Paks/~mods/`;
+//! - `LogicMods/…` (Blueprint mods) go to `<Project>/Content/Paks/LogicMods/`;
+//! - a folder with `Scripts/main.lua` is a UE4SS mod, placed in
+//!   `<Project>/Binaries/Win64/ue4ss/Mods/<mod>/`;
+//! - `dwmapi.dll` and `ue4ss/` (UE4SS itself) go to `<Project>/Binaries/Win64/`;
+//! - an archive that mirrors the game (`<Project>/…`) or the project
+//!   (`Content/…`, `Binaries/…`) is placed as is.
 //!
-//! Le reste (readme, captures) n'est pas installé.
+//! The rest (readme, screenshots) is not installed.
 
 use std::collections::HashSet;
 use std::fs;
@@ -21,12 +21,12 @@ use std::path::Path;
 
 use super::{Loader, PackageKind, Placement};
 
-/// Extensions des paquets de contenu Unreal (IoStore compris).
+/// Extensions of Unreal content packages (IoStore included).
 const PAK_FILES: [&str; 4] = [".pak", ".utoc", ".ucas", ".sig"];
 
-/// Dossier du projet Unreal : celui qui contient à la fois `Content/Paks` et
-/// `Binaries/Win64` (pas `Engine`, présent dans tous les jeux). Plusieurs
-/// candidats : on ne devine pas.
+/// Unreal project folder: the one that holds both `Content/Paks` and
+/// `Binaries/Win64` (not `Engine`, present in every game). Several
+/// candidates: we don't guess.
 pub fn find_project(game_dir: &Path) -> Option<String> {
     let mut found = fs::read_dir(game_dir).ok()?.flatten().filter_map(|entry| {
         let name = entry.file_name().to_string_lossy().into_owned();
@@ -41,7 +41,7 @@ pub fn find_project(game_dir: &Path) -> Option<String> {
 }
 
 pub struct Unreal {
-    /// Nom du dossier du projet, ex. `PhantomBladeZero`.
+    /// Name of the project folder, e.g. `PhantomBladeZero`.
     pub project: String,
 }
 
@@ -51,7 +51,7 @@ impl Loader for Unreal {
     }
 
     fn installed_manually(&self, _game_dir: &Path) -> bool {
-        // Pas de loader unique : UE4SS se vérifie comme un framework.
+        // No single loader: UE4SS is checked like a framework.
         false
     }
 
@@ -87,7 +87,7 @@ impl Unreal {
         let lower = name.to_ascii_lowercase();
         let first = dirs.first().map(|d| d.to_ascii_lowercase());
 
-        // 1. Arborescence du jeu, puis du projet.
+        // 1. Game tree, then project tree.
         if dirs
             .first()
             .is_some_and(|d| d.eq_ignore_ascii_case(project))
@@ -98,7 +98,7 @@ impl Unreal {
             return Some(format!("{project}/{}", parts.join("/")));
         }
 
-        // 2. UE4SS lui-même.
+        // 2. UE4SS itself.
         if dirs.is_empty() && lower == "dwmapi.dll" {
             return Some(format!("{win64}/{name}"));
         }
@@ -106,8 +106,8 @@ impl Unreal {
             return Some(format!("{win64}/{}", parts.join("/")));
         }
 
-        // 3. Mod UE4SS : le dossier le plus proche qui contient
-        //    `Scripts/main.lua`. À la racine du paquet : dossier au nom du mod.
+        // 3. UE4SS mod: the closest folder that holds `Scripts/main.lua`.
+        //    At the package root: a folder named after the mod.
         for depth in (0..=dirs.len()).rev() {
             let base = dirs[..depth].join("/");
             let main = if base.is_empty() {
@@ -124,7 +124,7 @@ impl Unreal {
             }
         }
 
-        // 4. Mods Blueprint, puis paquets de contenu.
+        // 4. Blueprint mods, then content packages.
         if let Some(at) = dirs
             .iter()
             .position(|d| d.eq_ignore_ascii_case("logicmods"))
@@ -141,9 +141,9 @@ impl Unreal {
     }
 }
 
-/// Dossiers d'emballage à ignorer (`Mon Mod v1.2/…`), comme pour REDengine :
-/// on descend tant que tout le paquet est dans un seul dossier qui n'a pas de
-/// sens pour le jeu.
+/// Wrapper folders to skip (`My Mod v1.2/…`), as for REDengine: we go down
+/// as long as the whole package sits in a single folder that means nothing
+/// to the game.
 fn wrapper_depth(files: &[String], project: &str) -> usize {
     let meaningful = |segment: &str| {
         segment.eq_ignore_ascii_case(project)
@@ -171,7 +171,7 @@ fn wrapper_depth(files: &[String], project: &str) -> usize {
                 Some(f) if f != parts[0] => return depth,
                 Some(_) => {}
             }
-            // `Mod/Scripts/main.lua` : `Mod` est le nom du mod UE4SS, on le garde.
+            // `Mod/Scripts/main.lua`: `Mod` is the UE4SS mod name, keep it.
             if parts.len() >= 3 && parts[1].eq_ignore_ascii_case("scripts") {
                 return depth;
             }
@@ -183,7 +183,7 @@ fn wrapper_depth(files: &[String], project: &str) -> usize {
     }
 }
 
-/// Nom de dossier sûr et lisible tiré du nom du mod.
+/// Safe, readable folder name taken from the mod name.
 fn folder_name(name: &str) -> String {
     let cleaned: String = name
         .chars()
@@ -304,7 +304,7 @@ mod tests {
                 ),
             ])
         );
-        // Lua à la racine du paquet : dossier au nom du mod.
+        // Lua at the package root: a folder named after the mod.
         assert_eq!(
             place(&["Scripts/main.lua"]),
             pairs(&[(

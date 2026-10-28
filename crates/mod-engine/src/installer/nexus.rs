@@ -1,25 +1,25 @@
-//! Installation depuis Nexus Mods, frameworks compris (jeux REDengine).
+//! Install from Nexus Mods, frameworks included (REDengine games).
 //!
-//! 1. Le mod demandé vient de Nexus : lien `nxm://` du site (compte
-//!    gratuit) ou téléchargement direct (Premium).
-//! 2. Ses fichiers disent de quels frameworks il a besoin (`.reds` →
-//!    redscript…), Nexus déclare le reste dans ses prérequis.
-//! 3. Les frameworks absents viennent de GitHub, la source de leurs auteurs,
-//!    sans aucun clic : ils passent avant le mod, comme des dépendances.
+//! 1. The requested mod comes from Nexus: the site's `nxm://` link (free
+//!    account) or a direct download (Premium).
+//! 2. Its files say which frameworks it needs (`.reds` means redscript…),
+//!    Nexus declares the rest in its requirements.
+//! 3. Missing frameworks come from GitHub, their authors' source, without
+//!    any click: they go before the mod, like dependencies.
 //!
-//! Tout le lot est transactionnel, comme une installation Thunderstore.
+//! The whole batch is transactional, like a Thunderstore install.
 //!
-//! Un mod peut avoir plusieurs fichiers (variantes de couleur, options) :
-//! l'utilisateur les choisit, ils sont posés dans l'ordre, chacun par-dessus
-//! le précédent, et forment un seul mod.
+//! A mod can have several files (color variants, options): the user picks
+//! them, they are placed in order, each over the previous one, and form a
+//! single mod.
 //!
-//! Un jeu resté sur une ancienne version (`before`, date de sortie de la
-//! suivante) reçoit les fichiers et les releases publiés avant cette date.
+//! A game that stayed on an old version (`before`, release date of the next
+//! one) gets the files and releases published before that date.
 
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 
-/// Dépôts GitHub essayés au plus pour un mod (chacun coûte une requête).
+/// Maximum GitHub repos tried for a mod (each one costs a request).
 const MIRROR_CANDIDATES: usize = 4;
 
 use serde::Serialize;
@@ -41,16 +41,16 @@ use crate::sources::nexus::{ModFile, ModInfo, Nexus, NxmLink, Requirement, mod_k
 use crate::state::{InstalledMod, State};
 use crate::store::Manifest;
 
-/// Ce que l'utilisateur a demandé.
+/// What the user asked for.
 #[derive(Debug, Clone, Copy)]
 pub enum NexusFile<'a> {
-    /// Le fichier principal du mod (bouton Install, mises à jour).
+    /// The mod's main file (Install button, updates).
     Main,
-    /// Le fichier choisi sur le site (lien `nxm://`).
+    /// The file picked on the site (`nxm://` link).
     Link(&'a NxmLink),
-    /// Fichiers choisis dans Unalia, posés dans cet ordre. Compte gratuit :
-    /// `link` est celui qui vient d'arriver du site, les autres doivent déjà
-    /// être téléchargés (sinon `InstallError::NexusWebsite`).
+    /// Files picked in Unalia, placed in this order. Free account: `link`
+    /// is the one that just came from the site, the others must already be
+    /// downloaded (else `InstallError::NexusWebsite`).
     Files {
         ids: &'a [u32],
         link: Option<&'a NxmLink>,
@@ -60,15 +60,15 @@ pub enum NexusFile<'a> {
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct NexusInstall {
-    /// Mods du jeu après l'installation.
+    /// The game's mods after the install.
     pub mods: Vec<InstalledMod>,
-    /// Prérequis déclarés sur Nexus que Modalia n'a pas pu installer seul
-    /// (autres mods Nexus : un clic sur le site pour un compte gratuit).
+    /// Requirements declared on Nexus that Modalia couldn't install by
+    /// itself (other Nexus mods: one click on the site for a free account).
     pub missing: Vec<Requirement>,
 }
 
 impl Installer<'_, Nexus> {
-    /// Installe un mod Nexus et les frameworks dont il a besoin.
+    /// Installs a Nexus mod and the frameworks it needs.
     #[allow(clippy::too_many_arguments)]
     pub async fn install_nexus(
         &self,
@@ -89,18 +89,18 @@ impl Installer<'_, Nexus> {
             .domain;
         let existing = state.list(target.game)?;
         let adapter = Adapter::for_game(profile, target.game_dir)?;
-        // Chemins des frameworks pour ce jeu (`{project}` des jeux Unreal).
+        // Framework paths for this game (`{project}` of Unreal games).
         let frameworks: Vec<Framework> = profile
             .frameworks
             .iter()
             .map(|f| f.resolve(adapter.project()))
             .collect();
 
-        // Le mod demandé. Un framework sans fichier précis vient de GitHub :
-        // pas de clic sur Nexus, même pour un compte gratuit.
+        // The requested mod. A framework without a precise file comes from
+        // GitHub: no click on Nexus, even for a free account.
         let framework = frameworks.iter().find(|f| f.nexus_id == Some(mod_id));
-        // Si GitHub ne le fournit pas (release sans le fichier attendu), il
-        // passe par Nexus comme n'importe quel mod.
+        // If GitHub doesn't provide it (release without the expected file),
+        // it goes through Nexus like any mod.
         let from_github = match (framework, file) {
             (Some(framework), NexusFile::Main) => {
                 self.github_package(github, framework, before).await.ok()
@@ -117,8 +117,8 @@ impl Installer<'_, Nexus> {
                     NexusFile::Link(link) => (vec![link.file_id], Some(link)),
                     NexusFile::Files { ids, link } => (ids.to_vec(), link),
                     NexusFile::Main => {
-                        // Réinstallation, mise à jour : les fichiers choisis
-                        // la dernière fois, dans leur version actuelle.
+                        // Reinstall, update: the files picked last time, in
+                        // their current version.
                         let mut kept: Vec<u32> = Vec::new();
                         for old in previous.map(|p| p.files.as_slice()).unwrap_or_default() {
                             if let Some(file) = info.successor(*old, before)
@@ -145,9 +145,9 @@ impl Installer<'_, Nexus> {
                 };
                 let single = ids.len() == 1;
                 let mut parts = Vec::new();
-                // Compte gratuit, plusieurs fichiers : ceux qui viennent
-                // sont téléchargés, le site est demandé pour le premier des
-                // autres. Le lien suivant reprend là.
+                // Free account, several files: the ones that are here are
+                // downloaded, the site is asked for the first of the others.
+                // The next link picks up from there.
                 let mut website = None;
                 for (index, file_id) in ids.iter().enumerate() {
                     let file = info
@@ -158,13 +158,13 @@ impl Installer<'_, Nexus> {
                         .ok_or_else(|| InstallError::NoFile(info.name.clone()))?;
                     let version = file_version(&info, &file, before);
                     let link = link.filter(|l| l.file_id == *file_id);
-                    // Compte gratuit (lien du site) : une seule connexion,
-                    // comme Vortex. Plusieurs contourneraient le bridage.
+                    // Free account (site link): a single connection, like
+                    // Vortex. Several would bypass the throttling.
                     let mut connections = link.map(|_| 1);
                     let archive = self.archive_path(&id, &version, Some(*file_id));
                     let cached = self.cached(target.game, &id, &version, Some(*file_id));
-                    // Déjà téléchargé (fichier précédent d'un choix
-                    // multiple, compte gratuit) : rien à redemander.
+                    // Already downloaded (previous file of a multiple
+                    // choice, free account): nothing to ask again.
                     let url = if cached {
                         String::new()
                     } else {
@@ -174,8 +174,8 @@ impl Installer<'_, Nexus> {
                             .await
                         {
                             Ok(url) => url,
-                            // Compte gratuit : avant d'envoyer sur le site, on
-                            // cherche le même fichier chez l'auteur, ailleurs.
+                            // Free account: before sending to the site, look
+                            // for the same file from the author, elsewhere.
                             Err(SourceError::WebsiteOnly { .. }) if link.is_none() => {
                                 let mirror = if single {
                                     self.github_mirror(
@@ -193,7 +193,7 @@ impl Installer<'_, Nexus> {
                                     None
                                 };
                                 match mirror {
-                                    // GitHub : pas de bridage à respecter.
+                                    // GitHub: no throttling to respect.
                                     Some(url) => {
                                         connections = None;
                                         url
@@ -210,7 +210,7 @@ impl Installer<'_, Nexus> {
                     let part = Package {
                         connections,
                         id: id.clone(),
-                        // Plusieurs fichiers : la progression dit lequel.
+                        // Several files: the progress says which one.
                         name: if single {
                             info.name.clone()
                         } else {
@@ -241,8 +241,8 @@ impl Installer<'_, Nexus> {
             }
         };
 
-        // Télécharger le mod, puis les frameworks qui manquent (et ceux
-        // dont ces frameworks ont besoin à leur tour).
+        // Download the mod, then the missing frameworks (and the ones those
+        // frameworks need in turn).
         let main_id = whole.id.clone();
         let chosen: Vec<u32> = parts.iter().filter_map(|p| p.file_id).collect();
         let mut fetched = vec![
@@ -279,10 +279,10 @@ impl Installer<'_, Nexus> {
             fetched.push(item);
         }
 
-        // Dernière occasion d'annuler : ensuite, le jeu est modifié.
+        // Last chance to cancel: after this, the game is modified.
         self.check_cancel()?;
-        // Poser : frameworks d'abord (les derniers découverts sont les plus
-        // profonds), le mod demandé en dernier.
+        // Place: frameworks first (the last discovered are the deepest),
+        // the requested mod last.
         let requested = mod_key(mod_id);
         let total = fetched.len();
         let store = self.paths.store();
@@ -334,11 +334,11 @@ impl Installer<'_, Nexus> {
         Ok(NexusInstall { mods, missing })
     }
 
-    /// Échelle de sources : le fichier principal du mod est-il publié tel
-    /// quel sur un dépôt GitHub cité dans sa description ? On ne le croit
-    /// pas sur parole : le fichier candidat (même taille exacte) est
-    /// téléchargé, et Nexus doit reconnaître son empreinte comme ce fichier
-    /// précis de ce mod. Gardé en cache, il n'est pas téléchargé deux fois.
+    /// Source ladder: is the mod's main file published as is on a GitHub
+    /// repo mentioned in its description? We don't take it on trust: the
+    /// candidate file (same exact size) is downloaded, and Nexus must
+    /// recognize its hash as this exact file of this mod. Kept in the
+    /// cache, it is not downloaded twice.
     #[allow(clippy::too_many_arguments)]
     async fn github_mirror(
         &self,
@@ -352,14 +352,14 @@ impl Installer<'_, Nexus> {
         on_progress: &mut impl FnMut(Progress),
     ) -> Option<String> {
         let size = file.size?;
-        // Les dépôts des frameworks sont cités comme dépendances, pas comme
-        // source du mod.
+        // Framework repos are mentioned as dependencies, not as the mod's
+        // source.
         let frameworks: Vec<String> = profile
             .frameworks
             .iter()
             .map(|f| f.github.to_ascii_lowercase())
             .collect();
-        // Le profil du jeu d'abord, puis les dépôts cités par la description.
+        // The game profile first, then the repos mentioned by the description.
         let listed = profile
             .mirrors
             .iter()
@@ -449,9 +449,9 @@ impl Installer<'_, Nexus> {
         })
     }
 
-    /// Les fichiers choisis d'un mod, chacun placé à part puis posés l'un
-    /// sur l'autre (une variante de couleur remplace l'archive du fichier
-    /// principal) : un seul paquet, `whole`.
+    /// A mod's picked files, each placed on its own then laid one over the
+    /// other (a color variant replaces the main file's archive): a single
+    /// package, `whole`.
     async fn fetch_parts(
         &self,
         target: &Target<'_>,
@@ -485,8 +485,8 @@ impl Installer<'_, Nexus> {
             super::path_segment(&whole.version),
             ids.join("+")
         );
-        // Le paquet composé reproduit le jeu : chaque fichier à sa place.
-        // Aucun fichier copié : il reprend le contenu des paquets.
+        // The combined package mirrors the game: each file in its place.
+        // No file copied: it reuses the packages' content.
         let manifest = combine(&placed);
         self.paths.store().save_manifest(&key, &manifest)?;
         let placements = files_of(&manifest)
@@ -528,9 +528,9 @@ impl Installer<'_, Nexus> {
     }
 }
 
-/// Compose les fichiers d'un mod, rangés comme dans le jeu : un fichier posé
-/// plus tard remplace celui du même chemin (sans tenir compte de la casse,
-/// comme Windows). L'empreinte est celle de la première archive.
+/// Combines a mod's files, laid out as in the game: a file placed later
+/// replaces the one at the same path (case-insensitive, like Windows). The
+/// hash is the first archive's.
 fn combine(parts: &[(Manifest, Vec<Placement>)]) -> Manifest {
     let mut combined = Manifest {
         sha256: parts
@@ -554,10 +554,10 @@ fn combine(parts: &[(Manifest, Vec<Placement>)]) -> Manifest {
     combined
 }
 
-/// Plusieurs fichiers principaux : ce sont des versions du même mod, une
-/// seule à installer. En tête (cochée d'office), celle qui cite un
-/// framework que Modalia installe (« UE4SS_… ») : elle marche telle quelle,
-/// l'autre peut dépendre d'un loader absent. Sinon l'ordre ne change pas.
+/// Several main files: they are versions of the same mod, only one to
+/// install. First (picked by default): the one that mentions a framework
+/// Modalia installs ("UE4SS_…"): it works as is, the other may depend on
+/// a missing loader. Otherwise the order doesn't change.
 fn recommend(choices: &mut [&ModFile], frameworks: &[Framework]) {
     if choices.iter().filter(|f| f.category == "MAIN").count() < 2 {
         return;
@@ -571,8 +571,8 @@ fn recommend(choices: &mut [&ModFile], frameworks: &[Framework]) {
     choices.sort_by_key(|f| !(f.category == "MAIN" && mentions(f)));
 }
 
-/// Release d'un framework : celle de son tag s'il en a un, sinon la
-/// dernière stable (d'avant `before` pour une ancienne version du jeu).
+/// Release of a framework: its tag's if it has one, else the latest stable
+/// one (from before `before` for an old version of the game).
 async fn framework_release(
     github: &GitHub,
     framework: &Framework,
@@ -584,8 +584,8 @@ async fn framework_release(
     }
 }
 
-/// Version d'un fichier Nexus. Sans numéro, celle du mod, sauf pour un
-/// ancien fichier : sa date, qui ne se confond pas avec la version actuelle.
+/// Version of a Nexus file. Without a number, the mod's, except for an old
+/// file: its date, which can't be confused with the current version.
 fn file_version(info: &ModInfo, file: &ModFile, before: Option<&str>) -> String {
     if !file.version.is_empty() {
         file.version.clone()
@@ -596,7 +596,7 @@ fn file_version(info: &ModInfo, file: &ModFile, before: Option<&str>) -> String 
     }
 }
 
-/// Adaptateur d'un jeu Nexus, d'après son profil.
+/// Adapter of a Nexus game, from its profile.
 enum Adapter {
     Bethesda(Bethesda),
     RedEngine(RedEngine),
@@ -630,8 +630,8 @@ impl Adapter {
         }
     }
 
-    /// Destination des fichiers du mod `name`. Rien à poser : une erreur
-    /// qui dit pourquoi.
+    /// Destination of the files of mod `name`. Nothing to place: an error
+    /// that says why.
     fn place(&self, name: &str, files: &[String]) -> Result<Vec<Placement>, InstallError> {
         let placements = self.loader().place(name, &PackageKind::Mod, files);
         if !placements.is_empty() {
@@ -644,11 +644,11 @@ impl Adapter {
     }
 }
 
-/// Mises à jour des mods d'un jeu Nexus : les frameworks d'après leur
-/// dernière release GitHub (là où Modalia les prend), les autres d'après
-/// Nexus, en une requête. Une source injoignable n'empêche pas l'autre.
-/// Pour une ancienne version du jeu (`before`), seulement ce qui est sorti
-/// avant la suivante : mod par mod, d'après ses fichiers.
+/// Updates of a Nexus game's mods: frameworks from their latest GitHub
+/// release (where Modalia takes them), the others from Nexus, in one
+/// request. An unreachable source doesn't block the other. For an old
+/// version of the game (`before`), only what came out before the next
+/// one: mod by mod, from its files.
 pub async fn available_updates_nexus(
     nexus: &Nexus,
     github: &GitHub,
@@ -659,10 +659,10 @@ pub async fn available_updates_nexus(
     use crate::resolver::compare_versions;
     use crate::sources::nexus::parse_mod_key;
 
-    // Une version de build (`3.0.1-1181-g83330635`) qui change sans que le
-    // numéro bouge compte aussi comme une mise à jour.
-    // Pour une ancienne version du jeu, un mod installé pour une plus
-    // récente est proposé aussi : la « mise à jour » revient en arrière.
+    // A build version (`3.0.1-1181-g83330635`) that changes while the
+    // number stays the same also counts as an update.
+    // For an old version of the game, a mod installed for a newer one is
+    // offered too: the "update" goes back.
     let newer = |m: &InstalledMod, latest: &str| {
         let order = compare_versions(latest, &m.version);
         let changed = order == std::cmp::Ordering::Greater
@@ -746,7 +746,7 @@ mod tests {
 
     #[test]
     fn the_main_file_that_names_a_framework_comes_first() {
-        // Skip Start Screen (Hogwarts Legacy) : deux versions du même mod.
+        // Skip Start Screen (Hogwarts Legacy): two versions of the same mod.
         let apparate = file(
             3280,
             "MAIN",
@@ -760,7 +760,7 @@ mod tests {
         let ids: Vec<u32> = choices.iter().map(|f| f.file_id).collect();
         assert_eq!(ids, [3279, 3280, 3281]);
 
-        // Un seul fichier principal : l'ordre ne change pas.
+        // A single main file: the order doesn't change.
         let mut choices = vec![&apparate, &extra];
         recommend(&mut choices, &[ue4ss()]);
         assert_eq!(choices[0].file_id, 3280);

@@ -1,6 +1,6 @@
-//! Moteur de Modalia, indépendant de l'interface.
+//! Modalia's engine, independent of the UI.
 //!
-//! Voir `SPEC.md` (section 6.3) pour le rôle de chaque brique.
+//! See `ARCHITECTURE.md` for the role of each building block.
 
 pub mod advice;
 pub mod archive;
@@ -20,8 +20,8 @@ pub mod store;
 
 pub use reqwest::Client as HttpClient;
 
-/// Client HTTP partagé par les briques qui parlent aux sources. Il
-/// s'identifie, comme le demandent les API publiques.
+/// HTTP client shared by the blocks that talk to the sources. It identifies
+/// itself, as the public APIs ask.
 pub fn http_client() -> HttpClient {
     reqwest::Client::builder()
         .user_agent(concat!(
@@ -29,8 +29,8 @@ pub fn http_client() -> HttpClient {
             env!("CARGO_PKG_VERSION"),
             " (+https://github.com/unalia-app/unalia-mod-manager)"
         ))
-        // Pas de délai total : un gros mod met des minutes à arriver. On
-        // coupe seulement une connexion qui ne répond plus.
+        // No total timeout: a big mod takes minutes to arrive. We only
+        // drop a connection that stopped answering.
         .connect_timeout(std::time::Duration::from_secs(15))
         .read_timeout(std::time::Duration::from_secs(30))
         .build()

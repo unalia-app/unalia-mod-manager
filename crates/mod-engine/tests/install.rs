@@ -1,5 +1,5 @@
-//! Chaîne d'installation sans réseau : resolver, extraction sûre, placement
-//! BepInEx et déploiement, sur le faux Silksong de `fixtures/steam`.
+//! Install chain without network: resolver, safe extraction, BepInEx
+//! placement and deployment, on the fake Silksong of `fixtures/steam`.
 
 use std::collections::{BTreeMap, HashMap};
 use std::fs;
@@ -19,7 +19,7 @@ use zip::write::SimpleFileOptions;
 
 const GAME: &str = "../../fixtures/steam/root/steamapps/common/Hollow Knight Silksong";
 
-/// Copie du faux jeu dans un dossier temporaire.
+/// Copy of the fake game in a temporary folder.
 fn game() -> (tempfile::TempDir, PathBuf) {
     let tmp = tempfile::tempdir().unwrap();
     let dir = tmp.path().join("Hollow Knight Silksong");
@@ -39,7 +39,7 @@ fn copy_dir(from: &Path, to: &Path) {
     }
 }
 
-/// Photographie complète d'un dossier : chemins, dossiers et contenus.
+/// Full snapshot of a folder: paths, folders and contents.
 fn snapshot(dir: &Path) -> BTreeMap<String, Option<Vec<u8>>> {
     fn walk(root: &Path, dir: &Path, out: &mut BTreeMap<String, Option<Vec<u8>>>) {
         for entry in fs::read_dir(dir).unwrap().flatten() {
@@ -120,7 +120,7 @@ fn mod_zip(dir: &Path) -> PathBuf {
     )
 }
 
-/// Paquet rangé dans un stockage de test.
+/// Package stored in a test storage.
 struct Stored {
     store: Store,
     manifest: Manifest,
@@ -136,13 +136,13 @@ impl Stored {
         }
     }
 
-    /// Contenu rangé d'un fichier du paquet.
+    /// Stored content of a package file.
     fn blob(&self, path: &str) -> PathBuf {
         self.store.blob(&self.manifest.files[path].hash)
     }
 }
 
-/// Extrait un paquet dans le stockage et calcule où vont ses fichiers.
+/// Extracts a package into the storage and computes where its files go.
 fn stage(store: &Path, archive: &Path, id: &str, kind: &PackageKind) -> (Stored, Vec<Placement>) {
     let store = Store::new(store);
     let dir = store.scratch().unwrap().join(id);
@@ -158,7 +158,7 @@ fn stage(store: &Path, archive: &Path, id: &str, kind: &PackageKind) -> (Stored,
     (stored, placements)
 }
 
-/// Range des fichiers donnés tels quels dans le stockage.
+/// Stores the given files as is in the storage.
 fn pack(store: &Path, key: &str, files: &[(&str, &str)]) -> Stored {
     let store = Store::new(store);
     let dir = store.scratch().unwrap();
@@ -233,7 +233,7 @@ fn refuses_zip_slip_and_leaves_nothing_behind() {
             matches!(err, ArchiveError::UnsafePath(_)),
             "{evil}: {err:?}"
         );
-        assert!(!dest.exists(), "{evil} : extraction partielle laissée");
+        assert!(!dest.exists(), "{evil}: partial extraction left behind");
         assert!(!tmp.path().join("evil.txt").exists());
     }
 }
@@ -259,7 +259,7 @@ fn refuses_zip_bombs() {
         max_ratio: 50,
     };
 
-    // 4 Mo de zéros compressés en quelques Ko : ratio absurde.
+    // 4 MB of zeros compressed into a few KB: absurd ratio.
     let zeros = vec![0u8; 4 * 1024 * 1024];
     let bomb = zip(tmp.path(), "bomb.zip", &[Entry::File("zeros.bin", &zeros)]);
     let relaxed = Limits {
@@ -269,7 +269,7 @@ fn refuses_zip_bombs() {
     let err = archive::extract(&bomb, &tmp.path().join("a"), relaxed).unwrap_err();
     assert!(matches!(err, ArchiveError::SuspiciousRatio(_)), "{err:?}");
 
-    // Même non compressé, 2 Mo dépassent la limite de 1 Mo.
+    // Even uncompressed, 2 MB exceed the 1 MB limit.
     let big = vec![7u8; 2 * 1024 * 1024];
     let large = zip(tmp.path(), "large.zip", &[Entry::Stored("big.bin", &big)]);
     let err = archive::extract(&large, &tmp.path().join("b"), limits).unwrap_err();
@@ -296,7 +296,7 @@ fn extracts_7z_archives() {
     fs::create_dir_all(src.join("archive/pc/mod")).unwrap();
     fs::write(src.join("archive/pc/mod/cool.archive"), b"archive").unwrap();
     fs::write(src.join("readme.txt"), b"hi").unwrap();
-    // Extension trompeuse : le format se lit dans le fichier.
+    // Misleading extension: the format is read from the file.
     let seven = tmp.path().join("cool.zip");
     sevenz_rust2::compress_to_path(&src, &seven).unwrap();
 
@@ -317,7 +317,7 @@ fn rar_fixture(name: &str) -> PathBuf {
 #[test]
 fn extracts_rar_archives() {
     let tmp = tempfile::tempdir().unwrap();
-    // Extension trompeuse : le format se lit dans le fichier.
+    // Misleading extension: the format is read from the file.
     let rar = tmp.path().join("mod.zip");
     fs::copy(rar_fixture("version.rar"), &rar).unwrap();
 
@@ -368,7 +368,7 @@ fn refuses_rar_archives_over_the_limits() {
     assert!(!tmp.path().join("out").exists());
 
     let rar = tmp.path().join("bad.rar");
-    fs::write(&rar, b"Rar!\x1a\x07\x00 pas vraiment un rar").unwrap();
+    fs::write(&rar, b"Rar!\x1a\x07\x00 not really a rar").unwrap();
     let err = archive::extract(&rar, &tmp.path().join("bad"), Limits::default()).unwrap_err();
     assert!(matches!(err, ArchiveError::Rar(_)), "{err:?}");
 }
@@ -377,7 +377,7 @@ fn refuses_rar_archives_over_the_limits() {
 fn refuses_corrupt_archives() {
     let tmp = tempfile::tempdir().unwrap();
     let path = tmp.path().join("bad.zip");
-    fs::write(&path, b"PK\x03\x04 pas vraiment un zip").unwrap();
+    fs::write(&path, b"PK\x03\x04 not really a zip").unwrap();
     let err = archive::extract(&path, &tmp.path().join("out"), Limits::default()).unwrap_err();
     assert!(matches!(err, ArchiveError::Corrupt(_)), "{err:?}");
 }
@@ -417,12 +417,12 @@ fn install_then_uninstall_restores_the_game_exactly() {
     );
     assert!(
         !game.join("manifest.json").exists(),
-        "métadonnées installées"
+        "metadata installed"
     );
     assert_eq!(
         loader.copied + skip_intro.copied,
         0,
-        "même disque : liens physiques attendus"
+        "same drive: hard links expected"
     );
 
     #[cfg(unix)]
@@ -436,11 +436,11 @@ fn install_then_uninstall_restores_the_game_exactly() {
         assert_eq!(
             stored.ino(),
             linked.ino(),
-            "le jeu doit voir un lien, pas une copie"
+            "the game must see a link, not a copy"
         );
     }
 
-    // Le jeu tourne : BepInEx écrit ses journaux et son cache.
+    // The game runs: BepInEx writes its logs and its cache.
     fs::write(game.join("BepInEx/LogOutput.log"), "log").unwrap();
     fs::create_dir_all(game.join("BepInEx/cache")).unwrap();
     fs::write(game.join("BepInEx/cache/chainloader.dat"), "cache").unwrap();
@@ -450,14 +450,14 @@ fn install_then_uninstall_restores_the_game_exactly() {
     assert_eq!(
         snapshot(&game),
         original,
-        "le dossier du jeu doit revenir à l'identique"
+        "the game folder must come back unchanged"
     );
 }
 
 #[test]
 fn never_overwrites_an_existing_file() {
     let (tmp, game) = game();
-    // BepInEx installé à la main auparavant : winhttp.dll est déjà là.
+    // BepInEx installed by hand before: winhttp.dll is already there.
     fs::write(game.join("winhttp.dll"), "manual install").unwrap();
     let before = snapshot(&game);
 
@@ -473,7 +473,7 @@ fn never_overwrites_an_existing_file() {
         matches!(&err, DeployError::Conflict(f) if f == "winhttp.dll"),
         "{err:?}"
     );
-    assert_eq!(snapshot(&game), before, "rien ne doit avoir été écrit");
+    assert_eq!(snapshot(&game), before, "nothing must have been written");
     assert!(!BepInEx.installed_manually(&game));
 }
 
@@ -483,8 +483,8 @@ fn a_failure_halfway_rolls_everything_back() {
     let store = pack(&tmp.path().join("store"), "test", &[("a.txt", "a"), ("b.txt", "b")]);
     let before = snapshot(&game);
 
-    // Le 2e fichier vise un dossier qui est en fait un fichier du jeu :
-    // l'écriture échoue après que le 1er a été posé.
+    // The 2nd file targets a folder that is actually a game file: the
+    // write fails after the 1st was placed.
     let placements = vec![
         Placement {
             source: "a.txt".into(),
@@ -501,7 +501,7 @@ fn a_failure_halfway_rolls_everything_back() {
     assert_eq!(
         snapshot(&game),
         before,
-        "le premier fichier doit avoir été retiré"
+        "the first file must have been removed"
     );
 }
 
@@ -522,7 +522,7 @@ fn disable_and_enable_are_undeploy_and_redeploy() {
     assert!(!plugin.exists());
     assert!(
         dir.blob("plugins/SkipIntro.dll").is_file(),
-        "le stockage garde le mod désactivé"
+        "the storage keeps the disabled mod"
     );
 
     deploy::deploy(dir.source(), &game, &files).unwrap();
@@ -543,17 +543,17 @@ fn configs_are_copied_and_their_edits_kept() {
     let original = stored.blob("config/com.bigfootmech.skipintro.cfg");
 
     let deployed = deploy::deploy(stored.source(), &game, &files).unwrap();
-    // BepInEx réécrit sa config sur place : le contenu rangé ne bouge pas.
+    // BepInEx rewrites its config in place: the stored content doesn't move.
     fs::write(&config, "enabled = false").unwrap();
     assert_eq!(fs::read_to_string(&original).unwrap(), "enabled = true");
-    // Le reste est lié : le jeu voit le contenu rangé lui-même.
+    // The rest is linked: the game sees the stored content itself.
     fs::write(&plugin, "patched").unwrap();
     assert_eq!(
         fs::read_to_string(stored.blob("plugins/SkipIntro.dll")).unwrap(),
         "patched"
     );
 
-    // Désactivé puis réactivé : la config modifiée revient.
+    // Disabled then enabled again: the edited config comes back.
     stored.edits = deploy::capture_edits(stored.source(), &game, &files).unwrap();
     assert_eq!(stored.edits.len(), 1);
     deploy::undeploy(&game, &deployed, false);
@@ -561,7 +561,7 @@ fn configs_are_copied_and_their_edits_kept() {
     deploy::deploy(stored.source(), &game, &files).unwrap();
     assert_eq!(fs::read_to_string(&config).unwrap(), "enabled = false");
 
-    // Remise à l'original : plus rien à garder.
+    // Back to the original: nothing left to keep.
     fs::write(&config, "enabled = true").unwrap();
     let edits = deploy::capture_edits(stored.source(), &game, &files).unwrap();
     assert!(edits.is_empty());
@@ -618,7 +618,7 @@ fn package(id: &str, version: &str, deps: &[(&str, &str)]) -> Mod {
     }
 }
 
-/// Le vrai arbre de KnightInSilksong, avec les deux loaders concurrents.
+/// The real KnightInSilksong tree, with the two competing loaders.
 fn catalog() -> HashMap<String, Mod> {
     [
         package(
@@ -683,7 +683,7 @@ async fn dependencies_come_first_and_only_one_loader() {
             "silksong_modding-I18N",
             "shownyoung-KnightInSilksong",
         ],
-        "I18N demande l'autre BepInExPack : le loader déjà choisi suffit"
+        "I18N asks for the other BepInExPack: the loader already picked is enough"
     );
 }
 
@@ -710,7 +710,7 @@ async fn already_installed_packages_are_skipped() {
         ]
     );
 
-    // Le mod lui-même déjà à jour : plan vide.
+    // The mod itself already up to date: empty plan.
     let up_to_date = Installed {
         versions: HashMap::from([("silksong_modding-I18N".into(), "1.1.1".into())]),
         loader: Some("BepInEx-BepInExPack_Silksong".into()),

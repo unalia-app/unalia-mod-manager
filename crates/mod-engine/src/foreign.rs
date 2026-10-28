@@ -1,16 +1,15 @@
-//! Fichiers de mods posés **hors d'Unalia** : à la main, par Vortex, par
-//! Mod Organizer… Ils bloquent une installation propre (`winhttp.dll`
-//! d'un ancien BepInEx, par exemple) et l'utilisateur ne sait pas quoi
-//! effacer.
+//! Mod files placed **outside Unalia**: by hand, by Vortex, by Mod
+//! Organizer… They block a clean install (`winhttp.dll` from an old
+//! BepInEx, for example) and the user doesn't know what to delete.
 //!
-//! On ne devine pas : seuls les emplacements connus des loaders du jeu sont
-//! regardés (son « empreinte »), jamais les fichiers du jeu lui-même. Ce qui
-//! s'y trouve sans venir d'Unalia part à la corbeille, d'où l'on peut le
-//! récupérer, et seulement ce que l'utilisateur a coché.
+//! We don't guess: we only look at the known locations of the game's
+//! loaders (its "footprint"), never at the game's own files. Whatever sits
+//! there without coming from Unalia goes to the Recycle Bin, where it can be
+//! recovered, and only what the user ticked.
 //!
-//! Un nom de DLL commun (`winhttp.dll`, `version.dll`…) peut aussi venir du
-//! jeu ou d'un programme dont il a besoin : il n'est `sure` qu'à côté du
-//! loader qui l'utilise, sinon sa case reste décochée.
+//! A common DLL name (`winhttp.dll`, `version.dll`…) can also come from the
+//! game or from a program it needs: it is only `sure` next to the loader
+//! that uses it, else its box stays unticked.
 
 use std::collections::HashSet;
 use std::fs;
@@ -21,23 +20,23 @@ use serde::Serialize;
 
 use crate::loaders::unreal::find_project;
 
-/// Emplacement de l'empreinte trouvé dans le jeu, avec ce qui n'y vient
-/// pas d'Unalia.
+/// Footprint location found in the game, with what doesn't come from
+/// Unalia.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Foreign {
-    /// Chemin relatif au jeu, avec des `/`.
+    /// Path relative to the game, with `/`.
     pub path: String,
     pub dir: bool,
-    /// Fichiers qui ne viennent pas d'Unalia (0 : dossier vide laissé là).
+    /// Files that don't come from Unalia (0: empty folder left behind).
     pub files: usize,
     pub bytes: u64,
-    /// Reste d'un loader à coup sûr : coché d'office dans « Reset mods ».
+    /// Surely a loader leftover: ticked by default in "Reset mods".
     pub sure: bool,
 }
 
-/// Emplacement de l'empreinte. `proof` : chemins dont un seul suffit à
-/// prouver le loader quand le nom ne le prouve pas (vide : le nom suffit).
+/// Footprint location. `proof`: paths, any one of which proves the loader
+/// when the name doesn't (empty: the name is enough).
 struct Spot {
     path: String,
     proof: Vec<String>,
@@ -52,20 +51,20 @@ fn spots(list: &[(&str, &[&str])], prefix: &str) -> Vec<Spot> {
         .collect()
 }
 
-/// Posés par Doorstop (BepInEx) à côté de son `winhttp.dll`.
+/// Placed by Doorstop (BepInEx) next to its `winhttp.dll`.
 const DOORSTOP: &[&str] = &["doorstop_config.ini", ".doorstop_version"];
 const CET: &[&str] = &["bin/x64/plugins/cyber_engine_tweaks"];
 const UE4SS: &[&str] = &["Binaries/Win64/ue4ss", "Binaries/Win64/UE4SS.dll"];
 
-/// Dossiers de MelonLoader aux noms trop communs pour être retirés sans
-/// preuve : seulement vides, ou à côté de `MelonLoader/`.
+/// MelonLoader folders with names too common to remove without proof: only
+/// when empty, or next to `MelonLoader/`.
 const MELON_DIRS: [&str; 4] = ["Mods", "Plugins", "UserData", "UserLibs"];
 
-/// Emplacements où les loaders de ce jeu (`loader` du profil) posent leurs
-/// fichiers et ceux de leurs mods, relatifs au jeu.
+/// Locations where this game's loaders (the profile's `loader`) put their
+/// files and their mods' files, relative to the game.
 fn footprint(loader: &str, game_dir: &Path) -> Vec<Spot> {
     let mut paths: Vec<Spot> = match loader {
-        // BepInEx et MelonLoader : un reste de l'un bloque aussi l'autre.
+        // BepInEx and MelonLoader: a leftover of one also blocks the other.
         "bepinex" | "bepisloader" | "melonloader" | "recursive-melonloader" => spots(
             &[
                 ("BepInEx", &[]),
@@ -119,8 +118,8 @@ fn footprint(loader: &str, game_dir: &Path) -> Vec<Spot> {
         },
         _ => Vec::new(),
     };
-    // Traces de Vortex à la racine : son manifeste de déploiement et sa
-    // marque de dossier géré.
+    // Vortex traces at the root: its deployment manifest and its managed
+    // folder marker.
     if let Ok(entries) = fs::read_dir(game_dir) {
         for entry in entries.flatten() {
             let name = entry.file_name().to_string_lossy().into_owned();
@@ -135,8 +134,8 @@ fn footprint(loader: &str, game_dir: &Path) -> Vec<Spot> {
     paths
 }
 
-/// Ce que l'empreinte contient sans venir d'Unalia. `ours` : fichiers posés
-/// par Unalia ; `our_dirs` : dossiers qu'il a créés (chemins relatifs, `/`).
+/// What the footprint holds that doesn't come from Unalia. `ours`: files
+/// placed by Unalia; `our_dirs`: folders it created (relative paths, `/`).
 pub fn scan(
     loader: &str,
     game_dir: &Path,
@@ -150,7 +149,7 @@ pub fn scan(
         .filter_map(|Spot { path, proof }| {
             let full = game_dir.join(&path);
             let meta = fs::symlink_metadata(&full).ok()?;
-            // Une preuve posée par Unalia ne prouve pas l'autre outil.
+            // A proof placed by Unalia doesn't prove the other tool.
             let sure = proof.is_empty()
                 || proof.iter().any(|p| {
                     let lower = p.to_ascii_lowercase();
@@ -175,7 +174,7 @@ pub fn scan(
                     bytes += size;
                 }
             }
-            // Dossier vide qu'Unalia n'a pas créé : reste d'un autre outil.
+            // Empty folder that Unalia didn't create: another tool's leftover.
             let leftover = !any && !our_dirs.contains(&path.to_ascii_lowercase());
             (files > 0 || leftover).then_some(Foreign {
                 path,
@@ -188,9 +187,9 @@ pub fn scan(
         .collect()
 }
 
-/// Retire ces emplacements du jeu avec `discard` (la corbeille,
-/// [`to_recycle_bin`], hors tests). Renvoie ceux qui n'ont pas pu partir
-/// (fichier ouvert par le jeu, droits…).
+/// Removes these locations from the game with `discard` (the Recycle Bin,
+/// [`to_recycle_bin`], outside tests). Returns the ones that couldn't go
+/// (file held open by the game, permissions…).
 pub fn remove(game_dir: &Path, found: &[Foreign], discard: impl Fn(&Path) -> io::Result<()>) -> Vec<String> {
     found
         .iter()
@@ -202,7 +201,7 @@ pub fn remove(game_dir: &Path, found: &[Foreign], discard: impl Fn(&Path) -> io:
         .collect()
 }
 
-/// Corbeille du système : l'utilisateur peut y récupérer un fichier.
+/// System Recycle Bin: the user can recover a file from it.
 pub fn to_recycle_bin(path: &Path) -> io::Result<()> {
     trash::delete(path).map_err(io::Error::other)
 }
@@ -211,13 +210,13 @@ fn is_empty_dir(dir: &Path) -> bool {
     fs::read_dir(dir).is_ok_and(|mut entries| entries.next().is_none())
 }
 
-/// Fichiers sous `dir` (récursivement), chemin relatif au jeu et taille.
+/// Files under `dir` (recursively), path relative to the game and size.
 fn files_under(dir: &Path, prefix: &str) -> Vec<(String, u64)> {
     fn walk(dir: &Path, prefix: &str, out: &mut Vec<(String, u64)>) -> io::Result<()> {
         for entry in fs::read_dir(dir)?.flatten() {
             let name = format!("{prefix}/{}", entry.file_name().to_string_lossy());
             let meta = entry.metadata()?;
-            // Une jonction se compte comme un fichier : on ne la suit pas.
+            // A junction counts as a file: we don't follow it.
             if meta.is_dir() && !meta.is_symlink() {
                 walk(&entry.path(), &name, out)?;
             } else {

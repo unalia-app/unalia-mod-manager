@@ -1,4 +1,4 @@
-//! Tests de la recherche d'images dans le cache de `fixtures/steam/root`.
+//! Tests of the image lookup in the cache of `fixtures/steam/root`.
 
 use std::path::{Path, PathBuf};
 
@@ -69,18 +69,18 @@ fn parses_kinds_from_urls() {
 fn accent_comes_from_the_cover_and_greys_give_none() {
     let root = steam_root();
 
-    // Jaquette sombre à halo cramoisi : teinte rouge.
-    let silksong = game_accent(&root, 1030300).expect("accent attendu");
+    // Dark cover with a crimson glow: red hue.
+    let silksong = game_accent(&root, 1030300).expect("accent expected");
     assert!(
         silksong.h < 40.0 || silksong.h > 340.0,
         "teinte rouge attendue : {silksong:?}"
     );
 
-    // Jaquette sarcelle trouvée dans un sous-dossier.
-    let unreal = game_accent(&root, 2000001).expect("accent attendu");
+    // Teal cover found in a subfolder.
+    let unreal = game_accent(&root, 2000001).expect("accent expected");
     assert!((160.0..220.0).contains(&unreal.h), "{unreal:?}");
 
-    // Capsule grise : pas d'accent inventé.
+    // Gray capsule: no invented accent.
     assert_eq!(game_accent(&root, 228980), None);
     // Aucune image.
     assert_eq!(game_accent(&root, 2000002), None);
@@ -104,7 +104,7 @@ fn trims_the_transparent_margins_of_a_logo() {
     assert!(trim_logo(&source, &target).unwrap());
     assert_eq!(image::open(&target).unwrap().into_rgba8().dimensions(), (10, 4));
 
-    // Déjà sans marge, ou entièrement vide : rien à écrire.
+    // Already without margins, or fully empty: nothing to write.
     let full = RgbaImage::from_pixel(8, 8, Rgba([0, 0, 0, 255]));
     full.save(&source).unwrap();
     assert!(!trim_logo(&source, &target).unwrap());

@@ -1,20 +1,18 @@
-//! Brique **deploy** : poser les fichiers d'un mod dans le dossier du jeu.
+//! **deploy** block: put a mod's files into the game folder.
 //!
-//! Les mods vivent dans le stockage de Modalia ; le jeu n'en voit que des
-//! liens physiques (hard links) : instantané, sans doublon sur le disque,
-//! et sans droits administrateur sous Windows (contrairement aux liens
-//! symboliques). Si le stockage et le jeu sont sur deux disques différents,
-//! un lien physique est impossible : on copie. Les fichiers de config sont
-//! toujours copiés (`store::is_editable`) ; ce que le joueur y change est
-//! gardé (`capture_edits`).
+//! Mods live in Modalia's storage; the game only sees hard links to them:
+//! instant, no duplicate on disk, and no admin rights on Windows (unlike
+//! symbolic links). If the storage and the game are on two different
+//! drives, a hard link is impossible: we copy. Config files are always
+//! copied (`store::is_editable`); what the player changes in them is kept
+//! (`capture_edits`).
 //!
-//! Garanties (SPEC §2.2) :
-//! - aucun fichier existant du jeu n'est jamais écrasé ni modifié : un
-//!   conflit arrête tout avant la première écriture ;
-//! - tout réussit ou rien ne reste : en cas d'échec, ce qui a été posé est
-//!   retiré ;
-//! - chaque fichier posé et chaque dossier créé est enregistré, pour que le
-//!   retrait rende le dossier exactement dans son état d'origine.
+//! Guarantees:
+//! - no existing game file is ever overwritten or modified: a conflict stops
+//!   everything before the first write;
+//! - all or nothing: on failure, whatever was placed is removed;
+//! - every placed file and every created folder is recorded, so that
+//!   removal brings the folder back exactly to its original state.
 
 use std::collections::{BTreeMap, HashSet};
 use std::fs;
@@ -28,8 +26,8 @@ use crate::download::sha256_file;
 use crate::loaders::Placement;
 use crate::store::{Manifest, Store, is_editable};
 
-/// D'où viennent les fichiers d'un mod : son paquet dans le stockage, et
-/// les configs que le joueur a modifiées (destination → contenu rangé).
+/// Where a mod's files come from: its package in the storage, and the
+/// configs the player edited (destination to stored content).
 #[derive(Debug, Clone, Copy)]
 pub struct Source<'a> {
     pub store: &'a Store,
@@ -38,8 +36,8 @@ pub struct Source<'a> {
 }
 
 impl Source<'_> {
-    /// Contenu à poser en `target` : la config modifiée, sinon le fichier
-    /// `source` du paquet.
+    /// Content to place at `target`: the edited config, else the package
+    /// file `source`.
     fn hash(&self, source: &str, target: &str) -> Option<(&str, u64)> {
         let entry = self.manifest.files.get(source)?;
         let hash = self.edits.get(target).unwrap_or(&entry.hash);
@@ -47,13 +45,13 @@ impl Source<'_> {
     }
 }
 
-/// Ce qu'un déploiement a posé dans le jeu (chemins relatifs au jeu).
+/// What a deployment placed in the game (paths relative to the game).
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Deployment {
     pub files: Vec<String>,
-    /// Dossiers qui n'existaient pas avant, du plus haut au plus profond.
+    /// Folders that didn't exist before, from the highest to the deepest.
     pub created_dirs: Vec<String>,
-    /// Fichiers copiés faute de pouvoir les lier (disques différents).
+    /// Files copied because they couldn't be linked (different drives).
     pub copied: usize,
 }
 
@@ -73,13 +71,13 @@ pub enum DeployError {
     },
 }
 
-/// Pose les fichiers de `from` dans `game_dir` selon `placements`.
+/// Places the files of `from` into `game_dir` according to `placements`.
 pub fn deploy(
     from: Source<'_>,
     game_dir: &Path,
     placements: &[Placement],
 ) -> Result<Deployment, DeployError> {
-    // 1. Tout vérifier avant d'écrire quoi que ce soit.
+    // 1. Check everything before writing anything.
     let mut targets = HashSet::new();
     let mut plan = Vec::with_capacity(placements.len());
     for p in placements {
@@ -93,15 +91,15 @@ pub fn deploy(
             return Err(DeployError::MissingSource(p.source.clone()));
         }
         let copy = is_editable(&p.target, size);
-        // Deux fichiers du paquet vers la même destination : on refuse
-        // plutôt que d'en perdre un.
+        // Two package files to the same destination: refuse rather than
+        // lose one.
         if !targets.insert(target.clone()) || exists(&game_dir.join(&target)) {
             return Err(DeployError::Conflict(p.target.clone()));
         }
         plan.push((source, target, &p.target, copy));
     }
 
-    // 2. Écrire, en retirant tout au premier échec.
+    // 2. Write, removing everything at the first failure.
     let mut done = Deployment::default();
     for (source, target, name, copy) in plan {
         if let Err(error) = place(game_dir, &source, &target, copy, &mut done) {
@@ -142,10 +140,10 @@ fn place(
     Ok(())
 }
 
-/// Configs du mod que le joueur a modifiées dans le jeu, à garder pour la
-/// prochaine fois qu'elles sont posées : à appeler avant de les retirer.
-/// Une config revenue à l'original n'est plus une modification ; une
-/// config absente garde sa dernière version connue.
+/// The mod's configs that the player edited in the game, to keep for the
+/// next time they are placed: call this before removing them. A config
+/// back to the original is no longer an edit; a missing config keeps its
+/// last known version.
 pub fn capture_edits(
     from: Source<'_>,
     game_dir: &Path,
@@ -176,14 +174,13 @@ pub fn capture_edits(
     Ok(edits)
 }
 
-/// Retire ce que `deployment` a posé. Les dossiers créés sont retirés s'ils
-/// sont vides ; avec `purge_dirs`, retirés avec leur contenu (ex. les
-/// journaux que BepInEx écrit dans ses propres dossiers) : ils n'existaient
-/// pas avant Modalia, rien d'original ne peut s'y trouver.
+/// Removes what `deployment` placed. Created folders are removed if they
+/// are empty; with `purge_dirs`, removed with their content (e.g. the logs
+/// BepInEx writes into its own folders): they didn't exist before Modalia,
+/// so nothing original can be in them.
 ///
-/// Ne s'arrête pas sur une erreur : retirer le plus possible vaut mieux
-/// qu'un retrait à moitié fait. Renvoie les chemins qui n'ont pas pu être
-/// retirés.
+/// Doesn't stop on an error: removing as much as possible beats a half-done
+/// removal. Returns the paths that couldn't be removed.
 pub fn undeploy(game_dir: &Path, deployment: &Deployment, purge_dirs: bool) -> Vec<String> {
     let mut leftovers = Vec::new();
     for file in &deployment.files {
@@ -203,7 +200,7 @@ pub fn undeploy(game_dir: &Path, deployment: &Deployment, purge_dirs: bool) -> V
         match result {
             Ok(()) => {}
             Err(e) if e.kind() == io::ErrorKind::NotFound => {}
-            // Dossier partagé avec un autre mod encore installé : il reste.
+            // Folder shared with another mod still installed: it stays.
             Err(_) if !purge_dirs => {}
             Err(_) => leftovers.push(dir.clone()),
         }
@@ -212,7 +209,7 @@ pub fn undeploy(game_dir: &Path, deployment: &Deployment, purge_dirs: bool) -> V
 }
 
 fn exists(path: &Path) -> bool {
-    // symlink_metadata : un lien cassé compte aussi comme occupé.
+    // symlink_metadata: a broken link also counts as taken.
     fs::symlink_metadata(path).is_ok()
 }
 

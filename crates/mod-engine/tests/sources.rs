@@ -1,5 +1,5 @@
-//! Tests de la source Thunderstore contre un faux serveur qui rejoue des
-//! réponses réelles enregistrées dans `fixtures/thunderstore`.
+//! Tests of the Thunderstore source against a fake server that replays
+//! real answers recorded in `fixtures/thunderstore`.
 
 use std::path::Path;
 
@@ -28,7 +28,7 @@ async fn search_maps_the_listing_to_neutral_summaries() {
     let mock = server
         .mock("GET", "/api/cyberstorm/listing/hollow-knight-silksong/")
         .match_query(Matcher::AllOf(vec![
-            // « Popular » par défaut : les mieux notés.
+            // "Popular" by default: the best rated.
             Matcher::UrlEncoded("ordering".into(), "top-rated".into()),
             Matcher::UrlEncoded("page".into(), "1".into()),
         ]))
@@ -85,7 +85,7 @@ async fn search_excludes_libraries_by_default() {
         .create_async()
         .await;
 
-    // Deux recherches : les filtres ne sont demandés qu'une fois.
+    // Two searches: the filters are only requested once.
     for _ in 0..2 {
         ts.search("hollow-knight-silksong", &SearchQuery::default())
             .await
@@ -98,7 +98,7 @@ async fn search_excludes_libraries_by_default() {
 #[tokio::test]
 async fn libraries_can_be_included_and_filters_are_optional() {
     let (mut server, ts) = source().await;
-    // Pas de route de filtres : la recherche marche quand même, sans filtre.
+    // No filter route: the search works anyway, without a filter.
     let plain = server
         .mock("GET", "/api/cyberstorm/listing/hollow-knight-silksong/")
         .match_query(Matcher::Any)
@@ -166,7 +166,7 @@ async fn get_returns_the_latest_version_and_its_dependencies() {
     assert_eq!(m.name, "KnightInSilksong");
     assert_eq!(m.author, "shownyoung");
     assert_eq!(m.categories, ["Mods"]);
-    assert_eq!(m.downloads, None, "total_downloads vaut -1 dans la réponse");
+    assert_eq!(m.downloads, None, "total_downloads is -1 in the response");
     assert!(
         m.source_url
             .ends_with("/c/hollow-knight-silksong/p/shownyoung/KnightInSilksong/")
@@ -224,8 +224,8 @@ async fn description_returns_the_raw_markdown() {
         .await
         .unwrap();
     assert!(markdown.contains("Skip the Team Cherry"));
-    // Le Markdown de Thunderstore contient du HTML brut : c'est à l'interface
-    // de le nettoyer, le moteur le transmet tel quel.
+    // Thunderstore's Markdown contains raw HTML: the UI has to sanitize
+    // it, the engine passes it on as is.
     assert!(markdown.contains("<h1>"));
 }
 
@@ -350,7 +350,7 @@ async fn a_missing_team_never_breaks_the_mod_page() {
         .with_body(fixture("package-knightinsilksong.json"))
         .create_async()
         .await;
-    // Pas de route d'équipe : 501 du faux serveur.
+    // No team route: 501 from the fake server.
     let m = ts
         .get("hollow-knight-silksong", "shownyoung-KnightInSilksong")
         .await

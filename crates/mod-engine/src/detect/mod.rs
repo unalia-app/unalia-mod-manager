@@ -1,11 +1,11 @@
-//! Brique **detect** : lister les jeux Steam installés et leur moteur.
+//! **detect** block: list the installed Steam games and their engine.
 //!
-//! On lit uniquement les fichiers de Steam (`libraryfolders.vdf`, puis les
-//! `appmanifest_*.acf` de chaque bibliothèque) : aucun parcours disque lourd.
+//! We only read Steam's own files (`libraryfolders.vdf`, then the
+//! `appmanifest_*.acf` of each library): no heavy disk walk.
 //!
-//! Un problème local (bibliothèque débranchée, manifeste corrompu, jeu
-//! désinstallé) n'interrompt jamais le scan : l'élément concerné est ignoré.
-//! Seule l'absence du dossier `steamapps` à la racine est une erreur.
+//! A local problem (unplugged library, corrupt manifest, uninstalled game)
+//! never stops the scan: the item is skipped. Only a missing `steamapps`
+//! folder at the root is an error.
 
 mod engine;
 pub mod shortcuts;
@@ -24,13 +24,13 @@ pub use engine::{Engine, detect_anti_cheat, detect_engine};
 pub struct SteamGame {
     pub app_id: u32,
     pub name: String,
-    /// Dossier du jeu : `<library>/steamapps/common/<installdir>`.
+    /// Game folder: `<library>/steamapps/common/<installdir>`.
     pub install_dir: PathBuf,
-    /// Bibliothèque Steam qui contient le jeu.
+    /// Steam library that holds the game.
     pub library: PathBuf,
     pub engine: Engine,
-    /// Dernière mise à jour du jeu par Steam (secondes Unix), si connue :
-    /// des mods installés avant peuvent ne plus fonctionner.
+    /// Last time Steam updated the game (Unix seconds), if known: mods
+    /// installed before may no longer work.
     pub last_updated: Option<i64>,
 }
 
@@ -40,7 +40,7 @@ pub enum DetectError {
     SteamNotFound(PathBuf),
 }
 
-/// Cherche le dossier d'installation de Steam aux emplacements habituels.
+/// Looks for Steam's install folder in the usual places.
 pub fn find_steam_root() -> Option<PathBuf> {
     steam_root_candidates()
         .into_iter()
@@ -101,8 +101,8 @@ fn home() -> Option<PathBuf> {
     std::env::var_os("HOME").map(PathBuf::from)
 }
 
-/// Liste les jeux installés de toutes les bibliothèques connues de Steam,
-/// triés par nom.
+/// Lists the installed games of every library Steam knows, sorted by
+/// name.
 pub fn scan_steam(steam_root: &Path) -> Result<Vec<SteamGame>, DetectError> {
     let steamapps = steam_root.join("steamapps");
     if !steamapps.is_dir() {
@@ -122,8 +122,8 @@ pub fn scan_steam(steam_root: &Path) -> Result<Vec<SteamGame>, DetectError> {
     Ok(games)
 }
 
-/// Bibliothèques déclarées dans `libraryfolders.vdf`, racine de Steam en
-/// tête, sans doublon ni dossier absent.
+/// Libraries declared in `libraryfolders.vdf`, Steam's root first, without
+/// duplicates or missing folders.
 pub fn library_folders(steam_root: &Path) -> Vec<PathBuf> {
     let mut candidates = vec![steam_root.to_path_buf()];
     let vdf_path = steam_root.join("steamapps").join("libraryfolders.vdf");
@@ -133,8 +133,8 @@ pub fn library_folders(steam_root: &Path) -> Vec<PathBuf> {
         && let Some(folders) = doc.obj("libraryfolders")
     {
         for (key, value) in folders.iter() {
-            // Format actuel : "0" { "path" "..." }. Ancien format : "1" "D:\\...".
-            // Les autres clés (ex. "TimeNextStatsReport") sont ignorées.
+            // Current format: "0" { "path" "..." }. Old format: "1" "D:\\...".
+            // Other keys (e.g. "TimeNextStatsReport") are ignored.
             if key.parse::<u32>().is_err() {
                 continue;
             }
@@ -186,7 +186,7 @@ fn read_app_manifest(path: &Path, library: &Path) -> Option<SteamGame> {
         .join("steamapps")
         .join("common")
         .join(state.str("installdir").filter(|d| is_plain_dir_name(d))?);
-    // Manifeste présent mais jeu supprimé ou jamais téléchargé.
+    // Manifest present but the game was deleted or never downloaded.
     if !install_dir.is_dir() {
         return None;
     }
@@ -204,8 +204,8 @@ fn read_app_manifest(path: &Path, library: &Path) -> Option<SteamGame> {
     })
 }
 
-/// `installdir` doit désigner un dossier direct de `common/` : on refuse
-/// tout ce qui pourrait en sortir (`..`, séparateurs, chemin absolu).
+/// `installdir` must name a direct child of `common/`: we refuse anything
+/// that could escape it (`..`, separators, absolute path).
 fn is_plain_dir_name(name: &str) -> bool {
     !name.is_empty() && name != "." && name != ".." && !name.contains(['/', '\\', ':'])
 }

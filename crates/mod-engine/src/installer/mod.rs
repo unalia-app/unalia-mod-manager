@@ -1,9 +1,9 @@
-//! Installation en un clic : enchaîne resolver → téléchargement →
-//! extraction → placement → déploiement → état, pour tout le plan.
+//! One-click install: chains resolver, download, extraction, placement,
+//! deployment and state, for the whole plan.
 //!
-//! Le plan entier est transactionnel (SPEC §2.2) : si une étape échoue, tout
-//! ce qui a été posé pendant cette installation est retiré, les versions
-//! remplacées sont remises en place, et rien n'est enregistré.
+//! The whole plan is transactional: if a step fails, everything placed
+//! during this install is removed, the replaced versions are put back, and
+//! nothing is recorded.
 
 mod nexus;
 
@@ -34,11 +34,11 @@ use crate::store::{Freed, Manifest, Store};
 /// Dossiers de Modalia.
 #[derive(Debug, Clone)]
 pub struct Paths {
-    /// Stockage des mods (`store::Store`) : chaque fichier une seule fois,
-    /// et un paquet par version extraite.
+    /// Mod storage (`store::Store`): each file only once, and one package
+    /// per extracted version.
     pub store: PathBuf,
-    /// Archives téléchargées, retirées une fois extraites (débuts de
-    /// téléchargement compris, pour reprendre).
+    /// Downloaded archives, removed once extracted (partial downloads
+    /// included, to resume).
     pub downloads: PathBuf,
 }
 
@@ -48,13 +48,13 @@ impl Paths {
     }
 }
 
-/// Le jeu dans lequel on installe.
+/// The game we install into.
 #[derive(Debug, Clone)]
 pub struct Target<'a> {
-    /// Clé du jeu dans l'état, ex. `steam:1030300`.
+    /// Game key in the state, e.g. `steam:1030300`.
     pub game: &'a str,
     pub game_dir: &'a Path,
-    /// Identifiant du jeu pour la source (communauté Thunderstore).
+    /// Game id for the source (Thunderstore community).
     pub community: &'a str,
 }
 
@@ -69,7 +69,7 @@ pub enum Progress {
         received: u64,
         size: Option<u64>,
     },
-    /// Extraction : `done` / `size` en octets décompressés.
+    /// Extraction: `done` / `size` in uncompressed bytes.
     Extracting {
         index: usize,
         total: usize,
@@ -110,7 +110,7 @@ pub enum InstallError {
     Conflict { path: String, other: String },
     #[error("Unalia can't tell where the files of {0} go")]
     NothingToInstall(String),
-    /// Installateur FOMOD : des options à choisir, pas encore proposées.
+    /// FOMOD installer: options to pick, not offered yet.
     #[error("{0} comes with an installer that asks you to pick options, which Unalia doesn't support yet")]
     Fomod(String),
     #[error("{0} has no file to install")]
@@ -135,22 +135,22 @@ pub enum InstallError {
     NoPreviousVersion,
     #[error("couldn't access Unalia's storage")]
     Io(#[from] std::io::Error),
-    /// Mod Nexus à plusieurs fichiers (variantes, options) : à l'utilisateur
-    /// de choisir, le fichier conseillé en tête.
+    /// Nexus mod with several files (variants, options): the user picks,
+    /// the advised file first.
     #[error("choose which files of this mod to install")]
     ChooseFiles(Vec<crate::sources::nexus::ModFile>),
-    /// Compte gratuit : ce fichier se télécharge depuis le site de Nexus.
+    /// Free account: this file downloads from the Nexus website.
     #[error("this file downloads from the Nexus Mods website")]
     NexusWebsite { file_id: u32 },
     #[error("the install was cancelled")]
     Cancelled,
 }
 
-/// Un paquet prêt à télécharger, quelle que soit sa source.
+/// A package ready to download, whatever its source.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Package {
-    /// Connexions simultanées permises par la source (Nexus gratuit : une
-    /// seule, comme Vortex). `None` : la valeur par défaut.
+    /// Simultaneous connections allowed by the source (free Nexus: a single
+    /// one, like Vortex). `None`: the default value.
     pub connections: Option<usize>,
     pub id: String,
     pub name: String,
@@ -159,8 +159,8 @@ pub struct Package {
     pub icon_url: Option<String>,
     pub download_url: String,
     pub sha256: Option<String>,
-    /// Fichier précis d'un mod Nexus : un mod en a plusieurs (variantes)
-    /// de même version, chacun a sa place dans le cache.
+    /// Precise file of a Nexus mod: a mod has several (variants) with the
+    /// same version, each one has its own place in the cache.
     pub file_id: Option<u32>,
 }
 
@@ -188,10 +188,10 @@ impl Package {
     }
 }
 
-/// Paquet téléchargé et rangé, avec la destination de ses fichiers.
+/// Downloaded and stored package, with the destination of its files.
 struct Fetched {
     package: Package,
-    /// Clé du paquet dans le stockage.
+    /// Package key in the storage.
     key: String,
     manifest: Manifest,
     placements: Vec<Placement>,
@@ -203,14 +203,14 @@ pub struct Installer<'a, S> {
     pub catalog: Option<&'a GameCatalog>,
     pub client: &'a HttpClient,
     pub paths: &'a Paths,
-    /// Annulation demandée par l'utilisateur : respectée pendant les
-    /// téléchargements et extractions, jamais au milieu d'un déploiement.
+    /// Cancel requested by the user: honored during downloads and
+    /// extractions, never in the middle of a deployment.
     pub cancel: Option<&'a Cancel>,
 }
 
 impl<S: ModSource> Installer<'_, S> {
-    /// Installe `mod_id` et ses dépendances. Renvoie les mods du jeu après
-    /// l'installation.
+    /// Installs `mod_id` and its dependencies. Returns the game's mods after
+    /// the install.
     pub async fn install(
         &self,
         state: &mut State,
@@ -255,9 +255,9 @@ impl<S: ModSource> Installer<'_, S> {
             .into_iter()
             .map(|d| {
                 let mut record = d.record;
-                // Un mod déjà là garde son statut (une dépendance mise à jour
-                // reste une dépendance) ; un nouveau est volontaire s'il est
-                // celui que l'utilisateur a demandé.
+                // A mod already there keeps its status (an updated
+                // dependency stays a dependency); a new one is explicit if
+                // it is the one the user asked for.
                 record.explicit = match &d.previous {
                     Some(previous) => previous.explicit,
                     None => record.id == mod_id,
@@ -270,10 +270,10 @@ impl<S: ModSource> Installer<'_, S> {
         Ok(state.list(target.game)?)
     }
 
-    /// Prépare l'installation de `mod_id` sans toucher au jeu ni à l'état :
-    /// tout le plan est téléchargé et extrait. Sert pendant une partie : à la
-    /// fermeture du jeu, l'installation n'a plus qu'à poser les liens.
-    /// Renvoie le nombre de paquets préparés.
+    /// Prepares the install of `mod_id` without touching the game or the
+    /// state: the whole plan is downloaded and extracted. Used during a
+    /// session: when the game closes, the install only has to place the
+    /// links. Returns the number of prepared packages.
     pub async fn prefetch(
         &self,
         existing: &[InstalledMod],
@@ -341,12 +341,12 @@ impl<S: ModSource> Installer<'_, S> {
             placements,
             loader_root,
         };
-        // Dernière occasion d'annuler : ensuite, le jeu est modifié.
+        // Last chance to cancel: after this, the game is modified.
         self.check_cancel()?;
         deploy_package(&self.paths.store(), target, fetched, previous, existing)
     }
 
-    /// Pour un paquet déjà en cache, aucun accès réseau.
+    /// For a package already cached, no network access.
     async fn fetch_step(
         &self,
         target: &Target<'_>,
@@ -359,12 +359,12 @@ impl<S: ModSource> Installer<'_, S> {
             .await
     }
 
-    /// Clé d'une version dans le stockage.
+    /// Key of a version in the storage.
     fn package_key(&self, game: &str, package: &Package) -> String {
         package_key(game, &package.id, &package.version, package.file_id)
     }
 
-    /// Cette version est-elle déjà rangée, ou son archive téléchargée ?
+    /// Is this version already stored, or its archive downloaded?
     fn cached(&self, game: &str, id: &str, version: &str, file_id: Option<u32>) -> bool {
         self.paths
             .store()
@@ -372,9 +372,9 @@ impl<S: ModSource> Installer<'_, S> {
             || self.archive_path(id, version, file_id).is_file()
     }
 
-    /// Télécharge un paquet et range ses fichiers dans le stockage, sans
-    /// toucher au jeu. Renvoie sa clé et son contenu. Déjà fait pour cette
-    /// version : instantané.
+    /// Downloads a package and stores its files, without touching the game.
+    /// Returns its key and its content. Already done for this version:
+    /// instant.
     async fn fetch_package(
         &self,
         target: &Target<'_>,
@@ -392,8 +392,8 @@ impl<S: ModSource> Installer<'_, S> {
             return Ok((key, manifest));
         }
 
-        // Télécharger (ou reprendre l'archive déjà en cache). L'extension
-        // ne compte pas : le format se lit dans le fichier.
+        // Download (or reuse the archive already cached). The extension
+        // doesn't matter: the format is read from the file.
         let archive = self.archive_path(&package.id, &package.version, package.file_id);
         let sha256 = if archive.is_file() {
             download::sha256_file(&archive)?
@@ -422,8 +422,8 @@ impl<S: ModSource> Installer<'_, S> {
             )
             .await
             .map_err(|source| match source {
-                // Annuler, c'est renoncer : le début du fichier part aussi.
-                // (Quitter l'appli, elle, garde de quoi reprendre.)
+                // Cancel means give up: the partial file goes too.
+                // (Quitting the app keeps enough to resume.)
                 DownloadError::Cancelled => {
                     discard_partial(&archive);
                     InstallError::Cancelled
@@ -442,9 +442,9 @@ impl<S: ModSource> Installer<'_, S> {
             name: name.clone(),
         });
 
-        // Extraire à côté du stockage, puis y ranger chaque fichier. Sur un
-        // fil à part : extraire et hacher 10 Go prend des minutes, le fil
-        // asynchrone doit rester libre. La progression revient par canal.
+        // Extract next to the storage, then store each file. On a separate
+        // thread: extracting and hashing 10 GB takes minutes, the async
+        // thread must stay free. Progress comes back through a channel.
         let scratch = store.scratch()?;
         let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
         let (from, to) = (archive.clone(), scratch.join("package"));
@@ -458,15 +458,15 @@ impl<S: ModSource> Installer<'_, S> {
                 Limits::default(),
                 cancel.as_ref(),
                 |done, size| {
-                    // Un message par Mo suffit à l'affichage.
+                    // One message per MB is enough for the display.
                     if done - last >= 1024 * 1024 || done == size {
                         last = done;
                         let _ = tx.send((done, size));
                     }
                 },
             )?;
-            // Erreur de rangement (disque plein…) : l'archive, elle, est
-            // bonne et reste en cache.
+            // Storage error (disk full…): the archive itself is fine and
+            // stays cached.
             Ok::<_, ArchiveError>(job_store.ingest(&job_key, &to, &job_sha))
         });
         while let Some((done, size)) = rx.recv().await {
@@ -483,7 +483,7 @@ impl<S: ModSource> Installer<'_, S> {
             .map_err(|e| InstallError::Io(std::io::Error::other(e)))?;
         match ingested {
             Ok(Ok(manifest)) => {
-                // Tout est rangé : l'archive ferait doublon.
+                // Everything is stored: the archive would be a duplicate.
                 let _ = fs::remove_dir_all(&scratch);
                 let _ = fs::remove_file(&archive);
                 Ok((key, manifest))
@@ -497,8 +497,8 @@ impl<S: ModSource> Installer<'_, S> {
                 Err(InstallError::Cancelled)
             }
             Err(source) => {
-                // Archive illisible : on la retire du cache pour qu'un nouvel
-                // essai la télécharge à nouveau.
+                // Unreadable archive: remove it from the cache so that a new
+                // try downloads it again.
                 let _ = fs::remove_dir_all(&scratch);
                 let _ = fs::remove_file(&archive);
                 Err(InstallError::Archive { name, source })
@@ -513,7 +513,7 @@ impl<S: ModSource> Installer<'_, S> {
         }
     }
 
-    /// Archive d'une version dans le cache des téléchargements.
+    /// Archive of a version in the download cache.
     fn archive_path(&self, id: &str, version: &str, file_id: Option<u32>) -> PathBuf {
         let file = file_id.map(|f| format!("-f{f}")).unwrap_or_default();
         self.paths
@@ -521,9 +521,8 @@ impl<S: ModSource> Installer<'_, S> {
             .join(format!("{id}-{}{file}.zip", path_segment(version)))
     }
 
-    /// Adaptateur du jeu : ses règles de placement si le catalogue les
-    /// connaît, sinon BepInEx (catalogue indisponible, premier lancement hors
-    /// ligne).
+    /// The game's adapter: its placement rules if the catalog knows them,
+    /// else BepInEx (catalog unavailable, first launch offline).
     fn loader_for(&self, community: &str) -> Box<dyn Loader + '_> {
         match self
             .catalog
@@ -545,10 +544,9 @@ impl<S: ModSource> Installer<'_, S> {
     }
 }
 
-/// Pose un paquet rangé dans le jeu et renvoie son enregistrement. Une
-/// mise à jour retire d'abord l'ancienne version, dont les configs
-/// modifiées sont gardées dans `previous` ; en cas d'échec, elle est
-/// remise.
+/// Places a stored package into the game and returns its record. An update
+/// first removes the old version, whose edited configs are kept in
+/// `previous`; on failure, it is put back.
 fn deploy_package(
     store: &Store,
     target: &Target<'_>,
@@ -569,7 +567,7 @@ fn deploy_package(
     if let Some(old) = previous.as_deref_mut() {
         take_down(store, target.game_dir, old, false);
     }
-    // Même version réinstallée : les configs modifiées restent.
+    // Same version reinstalled: the edited configs stay.
     let edits = previous
         .as_deref()
         .filter(|old| old.package == key)
@@ -614,7 +612,7 @@ fn deploy_package(
     })
 }
 
-/// Contenu d'un mod enregistré, depuis le stockage.
+/// Content of a recorded mod, from the storage.
 fn manifest_of(store: &Store, m: &InstalledMod) -> Result<Manifest, InstallError> {
     store.manifest(&m.package).map_err(|_| InstallError::Deploy {
         name: m.name.clone(),
@@ -622,7 +620,7 @@ fn manifest_of(store: &Store, m: &InstalledMod) -> Result<Manifest, InstallError
     })
 }
 
-/// Pose un mod enregistré, avec ses configs modifiées.
+/// Places a recorded mod, with its edited configs.
 fn put_up(store: &Store, game_dir: &Path, m: &InstalledMod) -> Result<Deployment, InstallError> {
     let manifest = manifest_of(store, m)?;
     let from = Source {
@@ -638,8 +636,8 @@ fn put_up(store: &Store, game_dir: &Path, m: &InstalledMod) -> Result<Deployment
     })
 }
 
-/// Retire un mod du jeu, en gardant d'abord dans `m.edits` les configs que
-/// le joueur y a modifiées. Renvoie ce qui n'a pas pu être retiré.
+/// Removes a mod from the game, first keeping in `m.edits` the configs the
+/// player edited there. Returns what couldn't be removed.
 fn take_down(store: &Store, game_dir: &Path, m: &mut InstalledMod, purge_dirs: bool) -> Vec<String> {
     if let Ok(manifest) = store.manifest(&m.package) {
         let from = Source {
@@ -654,7 +652,7 @@ fn take_down(store: &Store, game_dir: &Path, m: &mut InstalledMod, purge_dirs: b
     deploy::undeploy(game_dir, &m.deployment, purge_dirs)
 }
 
-/// Les fichiers d'un paquet, dans l'ordre.
+/// The files of a package, in order.
 fn files_of(manifest: &Manifest) -> Vec<String> {
     manifest.files.keys().cloned().collect()
 }
@@ -667,7 +665,7 @@ fn package_key(game: &str, id: &str, version: &str, file_id: Option<u32>) -> Str
     format!("{}/{version}", mod_prefix(game, id))
 }
 
-/// Dossier des paquets d'un mod dans le stockage (`<jeu>/<mod>`).
+/// Folder of a mod's packages in the storage (`<game>/<mod>`).
 fn mod_prefix(game: &str, id: &str) -> String {
     format!("{}/{}", game_segment(game), path_segment(id))
 }
@@ -676,8 +674,8 @@ fn game_segment(game: &str) -> String {
     path_segment(&game.replace(':', "-"))
 }
 
-/// Un fichier que ce paquet veut poser appartient-il déjà à un autre mod ?
-/// Renvoie le chemin et le nom de ce mod, pour un message qui dit lequel.
+/// Does a file this package wants to place already belong to another mod?
+/// Returns the path and that mod's name, for a message that says which.
 fn owned_elsewhere(
     placements: &[Placement],
     existing: &[InstalledMod],
@@ -697,15 +695,15 @@ fn owned_elsewhere(
     })
 }
 
-/// Retire le début d'un téléchargement et son journal de reprise.
+/// Removes a partial download and its resume journal.
 fn discard_partial(archive: &Path) {
     let _ = fs::remove_file(archive.with_extension("part"));
     let _ = fs::remove_file(archive.with_extension("part.json"));
 }
 
-/// Débuts de téléchargement d'un mod (toutes versions) laissés dans le
-/// cache, ex. après avoir quitté l'appli : de quoi reprendre, ou à jeter.
-/// Noms : `<id>-<version>.part` et son journal `.part.json`.
+/// Partial downloads of a mod (all versions) left in the cache, e.g. after
+/// quitting the app: enough to resume, or to throw away. Names:
+/// `<id>-<version>.part` and its journal `.part.json`.
 pub fn partial_downloads(paths: &Paths, id: &str) -> Vec<PathBuf> {
     let prefix = format!("{id}-");
     let Ok(entries) = fs::read_dir(&paths.downloads) else {
@@ -722,14 +720,14 @@ pub fn partial_downloads(paths: &Paths, id: &str) -> Vec<PathBuf> {
         .collect()
 }
 
-/// Jette les débuts de téléchargement d'un mod.
+/// Throws away a mod's partial downloads.
 pub fn discard_partial_downloads(paths: &Paths, id: &str) {
     for file in partial_downloads(paths, id) {
         let _ = fs::remove_file(file);
     }
 }
 
-/// Segment de chemin sûr tiré d'une version (`1.2/beta` → `1.2_beta`).
+/// Safe path segment taken from a version (`1.2/beta` gives `1.2_beta`).
 fn path_segment(version: &str) -> String {
     let cleaned: String = version
         .chars()
@@ -749,7 +747,7 @@ fn path_segment(version: &str) -> String {
     }
 }
 
-/// Ce que le resolver doit savoir des mods déjà dans le jeu.
+/// What the resolver needs to know about the mods already in the game.
 fn installed_of(existing: &[InstalledMod]) -> Installed {
     Installed {
         versions: existing
@@ -777,16 +775,16 @@ fn rollback(store: &Store, game_dir: &Path, done: &[Done]) {
     }
 }
 
-/// Versions remplacées par une installation (une réinstallation de la même
-/// version ne remplace rien).
+/// Versions replaced by an install (reinstalling the same version replaces
+/// nothing).
 fn replaced(done: &[Done]) -> Vec<InstalledMod> {
     done.iter()
         .filter_map(|d| d.previous.clone().filter(|p| p.package != d.record.package))
         .collect()
 }
 
-/// Garde les versions remplacées pour y revenir, puis fait le ménage du
-/// stockage.
+/// Keeps the replaced versions to go back to them, then cleans up the
+/// storage.
 fn keep_replaced(
     state: &mut State,
     paths: &Paths,
@@ -800,15 +798,15 @@ fn keep_replaced(
     Ok(())
 }
 
-/// Ménage du stockage : retire ce qu'aucun mod installé, aucune version
-/// gardée ni aucune config modifiée n'utilise.
+/// Storage cleanup: removes what no installed mod, no kept version and no
+/// edited config uses.
 pub fn collect_garbage(state: &State, paths: &Paths) -> Result<Freed, InstallError> {
     let (packages, blobs) = state.referenced()?;
     Ok(paths.store().gc(&packages, &blobs)?)
 }
 
-/// Remet en place une version déjà enregistrée (annulation d'une mise à
-/// jour ratée). Au mieux : l'utilisateur pourra réinstaller sinon.
+/// Puts back a version already recorded (undo of a failed update). Best
+/// effort: the user can reinstall otherwise.
 fn redeploy(store: &Store, game_dir: &Path, old: &InstalledMod) {
     let _ = put_up(store, game_dir, old);
 }
@@ -822,8 +820,8 @@ fn package_kind(loader_root: Option<&str>) -> PackageKind {
     }
 }
 
-/// Placements enregistrés à l'installation ; pour un mod installé avant
-/// leur ajout, recalcul avec les règles BepInEx d'alors.
+/// Placements recorded at install time; for a mod installed before they
+/// were added, computed again with the BepInEx rules of the time.
 fn placements_of(m: &InstalledMod, manifest: &Manifest) -> Vec<Placement> {
     if !m.placements.is_empty() {
         return m.placements.clone();
@@ -831,7 +829,7 @@ fn placements_of(m: &InstalledMod, manifest: &Manifest) -> Vec<Placement> {
     bepinex_placements(&m.id, m.loader_root.as_deref(), &files_of(manifest))
 }
 
-/// Où vont les fichiers d'un paquet, selon les règles BepInEx.
+/// Where a package's files go, by the BepInEx rules.
 fn bepinex_placements(id: &str, loader_root: Option<&str>, files: &[String]) -> Vec<Placement> {
     BepInEx.place(id, &package_kind(loader_root), files)
 }
@@ -860,7 +858,7 @@ fn list_files(dir: &Path) -> std::io::Result<Vec<String>> {
     Ok(out)
 }
 
-/// Mise à jour disponible pour un mod installé.
+/// Update available for an installed mod.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Update {
@@ -869,10 +867,9 @@ pub struct Update {
     pub latest: String,
 }
 
-/// Mises à jour disponibles parmi `installed`. Rien n'est installé : on
-/// prévient, l'utilisateur valide (SPEC §3.5). Un mod que la source ne
-/// trouve plus, ou une source injoignable, n'empêche pas de vérifier les
-/// autres.
+/// Updates available among `installed`. Nothing is installed: we tell, the
+/// user confirms. A mod the source no longer finds, or an unreachable
+/// source, doesn't prevent checking the others.
 pub async fn available_updates<S: ModSource>(
     source: &S,
     community: &str,
@@ -897,8 +894,8 @@ pub async fn available_updates<S: ModSource>(
     updates
 }
 
-/// Active ou désactive un mod : ses fichiers quittent le jeu (ou y
-/// reviennent), le stockage les garde.
+/// Enables or disables a mod: its files leave the game (or come back), the
+/// storage keeps them.
 pub fn set_enabled(
     state: &mut State,
     paths: &Paths,
@@ -926,10 +923,9 @@ pub fn set_enabled(
     Ok(m)
 }
 
-/// Désinstalle un mod. Le loader ne part qu'en dernier, avec tout ce que
-/// BepInEx a écrit dans ses dossiers : le jeu retrouve son état d'origine.
-/// Le stockage est conservé pour permettre l'annulation (`restore`), puis
-/// libéré par `purge`.
+/// Uninstalls a mod. The loader only goes last, with everything BepInEx
+/// wrote in its folders: the game gets its original state back. The
+/// storage is kept to allow undo (`restore`), then freed by `purge`.
 pub fn uninstall(
     state: &mut State,
     paths: &Paths,
@@ -947,9 +943,9 @@ pub fn uninstall(
     Ok(m)
 }
 
-/// Retire tous les mods d'un jeu, loader en dernier : le jeu retrouve son
-/// état d'origine. Sert à la désinstallation d'Unalia, quand sa base va
-/// disparaître. Renvoie le nombre de mods retirés.
+/// Removes every mod of a game, loader last: the game gets its original
+/// state back. Used when Unalia is uninstalled, when its database is about
+/// to disappear. Returns the number of removed mods.
 pub fn uninstall_all(state: &mut State, game: &str, game_dir: &Path) -> Result<usize, InstallError> {
     let (loaders, mods): (Vec<_>, Vec<_>) = state.list(game)?.into_iter().partition(InstalledMod::is_loader);
     let count = loaders.len() + mods.len();
@@ -960,8 +956,8 @@ pub fn uninstall_all(state: &mut State, game: &str, game_dir: &Path) -> Result<u
     Ok(count)
 }
 
-/// Jeux Bethesda : `plugins.txt` (`list`) suit les plugins des mods actifs,
-/// après chaque changement. Renvoie `true` s'il a changé.
+/// Bethesda games: `plugins.txt` (`list`) follows the plugins of the
+/// enabled mods, after each change. Returns `true` if it changed.
 pub fn sync_plugins(state: &State, game: &str, game_dir: &Path, list: &Path) -> Result<bool, InstallError> {
     let deployed: Vec<String> = state
         .list(game)?
@@ -972,8 +968,8 @@ pub fn sync_plugins(state: &State, game: &str, game_dir: &Path, list: &Path) -> 
     Ok(crate::loaders::bethesda::sync_plugins(game_dir, list, &deployed)?)
 }
 
-/// Mods actifs dont au moins un fichier a quitté le jeu : jeu réinstallé,
-/// fichiers vérifiés par Steam, ou effacés à la main. Loader en tête.
+/// Enabled mods with at least one file gone from the game: game
+/// reinstalled, files verified by Steam, or deleted by hand. Loader first.
 pub fn missing(state: &State, game: &str, game_dir: &Path) -> Result<Vec<InstalledMod>, InstallError> {
     Ok(state
         .list(game)?
@@ -988,8 +984,8 @@ pub fn missing(state: &State, game: &str, game_dir: &Path) -> Result<Vec<Install
         .collect())
 }
 
-/// Repose un mod depuis le stockage, sans rien retélécharger. Ce qui
-/// restait de lui dans le jeu est retiré d'abord.
+/// Places a mod again from the storage, downloading nothing again. What was
+/// left of it in the game is removed first.
 pub fn put_back(
     state: &mut State,
     paths: &Paths,
@@ -1005,10 +1001,10 @@ pub fn put_back(
     Ok(m)
 }
 
-/// Revient à une version précédente d'un mod, gardée dans le stockage :
-/// rien n'est retéléchargé. La version quittée devient à son tour une
-/// version précédente. Un mod désactivé change de version sans revenir
-/// dans le jeu.
+/// Goes back to a previous version of a mod, kept in the storage: nothing
+/// is downloaded again. The version left becomes a previous version in
+/// turn. A disabled mod changes version without coming back into the
+/// game.
 pub fn revert(
     state: &mut State,
     paths: &Paths,
@@ -1073,8 +1069,8 @@ pub fn revert(
     state.get(game, id)?.ok_or(InstallError::NotInstalled)
 }
 
-/// Oublie un jeu désinstallé : ses mods quittent la base et leur stockage
-/// est libéré. Rien n'est retiré du jeu : son dossier n'existe plus.
+/// Forgets an uninstalled game: its mods leave the database and their
+/// storage is freed. Nothing is removed from the game: its folder is gone.
 pub fn forget(state: &mut State, paths: &Paths, game: &str) -> Result<usize, InstallError> {
     let mods = state.list(game)?;
     for m in &mods {
@@ -1088,10 +1084,10 @@ pub fn forget(state: &mut State, paths: &Paths, game: &str) -> Result<usize, Ins
     Ok(mods.len())
 }
 
-/// Retire un jeu d'Unalia : ses mods quittent son dossier, qui retrouve
-/// son état d'origine (`game_dir` absent : le dossier n'existe plus), puis
-/// la base et le stockage. Le jeu lui-même n'est pas touché. Renvoie le
-/// nombre de mods retirés.
+/// Removes a game from Unalia: its mods leave its folder, which gets its
+/// original state back (`game_dir` missing: the folder is gone), then the
+/// database and the storage. The game itself is not touched. Returns the
+/// number of removed mods.
 pub fn remove_game(
     state: &mut State,
     paths: &Paths,
@@ -1105,8 +1101,8 @@ pub fn remove_game(
     Ok(removed + forget(state, paths, game)?)
 }
 
-/// Fichiers de mods posés dans le jeu hors d'Unalia (voir `foreign`).
-/// `loader` : celui du profil du jeu.
+/// Mod files placed in the game outside Unalia (see `foreign`). `loader`:
+/// the one from the game profile.
 pub fn foreign_files(state: &State, game: &str, game_dir: &Path, loader: &str) -> Result<Vec<Foreign>, InstallError> {
     let (mut files, mut dirs) = (HashSet::new(), HashSet::new());
     for m in state.list(game)? {
@@ -1116,23 +1112,22 @@ pub fn foreign_files(state: &State, game: &str, game_dir: &Path, loader: &str) -
     Ok(foreign::scan(loader, game_dir, &files, &dirs))
 }
 
-/// Bilan d'une remise à zéro.
+/// Result of a reset.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Reset {
-    /// Mods d'Unalia retirés.
+    /// Unalia mods removed.
     pub mods: usize,
-    /// Emplacements laissés par d'autres outils, retirés.
+    /// Locations left by other tools, removed.
     pub foreign: usize,
-    /// Ceux qui n'ont pas pu partir.
+    /// The ones that couldn't go.
     pub left: Vec<String>,
 }
 
-/// Remet le jeu à zéro côté mods : ceux d'Unalia le quittent et leur
-/// stockage est libéré, puis ce que d'autres outils ont laissé passe par
-/// `discard` (la corbeille), mais seulement les emplacements de `remove`,
-/// cochés par l'utilisateur (voir [`Foreign::sure`]). Le reste et les
-/// fichiers du jeu ne sont pas touchés.
+/// Resets the game's mods: Unalia's leave it and their storage is freed,
+/// then what other tools left goes through `discard` (the Recycle Bin), but
+/// only the locations in `remove`, ticked by the user (see
+/// [`Foreign::sure`]). The rest and the game's files are not touched.
 pub fn reset(
     state: &mut State,
     paths: &Paths,
@@ -1143,9 +1138,9 @@ pub fn reset(
     discard: impl Fn(&Path) -> io::Result<()>,
 ) -> Result<Reset, InstallError> {
     let before = foreign_files(state, game, game_dir, loader)?;
-    // Comme `uninstall_all`, mais les dossiers du loader ne sont pas vidés
-    // de force : ce qu'on y avait glissé à la main (un plugin dans
-    // `BepInEx/`) part à la corbeille avec le reste, pas pour de bon.
+    // Like `uninstall_all`, but the loader folders are not force-emptied:
+    // what was slipped in there by hand (a plugin in `BepInEx/`) goes to
+    // the Recycle Bin with the rest, not for good.
     let (loaders, others): (Vec<_>, Vec<_>) = state.list(game)?.into_iter().partition(InstalledMod::is_loader);
     for m in others.iter().chain(&loaders) {
         deploy::undeploy(game_dir, &m.deployment, false);
@@ -1153,7 +1148,7 @@ pub fn reset(
     }
     let mods = loaders.len() + others.len();
     forget(state, paths, game)?;
-    // Plus rien d'Unalia dans le jeu : tout ce qui reste vient d'ailleurs.
+    // Nothing from Unalia left in the game: whatever remains comes from elsewhere.
     let found: Vec<Foreign> = foreign::scan(loader, game_dir, &HashSet::new(), &HashSet::new())
         .into_iter()
         .filter(|f| remove.contains(&f.path))
@@ -1169,18 +1164,18 @@ pub fn reset(
     })
 }
 
-/// Place qu'occupe le stockage d'un jeu, en octets : chaque fichier compté
-/// une fois, versions précédentes comprises.
+/// Space taken by a game's storage, in bytes: each file counted once,
+/// previous versions included.
 pub fn storage_size(paths: &Paths, game: &str) -> u64 {
     paths.store().size_of(&game_segment(game))
 }
 
-/// Libère le stockage d'un mod désinstallé, une fois l'annulation passée :
-/// ses paquets, ses versions précédentes et, si aucun autre jeu ne l'a, ses
-/// archives en cache. Sans effet s'il a été réinstallé entre-temps.
+/// Frees the storage of an uninstalled mod, once the undo window passed:
+/// its packages, its previous versions and, if no other game has it, its
+/// cached archives. No effect if it was reinstalled in the meantime.
 pub fn purge(state: &mut State, paths: &Paths, game: &str, id: &str) -> Result<(), InstallError> {
-    // L'identifiant devient un nom de dossier : un seul segment, rien qui
-    // remonte.
+    // The id becomes a folder name: a single segment, nothing that goes
+    // up.
     let mut parts = Path::new(id).components();
     if !matches!(
         (parts.next(), parts.next()),
@@ -1212,7 +1207,7 @@ pub fn purge(state: &mut State, paths: &Paths, game: &str, id: &str) -> Result<(
     Ok(())
 }
 
-/// Annule une désinstallation : remet le mod tel qu'il était.
+/// Undoes an uninstall: puts the mod back as it was.
 pub fn restore(
     state: &mut State,
     paths: &Paths,
@@ -1227,18 +1222,18 @@ pub fn restore(
     Ok(m)
 }
 
-/// Dossiers du stockage d'aujourd'hui ; tout autre dossier vient de
-/// l'ancien stockage (un dossier par jeu, mod et version).
+/// Folders of today's storage; any other folder comes from the old storage
+/// (one folder per game, mod and version).
 const STORE_DIRS: &[&str] = &["files", "packages", "tmp"];
 
-/// Réglage : le stockage est au format des paquets.
+/// Setting: the storage uses the package format.
 const STORE_FORMAT: &str = "store_format";
 
-/// Passe les mods de l'ancien stockage (un dossier extrait par version) au
-/// stockage par empreinte, sans rien retélécharger, puis retire les restes
-/// de l'ancien : versions oubliées, mods qui ne sont plus installés, et
-/// archives en cache, devenues des doublons. Renvoie le nombre de mods
-/// migrés. Sans effet la deuxième fois.
+/// Moves the mods of the old storage (one extracted folder per version) to
+/// the hash-based storage, downloading nothing again, then removes the old
+/// one's leftovers: forgotten versions, mods no longer installed, and
+/// cached archives, now duplicates. Returns the number of migrated mods.
+/// No effect the second time.
 pub fn migrate_store(state: &mut State, paths: &Paths) -> Result<usize, InstallError> {
     if state.setting(STORE_FORMAT)?.as_deref() == Some("2") {
         return Ok(0);
@@ -1256,7 +1251,7 @@ pub fn migrate_store(state: &mut State, paths: &Paths) -> Result<usize, InstallE
                 lost += 1;
                 continue;
             }
-            // Calculés avant de vider le dossier : ils en lisent la liste.
+            // Computed before emptying the folder: they read its listing.
             if m.placements.is_empty() {
                 m.placements = bepinex_placements(&m.id, m.loader_root.as_deref(), &list_files(&dir)?);
             }
@@ -1272,8 +1267,8 @@ pub fn migrate_store(state: &mut State, paths: &Paths) -> Result<usize, InstallE
             migrated += 1;
         }
     }
-    // Un mod sans dossier (stockage effacé à la main) garde ses archives :
-    // de quoi le réinstaller sans tout retélécharger.
+    // A mod without a folder (storage deleted by hand) keeps its archives:
+    // enough to reinstall it without downloading everything again.
     if lost == 0 {
         if let Ok(entries) = fs::read_dir(&paths.store) {
             for entry in entries.flatten() {

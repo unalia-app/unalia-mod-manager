@@ -1,6 +1,6 @@
-//! Profils de jeux écrits à la main (`games/*.toml`), pour les jeux absents
-//! du schéma Thunderstore. Embarqués dans le binaire : de la donnée pure,
-//! relue comme du code (SPEC §7).
+//! Hand-written game profiles (`games/*.toml`), for games missing from the
+//! Thunderstore schema. Embedded in the binary: pure data, reviewed like
+//! code.
 
 use serde::Deserialize;
 
@@ -14,7 +14,7 @@ const PROFILES: [&str; 4] = [
     include_str!("../../../../games/skyrim-special-edition.toml"),
 ];
 
-/// Loaders des profils écrits à la main, que Modalia sait installer.
+/// Loaders of the hand-written profiles that Modalia knows how to install.
 pub const BUILTIN_LOADERS: [&str; 3] = ["bethesda", "redengine", "unreal"];
 
 #[derive(Deserialize)]
@@ -43,7 +43,7 @@ pub fn profiles() -> Vec<GameProfile> {
     PROFILES
         .iter()
         .map(|text| {
-            // Embarqué et testé : une erreur ici est un bug de Modalia.
+            // Embedded and tested: an error here is a Modalia bug.
             let raw: RawProfile = toml::from_str(text).expect("invalid built-in game profile");
             GameProfile {
                 community: raw

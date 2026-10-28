@@ -1,9 +1,9 @@
-//! Frameworks dont dépendent les mods d'un jeu (RED4ext, UE4SS…), décrits
-//! par son profil (`games/*.toml`). Modalia les installe tout seul, depuis
-//! la release GitHub de leurs auteurs, dès qu'un mod en a besoin.
+//! Frameworks that a game's mods depend on (RED4ext, UE4SS…), described by
+//! its profile (`games/*.toml`). Modalia installs them by itself, from their
+//! authors' GitHub release, as soon as a mod needs one.
 //!
-//! Les chemins peuvent contenir `{project}` : le dossier du projet Unreal du
-//! jeu, connu seulement une fois le jeu installé (voir `unreal`).
+//! Paths can contain `{project}`: the game's Unreal project folder, only
+//! known once the game is installed (see `unreal`).
 
 use std::path::Path;
 
@@ -11,25 +11,25 @@ use serde::{Deserialize, Serialize};
 
 use super::Placement;
 
-/// Framework dont dépendent les mods (profil du jeu).
+/// Framework that mods depend on (game profile).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all(serialize = "camelCase"))]
 pub struct Framework {
     pub name: String,
-    /// Sa page Nexus pour ce jeu, si elle existe (sert d'identifiant).
+    /// Its Nexus page for this game, if there is one (used as the id).
     #[serde(default)]
     pub nexus_id: Option<u32>,
-    /// Dépôt GitHub de l'auteur, ex. `wopss/RED4ext`.
+    /// The author's GitHub repo, e.g. `wopss/RED4ext`.
     pub github: String,
-    /// Release à prendre (tag), sinon la dernière stable. UE4SS : les jeux
-    /// Unreal 5 récents ont besoin de `experimental-latest`.
+    /// Release to take (tag), else the latest stable one. UE4SS: recent
+    /// Unreal 5 games need `experimental-latest`.
     #[serde(default)]
     pub release: Option<String>,
-    /// Nom du fichier de la release : `{version}` remplacé par la version,
-    /// ou `*` pour une partie variable (qui devient alors la version).
+    /// Release file name: `{version}` replaced by the version, or `*` for a
+    /// variable part (which then becomes the version).
     pub asset: String,
-    /// Fichier dont la présence prouve que le framework est installé
-    /// (par Modalia ou à la main).
+    /// File whose presence proves the framework is installed (by Modalia or
+    /// by hand).
     pub marker: String,
     #[serde(default)]
     pub needed_by_prefix: Vec<String>,
@@ -38,8 +38,8 @@ pub struct Framework {
 }
 
 impl Framework {
-    /// Identifiant de l'installation : celui de sa page Nexus, sinon tiré du
-    /// dépôt GitHub (`github-ue4ss-re-re-ue4ss`).
+    /// Install id: its Nexus page's, else taken from the GitHub repo
+    /// (`github-ue4ss-re-re-ue4ss`).
     pub fn key(&self) -> String {
         match self.nexus_id {
             Some(id) => format!("nexus-{id}"),
@@ -50,7 +50,7 @@ impl Framework {
         }
     }
 
-    /// Remplace `{project}` dans les chemins.
+    /// Replaces `{project}` in the paths.
     pub fn resolve(&self, project: Option<&str>) -> Self {
         let fill = |path: &str| match project {
             Some(project) => path.replace("{project}", project),
@@ -63,7 +63,7 @@ impl Framework {
         }
     }
 
-    /// Un fichier posé à `target` a-t-il besoin de ce framework ?
+    /// Does a file placed at `target` need this framework?
     pub fn needed_by(&self, target: &str) -> bool {
         let lower = target.to_ascii_lowercase();
         self.needed_by_prefix
@@ -75,7 +75,7 @@ impl Framework {
                 .any(|e| lower.ends_with(&e.to_ascii_lowercase()))
     }
 
-    /// Ces placements fournissent-ils le framework lui-même ?
+    /// Do these placements provide the framework itself?
     pub fn provided_by(&self, placements: &[Placement]) -> bool {
         placements
             .iter()
@@ -87,8 +87,8 @@ impl Framework {
     }
 }
 
-/// Frameworks dont ont besoin les fichiers placés, hors ceux qu'ils
-/// fournissent eux-mêmes (ArchiveXL contient des `.xl`).
+/// Frameworks needed by the placed files, except the ones they provide
+/// themselves (ArchiveXL contains `.xl` files).
 pub fn needed_frameworks<'a>(
     frameworks: &'a [Framework],
     placements: &[Placement],

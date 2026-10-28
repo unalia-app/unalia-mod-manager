@@ -1,7 +1,7 @@
-//! Identification du moteur d'un jeu par signature de fichiers.
+//! Identifies a game's engine from file signatures.
 //!
-//! On ne lit que les noms des entrées, à deux ou trois niveaux de profondeur
-//! au plus : la détection doit rester instantanée même sur 1 000 jeux.
+//! We only read entry names, two or three levels deep at most: detection
+//! must stay instant even across 1,000 games.
 
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -27,9 +27,9 @@ pub fn detect_engine(game_dir: &Path) -> Engine {
     }
 }
 
-/// `UnityPlayer.dll` / `.so` à la racine, ou un dossier `<Jeu>_Data` qui
-/// contient les fichiers propres à Unity (couvre aussi les vieilles versions
-/// sans `UnityPlayer`). Sous macOS, le lecteur est dans le bundle `.app`.
+/// `UnityPlayer.dll` / `.so` at the root, or a `<Game>_Data` folder that
+/// holds Unity's own files (also covers old versions without
+/// `UnityPlayer`). On macOS, the player is inside the `.app` bundle.
 fn is_unity(root: &[Entry]) -> bool {
     const PLAYERS: [&str; 2] = ["unityplayer.dll", "unityplayer.so"];
     const DATA_MARKERS: [&str; 5] = [
@@ -59,8 +59,8 @@ fn is_unity(root: &[Entry]) -> bool {
     })
 }
 
-/// Un dossier `Engine` à la racine et au moins une archive `.pak` dans
-/// `<Projet>/Content/Paks`.
+/// An `Engine` folder at the root and at least one `.pak` archive in
+/// `<Project>/Content/Paks`.
 fn is_unreal(root: &[Entry]) -> bool {
     if !root.iter().any(|e| e.is_dir && e.name == "engine") {
         return false;
@@ -75,9 +75,9 @@ fn is_unreal(root: &[Entry]) -> bool {
         })
 }
 
-/// Anti-triche du jeu, d'après ses fichiers : à la racine, ou à côté de
-/// l'exécutable d'un jeu Unreal (`<Projet>/Binaries/Win64`). Les mods
-/// restent permis, mais le joueur risque un bannissement en ligne.
+/// The game's anti-cheat, from its files: at the root, or next to an Unreal
+/// game's executable (`<Project>/Binaries/Win64`). Mods stay allowed, but
+/// the player risks an online ban.
 pub fn detect_anti_cheat(game_dir: &Path) -> Option<&'static str> {
     let root = entries(game_dir);
     let binaries = root
@@ -97,8 +97,8 @@ pub fn detect_anti_cheat(game_dir: &Path) -> Option<&'static str> {
 }
 
 struct Entry {
-    /// Nom en minuscules : les systèmes de fichiers Windows ignorent la casse,
-    /// les jeux ne sont donc pas cohérents d'une version à l'autre.
+    /// Lowercase name: Windows file systems ignore case, so games are not
+    /// consistent from one version to the next.
     name: String,
     path: PathBuf,
     is_dir: bool,
@@ -120,7 +120,7 @@ fn entries(dir: &Path) -> Vec<Entry> {
         .collect()
 }
 
-/// Suit un chemin relatif en ignorant la casse de chaque segment.
+/// Follows a relative path, ignoring the case of each segment.
 fn find(dir: &Path, segments: &[&str]) -> Option<PathBuf> {
     let mut current = dir.to_path_buf();
     for segment in segments {

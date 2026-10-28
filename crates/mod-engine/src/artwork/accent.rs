@@ -1,21 +1,21 @@
-//! Couleur d'accent extraite d'une image, en OKLCH (SPEC §4).
+//! Accent color extracted from an image, in OKLCH.
 //!
-//! 1. On réduit l'image et on classe ses pixels colorés par teinte.
-//! 2. La teinte dominante (pondérée par la saturation) est retenue.
-//! 3. On impose une luminosité et une saturation lisibles sur le fond sombre
-//!    de Modalia, puis on ramène la couleur dans le gamut sRGB.
+//! 1. We shrink the image and bin its colored pixels by hue.
+//! 2. The dominant hue (weighted by saturation) wins.
+//! 3. We force a lightness and a chroma that read well on Modalia's dark
+//!    background, then bring the color back into the sRGB gamut.
 //!
-//! Une image presque grise ne donne pas d'accent : l'interface garde alors
-//! l'accent neutre plutôt que d'inventer une couleur.
+//! A nearly gray image gives no accent: the UI then keeps the neutral
+//! accent rather than inventing a color.
 
 use std::f32::consts::TAU;
 use std::path::Path;
 
 use image::{DynamicImage, GenericImageView};
 
-/// Fond de Modalia (`--color-bg`, #0d0d0f), pour le calcul de contraste.
+/// Modalia's background (`--color-bg`, #0d0d0f), for the contrast check.
 const BACKGROUND: [f32; 3] = [13.0 / 255.0, 13.0 / 255.0, 15.0 / 255.0];
-/// Contraste minimal d'un texte en couleur d'accent sur le fond (WCAG AA).
+/// Minimum contrast of accent-colored text on the background (WCAG AA).
 const MIN_CONTRAST: f32 = 4.5;
 
 const TARGET_LIGHTNESS: f32 = 0.78;
@@ -23,16 +23,16 @@ const MIN_CHROMA: f32 = 0.07;
 const MAX_CHROMA: f32 = 0.17;
 
 const HUE_BINS: usize = 24;
-/// Part minimale de pixels colorés dans la teinte retenue.
+/// Minimum share of colored pixels in the chosen hue.
 const MIN_COVERAGE: f32 = 0.03;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Accent {
-    /// Luminosité perçue, 0 à 1.
+    /// Perceived lightness, 0 to 1.
     pub l: f32,
     /// Saturation (chroma OKLCH).
     pub c: f32,
-    /// Teinte en degrés, 0 à 360.
+    /// Hue in degrees, 0 to 360.
     pub h: f32,
 }
 
@@ -50,7 +50,7 @@ impl Accent {
         )
     }
 
-    /// Contraste WCAG d'un texte de cette couleur sur le fond de Modalia.
+    /// WCAG contrast of text in this color on Modalia's background.
     pub fn contrast_on_background(self) -> f32 {
         contrast(
             relative_luminance(self.to_srgb()),
@@ -64,8 +64,8 @@ pub fn accent_from_path(path: &Path) -> Option<Accent> {
 }
 
 pub fn accent_from_image(image: &DynamicImage) -> Option<Accent> {
-    // 64 px de côté suffisent pour la couleur dominante et gardent le calcul
-    // sous la milliseconde.
+    // 64 px per side is enough for the dominant color and keeps the
+    // computation under a millisecond.
     let small = image.thumbnail(64, 64);
 
     #[derive(Default, Clone, Copy)]
@@ -87,13 +87,13 @@ pub fn accent_from_image(image: &DynamicImage) -> Option<Accent> {
         total += 1;
         let (l, a, b) = srgb_to_oklab([r, g, b].map(|v| f32::from(v) / 255.0));
         let chroma = a.hypot(b);
-        // Ni les noirs ni les gris (blancs compris) ne portent une teinte fiable.
+        // Neither blacks nor grays (whites included) carry a reliable hue.
         if l < 0.2 || chroma < 0.04 {
             continue;
         }
         let hue = b.atan2(a).rem_euclid(TAU);
         let bin = &mut bins[((hue / TAU) * HUE_BINS as f32) as usize % HUE_BINS];
-        // Les couleurs vives et de luminosité moyenne comptent davantage.
+        // Vivid colors of medium lightness weigh more.
         let weight = chroma * (1.0 - (l - 0.6).abs());
         bin.weight += weight;
         bin.count += 1;
@@ -102,8 +102,8 @@ pub fn accent_from_image(image: &DynamicImage) -> Option<Accent> {
         bin.chroma += chroma * weight;
     }
 
-    // On regroupe chaque case avec ses voisines pour qu'une teinte à cheval
-    // sur deux cases ne soit pas pénalisée.
+    // Each bin is grouped with its neighbors so that a hue straddling two
+    // bins is not penalized.
     let merged = (0..HUE_BINS)
         .map(|i| {
             let mut m = Bin::default();
@@ -128,9 +128,9 @@ pub fn accent_from_image(image: &DynamicImage) -> Option<Accent> {
     Some(legible(hue, chroma))
 }
 
-/// Luminosité fixe pour un rendu homogène d'un jeu à l'autre, saturation
-/// réduite jusqu'à entrer dans le gamut sRGB, puis luminosité relevée si le
-/// contraste reste insuffisant.
+/// Fixed lightness for a consistent look from one game to the next, chroma
+/// reduced until it fits the sRGB gamut, then lightness raised if the
+/// contrast is still too low.
 fn legible(hue: f32, chroma: f32) -> Accent {
     let mut accent = Accent {
         l: TARGET_LIGHTNESS,
@@ -223,7 +223,7 @@ mod tests {
         DynamicImage::ImageRgb8(RgbImage::from_pixel(60, 90, Rgb(rgb)))
     }
 
-    /// Fond `base` avec un rectangle `spot` couvrant la fraction `share` de la hauteur.
+    /// `base` background with a `spot` rectangle covering the `share` fraction of the height.
     fn with_spot(base: [u8; 3], spot: [u8; 3], share: f32) -> DynamicImage {
         let mut img = RgbImage::from_pixel(60, 90, Rgb(base));
         let rows = (90.0 * share) as u32;
@@ -271,7 +271,7 @@ mod tests {
 
     #[test]
     fn a_small_vivid_area_beats_a_large_dark_one() {
-        // Jaquette typique : surtout sombre, un titre ou un personnage coloré.
+        // Typical cover: mostly dark, a colored title or character.
         let img = with_spot([15, 15, 20], [230, 160, 20], 0.15);
         let accent = accent_from_image(&img).unwrap();
         assert!(hue_distance(accent.h, 70.0) < 15.0, "{accent:?}");

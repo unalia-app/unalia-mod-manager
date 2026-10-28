@@ -1,6 +1,6 @@
-//! Cyberpunk 2077 de bout en bout : un mod Nexus (lien `nxm://`), ses
-//! frameworks installés tout seuls depuis GitHub, les conflits, contre de
-//! faux Nexus et GitHub qui servent de vraies archives.
+//! Cyberpunk 2077 end to end: a Nexus mod (`nxm://` link), its frameworks
+//! installed by themselves from GitHub, conflicts, against a fake Nexus and
+//! a fake GitHub that serve real archives.
 
 use std::collections::BTreeMap;
 use std::fs;
@@ -18,7 +18,7 @@ use mod_engine::state::State;
 use serde_json::json;
 use zip::write::SimpleFileOptions;
 
-/// Fichiers d'une archive : chemin et contenu.
+/// Files of an archive: path and content.
 type Files<'a> = Vec<(&'a str, &'a [u8])>;
 
 const GAME: &str = "steam:1091500";
@@ -36,9 +36,9 @@ struct World {
     github: GitHub,
     client: reqwest::Client,
     state: State,
-    /// Description des prochains mods publiés (on y cite des dépôts GitHub).
+    /// Description of the next published mods (GitHub repos are mentioned there).
     description: String,
-    /// Jeu resté sur une ancienne version : mods publiés avant cette date.
+    /// Game that stayed on an old version: mods published before this date.
     before: Option<String>,
 }
 
@@ -81,8 +81,8 @@ impl World {
         world
     }
 
-    /// Les frameworks sur le faux GitHub, avec la disposition de leurs
-    /// vraies archives.
+    /// The frameworks on the fake GitHub, with the layout of their real
+    /// archives.
     async fn publish_frameworks(&mut self) {
         let frameworks: [(&str, &str, &str, Files); 4] = [
             (
@@ -147,7 +147,7 @@ impl World {
         }
     }
 
-    /// Un mod sur le faux Nexus : fiche, fichiers, prérequis, archive.
+    /// A mod on the fake Nexus: page, files, requirements, archive.
     async fn publish(
         &mut self,
         mod_id: u32,
@@ -195,7 +195,7 @@ impl World {
         )
         .await;
         let download = format!("/cdn/{mod_id}.zip");
-        // Compte gratuit : le lien n'est donné qu'avec la clé du lien nxm://.
+        // Free account: the link is only given with the key of the nxm:// link.
         self.server
             .mock(
                 "GET",
@@ -341,12 +341,12 @@ async fn a_nexus_mod_brings_its_frameworks_from_github() {
     let done = w.install(COOL_HUD, NexusFile::Link(&link)).await.unwrap();
 
     let game = &w.game;
-    // Le mod, rangé malgré son dossier d'emballage, sans son readme.
+    // The mod, stored despite its wrapper folder, without its readme.
     assert!(game.join("r6/scripts/CoolHud/hud.reds").is_file());
     assert!(game.join("archive/pc/mod/coolhud.archive.xl").is_file());
     assert!(!game.join("README.txt").exists());
-    // redscript (.reds), ArchiveXL (.xl), Codeware (prérequis Nexus), et
-    // RED4ext dont ArchiveXL et Codeware ont besoin à leur tour.
+    // redscript (.reds), ArchiveXL (.xl), Codeware (Nexus requirement), and
+    // RED4ext, which ArchiveXL and Codeware need in turn.
     assert!(game.join("engine/tools/scc.exe").is_file());
     assert!(
         game.join("red4ext/plugins/ArchiveXL/ArchiveXL.dll")
@@ -379,8 +379,8 @@ async fn a_nexus_mod_brings_its_frameworks_from_github() {
     let red4ext = done.mods.iter().find(|m| m.id == "nexus-2380").unwrap();
     assert_eq!(red4ext.version, "1.30.0");
 
-    // Mod Settings n'est pas un framework : l'utilisateur doit passer par
-    // le site (compte gratuit).
+    // Mod Settings is not a framework: the user has to go through the site
+    // (free account).
     let missing: Vec<_> = done.missing.iter().map(|r| r.name.as_str()).collect();
     assert_eq!(missing, ["Mod Settings"]);
 }
@@ -426,7 +426,7 @@ async fn a_free_account_is_sent_to_the_website() {
 #[tokio::test]
 async fn frameworks_install_from_github_without_the_website() {
     let mut w = World::new().await;
-    // ArchiveXL demandé directement : pas besoin de Nexus, ni de Premium.
+    // ArchiveXL requested directly: no need for Nexus or Premium.
     let done = w.install(4198, NexusFile::Main).await.unwrap();
     let mut ids: Vec<_> = done
         .mods
@@ -493,7 +493,7 @@ async fn updates_come_from_github_for_frameworks_and_nexus_for_mods() {
     w.install(COOL_HUD, NexusFile::Link(&link(COOL_HUD)))
         .await
         .unwrap();
-    // Une version plus récente de Cool HUD sur Nexus.
+    // A more recent version of Cool HUD on Nexus.
     w.graphql(
         vec![
             Matcher::Regex(r"nodes \{ modId version \}".into()),
@@ -509,12 +509,12 @@ async fn updates_come_from_github_for_frameworks_and_nexus_for_mods() {
         .iter()
         .map(|u| (u.mod_id.as_str(), u.latest.as_str()))
         .collect();
-    // Les frameworks viennent d'être installés à leur dernière version.
+    // The frameworks were just installed at their latest version.
     assert_eq!(updates, [("nexus-5000", "1.3.0")]);
 }
 
-/// Le même fichier publié par l'auteur sur GitHub, et ce que Nexus répond
-/// quand on lui demande à qui appartient son empreinte.
+/// The same file published by the author on GitHub, and what Nexus answers
+/// when asked who owns its hash.
 async fn mirror_on_github(w: &mut World, bytes: Vec<u8>, owner_mod: u32, owner_file: u32) {
     w.server
         .mock("GET", "/repos/someone/cool-hud/releases/latest")
@@ -562,7 +562,7 @@ async fn a_verified_github_copy_spares_the_website() {
     w.publish(COOL_HUD, "Cool HUD", "1.2.0", &[], &files).await;
     mirror_on_github(&mut w, zip_bytes(&files), COOL_HUD, COOL_HUD * 10).await;
 
-    // Compte gratuit, sans lien du site : Nexus refuserait, GitHub sert.
+    // Free account, no site link: Nexus would refuse, GitHub serves.
     let done = w.install(COOL_HUD, NexusFile::Main).await.unwrap();
     assert!(w.game.join("r6/scripts/CoolHud/hud.reds").is_file());
     let hud = done.mods.iter().find(|m| m.id == "nexus-5000").unwrap();
@@ -575,8 +575,8 @@ async fn a_github_file_that_nexus_attributes_elsewhere_is_not_used() {
     w.description = "https://github.com/someone/cool-hud".into();
     let files = cool_hud_files();
     w.publish(COOL_HUD, "Cool HUD", "1.2.0", &[], &files).await;
-    // Même octets, mais Nexus les rattache à un autre mod (une copie
-    // republiée) : ce n'est pas la preuve qu'il s'agit de ce fichier.
+    // Same bytes, but Nexus ties them to another mod (a reuploaded copy):
+    // that doesn't prove it is this file.
     mirror_on_github(&mut w, zip_bytes(&files), 31005, 1).await;
     let before = snapshot(&w.game);
 
@@ -595,7 +595,7 @@ async fn a_game_kept_on_an_older_version_gets_the_files_of_its_time() {
     assert_eq!(w.before.as_deref(), Some("2026-10-22"));
     assert_eq!(w.profile.mods_before("2.5"), None);
 
-    // RED4ext : une release pour la 2.5, une préversion, et celle d'avant.
+    // RED4ext: a release for 2.5, a prerelease, and the one before.
     let old_red4ext = format!("{}/assets/red4ext-1.29.1.zip", w.server.url());
     w.server
         .mock("GET", "/repos/wopss/RED4ext/releases")
@@ -623,7 +623,7 @@ async fn a_game_kept_on_an_older_version_gets_the_files_of_its_time() {
         .create_async()
         .await;
 
-    // Le mod : son fichier pour la 2.5 (le principal) et celui d'avant.
+    // The mod: its file for 2.5 (the main one) and the one before.
     let mod_id = 6000;
     w.graphql(
         vec![
@@ -654,7 +654,7 @@ async fn a_game_kept_on_an_older_version_gets_the_files_of_its_time() {
         ] }),
     )
     .await;
-    // Seul l'ancien fichier peut être téléchargé : demander l'autre échoue.
+    // Only the old file can be downloaded: asking for the other fails.
     w.server
         .mock(
             "GET",
@@ -694,7 +694,7 @@ async fn a_game_kept_on_an_older_version_gets_the_files_of_its_time() {
         BTreeMap::from([("nexus-2380", "1.29.1"), ("nexus-6000", "1.4")])
     );
 
-    // Rien de plus récent d'avant la 2.5 : pas de mise à jour proposée.
+    // Nothing more recent from before 2.5: no update offered.
     let installed = w.state.list(GAME).unwrap();
     let updates = available_updates_nexus(
         &w.nexus,
@@ -706,8 +706,8 @@ async fn a_game_kept_on_an_older_version_gets_the_files_of_its_time() {
     .await;
     assert!(updates.is_empty(), "{updates:?}");
 
-    // Installé pour la 2.5 avant le retour en arrière : la version d'avant
-    // est proposée.
+    // Installed for 2.5 before going back: the previous version is
+    // offered.
     let mut newer = installed
         .iter()
         .find(|m| m.id == "nexus-6000")
@@ -731,9 +731,9 @@ async fn a_game_kept_on_an_older_version_gets_the_files_of_its_time() {
     assert_eq!(back, [("nexus-6000", "2.0", "1.4")]);
 }
 
-/// La Porsche 911 GT3 RS (mod 11180) : un fichier principal et des
-/// variantes de couleur, tous « MAIN », aucun marqué comme principal.
-/// Chaque couleur remplace l'archive du fichier principal.
+/// The Porsche 911 GT3 RS (mod 11180): a main file and color variants, all
+/// "MAIN", none marked as primary. Each color replaces the main file's
+/// archive.
 async fn publish_gt3(w: &mut World) {
     let mod_id = 11180;
     w.graphql(
@@ -821,7 +821,7 @@ async fn a_color_variant_goes_on_top_of_the_main_file() {
     let mut w = World::new().await;
     publish_gt3(&mut w).await;
 
-    // Plusieurs fichiers : à l'utilisateur de choisir, le principal en tête.
+    // Several files: the user picks, the main one first.
     let err = w.install(11180, NexusFile::Main).await.unwrap_err();
     let InstallError::ChooseFiles(files) = err else {
         panic!("{err:?}");
@@ -829,7 +829,7 @@ async fn a_color_variant_goes_on_top_of_the_main_file() {
     let ids: Vec<u32> = files.iter().map(|f| f.file_id).collect();
     assert_eq!(ids, [62171, 62175, 62172]);
 
-    // Compte gratuit : le principal arrive du site, la couleur doit suivre.
+    // Free account: the main one comes from the site, the color must follow.
     let chosen = [62171, 62172];
     let main = file_link(11180, 62171);
     let err = w
@@ -848,7 +848,7 @@ async fn a_color_variant_goes_on_top_of_the_main_file() {
     );
     assert!(!w.game.join("archive").exists());
 
-    // La couleur arrive : le principal est déjà là, tout est posé.
+    // The color arrives: the main one is already there, everything is placed.
     let color = file_link(11180, 62172);
     let done = w
         .install(
@@ -870,7 +870,7 @@ async fn a_color_variant_goes_on_top_of_the_main_file() {
     assert_eq!(gt3.files, [62171, 62172]);
     assert_eq!(gt3.name, "Porsche 911 GT3 RS");
 
-    // Réinstaller (mise à jour) garde le même choix, sans rien redemander.
+    // Reinstalling (update) keeps the same choice, asking for nothing.
     let done = w.install(11180, NexusFile::Main).await.unwrap();
     let gt3 = done.mods.iter().find(|m| m.id == "nexus-11180").unwrap();
     assert_eq!(gt3.files, [62171, 62172]);
@@ -880,8 +880,8 @@ async fn a_color_variant_goes_on_top_of_the_main_file() {
     );
 }
 
-/// Jeux reconnus automatiquement : une requête pour tous les noms, nom
-/// exact seulement.
+/// Automatically recognized games: one request for every name, exact name
+/// only.
 #[tokio::test]
 async fn games_are_found_by_their_exact_name() {
     let mut server = mockito::Server::new_async().await;
@@ -899,7 +899,7 @@ async fn games_are_found_by_their_exact_name() {
             json!({ "data": {
                 "g0": { "nodes": [{ "id": 5113, "name": "Hogwarts Legacy", "domainName": "hogwartslegacy" }] },
                 "g1": { "nodes": [] },
-                // Nom proche mais pas identique : refusé.
+                // Close but not identical name: refused.
                 "g2": { "nodes": [{ "id": 1704, "name": "Skyrim Special Edition", "domainName": "skyrimspecialedition" }] }
             }})
             .to_string(),

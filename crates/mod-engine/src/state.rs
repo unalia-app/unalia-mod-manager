@@ -1,10 +1,10 @@
-//! Brique **state** : ce que Modalia a installé, dans une base SQLite.
+//! **state** block: what Modalia installed, in a SQLite database.
 //!
-//! Pour chaque mod installé dans un jeu : sa version, son état actif ou non,
-//! l'empreinte de l'archive, et la liste exacte des fichiers posés dans le
-//! jeu (le déploiement), sans laquelle on ne saurait pas tout retirer.
-//! Les versions remplacées par une mise à jour restent connues quelque
-//! temps : y revenir ne retélécharge rien.
+//! For each mod installed in a game: its version, whether it is enabled,
+//! the archive hash, and the exact list of files placed in the game (the
+//! deployment), without which we couldn't remove everything. Versions
+//! replaced by an update stay known for a while: going back to one
+//! downloads nothing again.
 
 use std::collections::{BTreeMap, HashSet};
 use std::path::Path;
@@ -19,52 +19,52 @@ use crate::loaders::Placement;
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct InstalledMod {
-    /// Jeu, ex. `steam:1030300`.
+    /// Game, e.g. `steam:1030300`.
     pub game: String,
     pub id: String,
     pub name: String,
     pub author: String,
     pub version: String,
     pub icon_url: Option<String>,
-    /// Paquet loader : son dossier racine dans l'archive (ex. `BepInExPack`).
+    /// Loader package: its root folder in the archive (e.g. `BepInExPack`).
     pub loader_root: Option<String>,
     pub enabled: bool,
-    /// Demandé par l'utilisateur (sinon : installé comme dépendance).
+    /// Requested by the user (else: installed as a dependency).
     pub explicit: bool,
     pub sha256: String,
-    /// Secondes depuis l'époque Unix.
+    /// Seconds since the Unix epoch.
     pub installed_at: i64,
-    /// Paquet du stockage (`store::Store`) qui contient ses fichiers.
+    /// Package in the storage (`store::Store`) that holds its files.
     pub package: String,
-    /// Dossier du mod dans l'ancien stockage, d'avant les paquets : vide
-    /// une fois migré.
+    /// The mod's folder in the old storage, from before packages: empty
+    /// once migrated.
     #[serde(skip)]
     pub legacy_store_dir: String,
-    /// Fichiers Nexus installés, dans l'ordre où ils sont posés (le
-    /// principal puis ses variantes) : repris par les mises à jour.
+    /// Installed Nexus files, in the order they are placed (the main file
+    /// then its variants): picked up again by updates.
     pub files: Vec<u32>,
     #[serde(skip)]
     pub deployment: Deployment,
-    /// Où va chaque fichier du stockage : réutilisé tel quel pour
-    /// réactiver, annuler un retrait ou revenir en arrière. Vide pour les
-    /// mods installés avant son ajout (on recalcule alors).
+    /// Where each storage file goes: reused as is to enable again, undo a
+    /// removal or roll back. Empty for mods installed before it was added
+    /// (it is computed again then).
     #[serde(skip)]
     pub placements: Vec<Placement>,
-    /// Fichiers de config que le joueur (ou le mod) a modifiés dans le jeu :
-    /// destination → contenu rangé. Remis tels quels à la réactivation.
+    /// Config files that the player (or the mod) edited in the game:
+    /// destination to stored content. Put back as is when enabled again.
     #[serde(skip)]
     pub edits: BTreeMap<String, String>,
-    /// Versions d'avant, la plus récente en tête.
+    /// Previous versions, the most recent first.
     pub previous_versions: Vec<PreviousVersion>,
 }
 
-/// Version remplacée par une mise à jour, gardée pour y revenir.
+/// Version replaced by an update, kept to go back to.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PreviousVersion {
     pub version: String,
     pub package: String,
-    /// Secondes depuis l'époque Unix.
+    /// Seconds since the Unix epoch.
     pub installed_at: i64,
     pub replaced_at: i64,
     #[serde(skip)]
@@ -77,7 +77,7 @@ pub struct PreviousVersion {
     pub edits: BTreeMap<String, String>,
 }
 
-/// Versions précédentes gardées par mod.
+/// Previous versions kept per mod.
 pub const KEPT_VERSIONS: usize = 3;
 
 impl InstalledMod {
@@ -152,14 +152,14 @@ CREATE TABLE IF NOT EXISTS manual_games (
 );
 ";
 
-/// Jeu ajouté à la main (hors launcher), reconnu grâce au catalogue.
+/// Manually added game (outside a launcher), recognized from the catalog.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ManualGame {
-    /// Identifiant Steam du jeu s'il en a un, sinon identifiant dérivé du
-    /// profil (voir `games::manual_app_id`).
+    /// The game's Steam id if it has one, else an id derived from the
+    /// profile (see `games::manual_app_id`).
     pub app_id: u32,
-    /// Profil du catalogue (ex. `hollow-knight-silksong`).
+    /// Catalog profile (e.g. `hollow-knight-silksong`).
     pub profile_id: String,
     pub path: String,
     pub added_at: i64,
@@ -184,7 +184,7 @@ impl State {
         Ok(Self { conn })
     }
 
-    /// Mods installés dans `game`, loader en tête puis par nom.
+    /// Mods installed in `game`, loader first, then by name.
     pub fn list(&self, game: &str) -> Result<Vec<InstalledMod>, StateError> {
         let mut stmt = self.conn.prepare(
             "SELECT * FROM installed_mods WHERE game = ?1
@@ -212,7 +212,7 @@ impl State {
             .transpose()
     }
 
-    /// Jeux qui ont au moins un mod installé.
+    /// Games that have at least one mod installed.
     pub fn games(&self) -> Result<Vec<String>, StateError> {
         let mut stmt = self
             .conn
@@ -221,8 +221,8 @@ impl State {
         Ok(rows.collect::<Result<_, _>>()?)
     }
 
-    /// `id` est-il installé dans au moins un jeu ? Le cache des archives
-    /// est commun à tous les jeux.
+    /// Is `id` installed in at least one game? The archive cache is shared
+    /// by every game.
     pub fn installed_anywhere(&self, id: &str) -> Result<bool, StateError> {
         Ok(self
             .conn
@@ -235,7 +235,7 @@ impl State {
             .is_some())
     }
 
-    /// Enregistre plusieurs mods d'un coup : tout ou rien.
+    /// Records several mods at once: all or nothing.
     pub fn save_all(&mut self, mods: &[InstalledMod]) -> Result<(), StateError> {
         let tx = self.conn.transaction()?;
         for m in mods {
@@ -274,7 +274,7 @@ impl State {
         self.save_all(std::slice::from_ref(m))
     }
 
-    /// Le stockage des mods a été déplacé : réécrit les chemins enregistrés.
+    /// The mod storage moved: rewrites the recorded paths.
     pub fn rebase_store(&mut self, old: &Path, new: &Path) -> Result<(), StateError> {
         self.conn.execute(
             "UPDATE installed_mods SET store_dir = ?2 || substr(store_dir, length(?1) + 1)
@@ -284,8 +284,8 @@ impl State {
         Ok(())
     }
 
-    /// Garde `m` comme version précédente de son mod, avec au plus
-    /// `KEPT_VERSIONS` autres, les plus récentes.
+    /// Keeps `m` as a previous version of its mod, with at most
+    /// `KEPT_VERSIONS` others, the most recent ones.
     pub fn push_previous(&mut self, m: &InstalledMod, replaced_at: i64) -> Result<(), StateError> {
         let tx = self.conn.transaction()?;
         tx.execute(
@@ -313,7 +313,7 @@ impl State {
         Ok(())
     }
 
-    /// Versions précédentes d'un mod, la plus récente en tête.
+    /// Previous versions of a mod, the most recent first.
     pub fn previous(&self, game: &str, id: &str) -> Result<Vec<PreviousVersion>, StateError> {
         let mut stmt = self.conn.prepare(
             "SELECT package, version, sha256, installed_at, replaced_at, files, placements, edits
@@ -354,7 +354,7 @@ impl State {
         Ok(())
     }
 
-    /// Oublie toutes les versions précédentes d'un mod.
+    /// Forgets every previous version of a mod.
     pub fn forget_previous(&mut self, game: &str, id: &str) -> Result<(), StateError> {
         self.conn.execute(
             "DELETE FROM previous_versions WHERE game = ?1 AND id = ?2",
@@ -363,7 +363,7 @@ impl State {
         Ok(())
     }
 
-    /// Oublie les versions précédentes de tous les mods d'un jeu.
+    /// Forgets the previous versions of every mod of a game.
     pub fn forget_game_previous(&mut self, game: &str) -> Result<(), StateError> {
         self.conn.execute(
             "DELETE FROM previous_versions WHERE game = ?1",
@@ -372,9 +372,9 @@ impl State {
         Ok(())
     }
 
-    /// Ce que le stockage doit garder, tous jeux confondus : les paquets
-    /// des mods installés et de leurs versions précédentes, et les configs
-    /// modifiées.
+    /// What the storage must keep, across all games: the packages of the
+    /// installed mods and of their previous versions, and the edited
+    /// configs.
     pub fn referenced(&self) -> Result<(HashSet<String>, HashSet<String>), StateError> {
         let mut packages = HashSet::new();
         let mut blobs = HashSet::new();
@@ -394,7 +394,7 @@ impl State {
         Ok((packages, blobs))
     }
 
-    /// Changements en attente de la fermeture du jeu, dans l'ordre.
+    /// Changes waiting for the game to close, in order.
     pub fn pending(&self, game: &str) -> Result<Vec<PendingOp>, StateError> {
         let ops: Option<String> = self
             .conn
@@ -438,7 +438,7 @@ impl State {
         Ok(rows.collect::<Result<_, _>>()?)
     }
 
-    /// Ajoute (ou remplace, si le jeu change de dossier) un jeu manuel.
+    /// Adds (or replaces, if the game moved) a manual game.
     pub fn save_manual_game(&mut self, game: &ManualGame) -> Result<(), StateError> {
         self.conn.execute(
             "INSERT OR REPLACE INTO manual_games VALUES (?1, ?2, ?3, ?4)",
@@ -455,8 +455,8 @@ impl State {
         Ok(())
     }
 
-    /// Réglage de l'appli (ex. la clé API Nexus de l'utilisateur, qui ne
-    /// quitte jamais sa machine).
+    /// App setting (e.g. the user's Nexus API key, which never leaves their
+    /// machine).
     pub fn setting(&self, key: &str) -> Result<Option<String>, StateError> {
         Ok(self
             .conn
@@ -468,7 +468,7 @@ impl State {
             .optional()?)
     }
 
-    /// `None` retire le réglage.
+    /// `None` removes the setting.
     pub fn set_setting(&mut self, key: &str, value: Option<&str>) -> Result<(), StateError> {
         match value {
             Some(value) => self.conn.execute(
@@ -491,8 +491,8 @@ impl State {
     }
 }
 
-/// Ligne brute : le déploiement (JSON) est décodé ensuite, pour que son
-/// erreur éventuelle ne soit pas confondue avec une erreur SQL.
+/// Raw row: the deployment (JSON) is decoded afterwards, so that a possible
+/// error there isn't mistaken for an SQL error.
 struct Row {
     m: InstalledMod,
     deployment: String,
@@ -512,7 +512,7 @@ impl Row {
     }
 }
 
-/// Bases créées par une version précédente : colonnes ajoutées depuis.
+/// Databases created by a previous version: columns added since.
 fn migrate(conn: &Connection) -> rusqlite::Result<()> {
     for (column, default) in [
         ("placements", "'[]'"),

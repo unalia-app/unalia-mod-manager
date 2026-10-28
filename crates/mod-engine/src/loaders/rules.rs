@@ -1,20 +1,20 @@
-//! Adaptateur générique piloté par les `installRules` du schéma Thunderstore
-//! (ceux de l'installeur historique d'r2modman). Un jeu y décrit ses
-//! dossiers de mods ; aucun code par jeu.
+//! Generic adapter driven by the `installRules` of the Thunderstore schema
+//! (the ones from r2modman's legacy installer). A game describes its mod
+//! folders there; no per-game code.
 //!
-//! Pour chaque fichier d'un paquet, la destination se décide ainsi :
-//! 1. un dossier du paquet porte le nom d'une route (`plugins/`, `Mods/`,
-//!    `UserData/`…) : son contenu va dans cette route ;
-//! 2. sinon, l'extension correspond à une route (`.dll` → `Mods`) ; la plus
-//!    longue gagne (`.lib.dll` avant `.dll`) ;
-//! 3. sinon, la route par défaut du jeu.
+//! For each file of a package, the destination is decided this way:
+//! 1. a folder of the package has the name of a route (`plugins/`, `Mods/`,
+//!    `UserData/`…): its content goes into that route;
+//! 2. else, the extension matches a route (`.dll` to `Mods`); the longest
+//!    wins (`.lib.dll` before `.dll`);
+//! 3. else, the game's default route.
 //!
-//! Puis le mode de suivi de la route dit comment ranger :
-//! - `subdir` : `route/<mod>/<chemin>` (chaque mod dans son dossier) ;
-//! - `subdir-no-flatten` : pareil, en gardant le chemin complet du paquet ;
-//! - `none` et `state` : `route/<chemin>`, sans sous-dossier (réglages,
-//!   bibliothèques partagées). Modalia suit de toute façon chaque fichier
-//!   posé, et un fichier déjà présent n'est jamais écrasé.
+//! Then the route's tracking mode says how to store it:
+//! - `subdir`: `route/<mod>/<path>` (each mod in its own folder);
+//! - `subdir-no-flatten`: same, keeping the full package path;
+//! - `none` and `state`: `route/<path>`, without a subfolder (settings,
+//!   shared libraries). Modalia tracks every placed file anyway, and a file
+//!   already there is never overwritten.
 
 use std::path::Path;
 
@@ -29,7 +29,7 @@ pub enum Tracking {
     SubdirNoFlatten,
     None,
     State,
-    /// L'archive est posée telle quelle (Godot). Pas encore géré.
+    /// The archive is placed as is (Godot). Not handled yet.
     PackageZip,
     #[serde(other)]
     Unknown,
@@ -37,24 +37,24 @@ pub enum Tracking {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct InstallRule {
-    /// Dossier relatif au jeu, ex. `BepInEx/plugins`.
+    /// Folder relative to the game, e.g. `BepInEx/plugins`.
     pub route: String,
-    /// Extensions envoyées ici par défaut, ex. `.dll`, `.lib.dll`.
+    /// Extensions sent here by default, e.g. `.dll`, `.lib.dll`.
     pub extensions: Vec<String>,
     pub tracking: Tracking,
-    /// Route des fichiers qu'aucune autre règle ne réclame.
+    /// Route for the files no other rule claims.
     pub default: bool,
 }
 
-/// Règles d'un jeu, prêtes à servir.
+/// A game's rules, ready to use.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct InstallRules {
     pub rules: Vec<InstallRule>,
-    /// Fichiers du paquet à ne jamais installer (racine du paquet).
+    /// Package files never to install (package root).
     pub exclusions: Vec<String>,
 }
 
-/// Métadonnées Thunderstore à la racine d'un paquet : jamais installées.
+/// Thunderstore metadata at a package root: never installed.
 const METADATA: [&str; 7] = [
     "manifest.json",
     "icon.png",
@@ -66,7 +66,7 @@ const METADATA: [&str; 7] = [
 ];
 
 impl InstallRules {
-    /// Toutes les routes sont-elles gérées par Modalia ?
+    /// Are all routes handled by Modalia?
     pub fn installable(&self) -> bool {
         !self.rules.is_empty()
             && self.rules.iter().any(|r| r.default)
@@ -76,8 +76,8 @@ impl InstallRules {
                 .all(|r| !matches!(r.tracking, Tracking::PackageZip | Tracking::Unknown))
     }
 
-    /// Conventions de MelonLoader, pour les jeux « recursive-melonloader »
-    /// dont le schéma ne détaille pas les règles.
+    /// MelonLoader conventions, for "recursive-melonloader" games whose
+    /// schema doesn't detail the rules.
     pub fn melonloader_defaults() -> Self {
         let rule = |route: &str, extensions: &[&str], tracking, default| InstallRule {
             route: route.to_owned(),
@@ -103,9 +103,9 @@ impl InstallRules {
             || self.exclusions.iter().any(|e| e.eq_ignore_ascii_case(name))
     }
 
-    /// Route réclamée par un dossier du paquet : le premier dossier (en
-    /// partant de la racine) qui termine une route. Une route longue
-    /// (`Renderer/BepInEx/plugins`) l'emporte si le chemin la reproduit.
+    /// Route claimed by a package folder: the first folder (from the root)
+    /// that ends a route. A long route (`Renderer/BepInEx/plugins`) wins if
+    /// the path mirrors it.
     fn folder_match(&self, folders: &[&str]) -> Option<(&InstallRule, usize)> {
         for (i, folder) in folders.iter().enumerate() {
             let best = self
@@ -117,7 +117,7 @@ impl InstallRules {
                     if !last.eq_ignore_ascii_case(folder) {
                         return None;
                     }
-                    // Nombre de segments de la route que le chemin reproduit.
+                    // Number of route segments that the path mirrors.
                     let depth = route
                         .iter()
                         .rev()
@@ -126,13 +126,13 @@ impl InstallRules {
                         .count();
                     Some((rule, depth))
                 })
-                // À égalité, la première règle du jeu gagne (`rev` : `max_by_key`
-                // garde le dernier des ex æquo).
+                // On a tie, the game's first rule wins (`rev`: `max_by_key`
+                // keeps the last of equal ones).
                 .rev()
                 .max_by_key(|(_, depth)| *depth)
                 .map(|(rule, _)| rule);
             if let Some(rule) = best {
-                // Le contenu qui suit ce dossier va dans la route.
+                // The content after this folder goes into the route.
                 return Some((rule, i + 1));
             }
         }
@@ -159,7 +159,7 @@ impl InstallRules {
             return None;
         }
 
-        // `rest` : chemin sous la route ; `whole` : chemin complet du paquet.
+        // `rest`: path under the route; `whole`: full package path.
         let (rule, rest) = match self.folder_match(folders) {
             Some((rule, consumed)) => (rule, parts[consumed..].join("/")),
             None => match self.extension_match(name) {
@@ -179,8 +179,8 @@ impl InstallRules {
     }
 }
 
-/// Le loader générique d'un jeu : ses règles, et le loader attendu (pour
-/// repérer une installation manuelle).
+/// A game's generic loader: its rules, and the expected loader (to spot a
+/// manual install).
 pub struct RulesLoader<'a> {
     pub loader: &'a str,
     pub rules: &'a InstallRules,
@@ -218,8 +218,8 @@ impl Loader for RulesLoader<'_> {
     }
 }
 
-/// Paquet loader : le contenu de son dossier racine (ou tout le paquet si
-/// la racine est vide, comme MelonLoader) va à la racine du jeu.
+/// Loader package: the content of its root folder (or the whole package if
+/// the root is empty, like MelonLoader) goes to the game root.
 pub(super) fn loader_target(
     rules: &InstallRules,
     source: &str,

@@ -1,7 +1,7 @@
-//! Affiche les jeux détectés et leur accent, pour vérifier detect et artwork
-//! sur un vrai dossier Steam :
+//! Prints the detected games and their accent color, to check detect and
+//! artwork against a real Steam folder:
 //!
-//!     cargo run -p mod-engine --example scan -- [dossier Steam]
+//!     cargo run -p mod-engine --example scan -- [Steam folder]
 
 use std::path::PathBuf;
 
@@ -14,7 +14,7 @@ fn main() {
         .map(PathBuf::from)
         .or_else(find_steam_root)
     else {
-        eprintln!("Aucun dossier Steam trouvé.");
+        eprintln!("No Steam folder found.");
         std::process::exit(1);
     };
 

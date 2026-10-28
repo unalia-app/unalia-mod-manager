@@ -1,5 +1,5 @@
-//! Téléchargements de gros fichiers contre un vrai serveur HTTP local qui
-//! gère les requêtes de plage et sait couper la connexion en plein envoi.
+//! Big file downloads against a real local HTTP server that handles range
+//! requests and can drop the connection mid-transfer.
 
 use std::io::{BufRead, BufReader, Write};
 use std::net::{TcpListener, TcpStream};
@@ -9,13 +9,13 @@ use std::thread;
 
 use mod_engine::download::{self, DownloadError, Options};
 
-/// Comportement du faux serveur.
+/// Behavior of the fake server.
 #[derive(Clone, Copy)]
 struct Behavior {
-    /// Accepte les requêtes de plage.
+    /// Accepts range requests.
     ranges: bool,
-    /// Les requêtes n° `from..to` (la sonde est la n° 0) sont coupées après
-    /// `after` octets.
+    /// Requests number `from..to` (the probe is number 0) are dropped after
+    /// `after` bytes.
     drop_requests: (usize, usize),
     drop_after: u64,
 }
@@ -33,7 +33,7 @@ impl Default for Behavior {
 struct Server {
     url: String,
     requests: Arc<AtomicUsize>,
-    /// Octets de contenu réellement envoyés.
+    /// Content bytes actually sent.
     served: Arc<AtomicU64>,
 }
 
@@ -114,11 +114,11 @@ fn handle(
         served.fetch_add(limit as u64, Ordering::SeqCst);
     }
     let _ = stream.flush();
-    // Coupure : on ferme sans avoir tout envoyé.
+    // Drop: close without sending everything.
 }
 
 fn data(size: usize) -> Arc<Vec<u8>> {
-    // Contenu non trivial pour qu'un morceau mal placé se voie.
+    // Non-trivial content so that a misplaced chunk shows.
     Arc::new((0..size).map(|i| (i * 31 % 251) as u8).collect())
 }
 
@@ -152,7 +152,7 @@ async fn large_files_download_in_parallel_parts() {
         &dest,
         &options(4),
         |received, total| {
-            assert!(received >= last, "la progression ne recule jamais");
+            assert!(received >= last, "progress never goes back");
             assert_eq!(total, Some(content.len() as u64));
             last = received;
         },
@@ -166,7 +166,7 @@ async fn large_files_download_in_parallel_parts() {
     assert_eq!(
         server.requests.load(Ordering::SeqCst),
         5,
-        "une sonde puis 4 morceaux"
+        "a probe then 4 chunks"
     );
     assert!(!dest.with_extension("part").exists());
     assert!(!dest.with_extension("part.json").exists());
@@ -175,7 +175,7 @@ async fn large_files_download_in_parallel_parts() {
 #[tokio::test(flavor = "multi_thread")]
 async fn dropped_connections_are_retried_where_they_stopped() {
     let content = data(2 * 1024 * 1024);
-    // Les 4 premiers morceaux sont coupés à 100 Ko : chacun doit reprendre.
+    // The first 4 chunks are dropped at 100 KB: each must resume.
     let server = serve(
         content.clone(),
         Behavior {
@@ -198,7 +198,7 @@ async fn dropped_connections_are_retried_where_they_stopped() {
     .unwrap();
 
     assert_eq!(std::fs::read(&dest).unwrap(), *content);
-    // Rien n'a été retéléchargé deux fois (à la sonde près).
+    // Nothing was downloaded twice (apart from the probe).
     assert!(server.served.load(Ordering::SeqCst) <= content.len() as u64 + 1);
 }
 
@@ -226,7 +226,7 @@ async fn servers_without_ranges_get_a_single_stream() {
     .unwrap();
 
     assert_eq!(std::fs::read(&dest).unwrap(), *content);
-    assert_eq!(server.requests.load(Ordering::SeqCst), 1, "la sonde suffit");
+    assert_eq!(server.requests.load(Ordering::SeqCst), 1, "the probe is enough");
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -235,8 +235,8 @@ async fn an_interrupted_download_resumes_on_the_next_try() {
     let dir = tempfile::tempdir().unwrap();
     let dest = dir.path().join("mod.zip");
 
-    // Premier essai : toutes les connexions coupent, sans nouvelle tentative
-    // (Modalia fermé, réseau perdu…).
+    // First try: every connection drops, with no retry (Modalia closed,
+    // network lost…).
     let flaky = serve(
         content.clone(),
         Behavior {
@@ -264,11 +264,11 @@ async fn an_interrupted_download_resumes_on_the_next_try() {
     );
     assert!(
         dest.with_extension("part").exists(),
-        "la partie reçue est gardée"
+        "the received part is kept"
     );
     assert!(dest.with_extension("part.json").exists());
 
-    // Second essai : seul ce qui manquait est demandé.
+    // Second try: only what was missing is requested.
     let healthy = serve(content.clone(), Behavior::default());
     download::download(
         &reqwest::Client::new(),
@@ -283,7 +283,7 @@ async fn an_interrupted_download_resumes_on_the_next_try() {
     let resent = healthy.served.load(Ordering::SeqCst);
     assert!(
         resent < content.len() as u64 - 1024 * 1024,
-        "{resent} octets renvoyés : la reprise doit éviter le déjà-reçu"
+        "{resent} bytes sent again: resuming must skip what was already received"
     );
 }
 
@@ -336,7 +336,7 @@ async fn oversized_files_are_refused_before_downloading() {
     assert_eq!(
         server.served.load(Ordering::SeqCst),
         1,
-        "seule la sonde a été envoyée"
+        "only the probe was sent"
     );
 }
 
@@ -369,10 +369,10 @@ async fn a_cancelled_download_stops_and_resumes_later() {
     assert!(!dest.exists());
     assert!(
         dest.with_extension("part").exists(),
-        "ce qui est arrivé est gardé"
+        "what arrived is kept"
     );
 
-    // Relancé plus tard : il reprend et termine.
+    // Started again later: it resumes and finishes.
     download::download(
         &reqwest::Client::new(),
         &server.url,

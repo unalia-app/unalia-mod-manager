@@ -1,13 +1,13 @@
-//! Brique **store** : chaque fichier des mods rangé une seule fois, sous son
-//! empreinte, comme le store de pnpm.
+//! **store** block: each mod file stored only once, under its hash, like
+//! pnpm's store.
 //!
-//! - `files/ab/cdef…` : le contenu, nommé par son SHA-256. Deux versions,
-//!   deux mods ou deux jeux qui ont le même fichier le partagent.
-//! - `packages/<jeu>/<mod>/<version>.json` : une version extraite, la liste
-//!   « chemin dans le paquet → empreinte ». Garder une ancienne version ne
-//!   coûte que ses fichiers propres, et y revenir ne retélécharge rien.
+//! - `files/ab/cdef…`: the content, named by its SHA-256. Two versions, two
+//!   mods or two games that have the same file share it.
+//! - `packages/<game>/<mod>/<version>.json`: an extracted version, the list
+//!   "path in the package to hash". Keeping an old version only costs its
+//!   own files, and going back to it downloads nothing again.
 //!
-//! Un fichier ne part que quand plus aucun paquet ne s'en sert (`gc`).
+//! A file only goes once no package uses it anymore (`gc`).
 
 use std::collections::{BTreeMap, HashSet};
 use std::fs::{self, File};
@@ -20,20 +20,20 @@ use serde::{Deserialize, Serialize};
 
 use crate::download::sha256_file;
 
-/// Un paquet que rien n'utilise encore (préparé pendant une partie, premier
-/// fichier d'un choix multiple Nexus) est gardé ce temps-là.
+/// A package that nothing uses yet (prepared during a session, first file
+/// of a Nexus multiple choice) is kept this long.
 const GRACE: Duration = Duration::from_secs(24 * 60 * 60);
 
-/// Ranger un paquet et faire le ménage ne se croisent pas : le ménage
-/// pourrait retirer un fichier qu'un paquet en cours d'écriture réutilise.
+/// Storing a package and cleaning up never overlap: the cleanup could
+/// remove a file that a package being written reuses.
 static LOCK: Mutex<()> = Mutex::new(());
 
-/// Une version extraite d'un mod.
+/// An extracted version of a mod.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Manifest {
-    /// Empreinte de l'archive téléchargée.
+    /// Hash of the downloaded archive.
     pub sha256: String,
-    /// Chemin dans le paquet (séparateur `/`) → contenu.
+    /// Path in the package (`/` separator) to content.
     pub files: BTreeMap<String, Entry>,
 }
 
@@ -43,7 +43,7 @@ pub struct Entry {
     pub size: u64,
 }
 
-/// Ce que le ménage a libéré.
+/// What the cleanup freed.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub struct Freed {
     pub files: usize,
@@ -60,7 +60,7 @@ impl Store {
         Self { root: root.into() }
     }
 
-    /// Fichier du stockage pour un contenu.
+    /// Storage file for a content.
     pub fn blob(&self, hash: &str) -> PathBuf {
         let (head, rest) = hash.split_at(hash.len().min(2));
         self.root.join("files").join(head).join(rest)
@@ -70,8 +70,8 @@ impl Store {
         self.root.join("packages").join(format!("{key}.json"))
     }
 
-    /// Le paquet `key` est-il déjà rangé ? Le dire le protège du ménage
-    /// pour un nouveau délai : il va servir.
+    /// Is the package `key` already stored? Saying so protects it from the
+    /// cleanup for another grace period: it is about to be used.
     pub fn has(&self, key: &str) -> bool {
         let path = self.manifest_path(key);
         match File::options().append(true).open(&path) {
@@ -106,8 +106,8 @@ impl Store {
         fs::rename(&tmp, &path)
     }
 
-    /// Dossier de travail vide, sur le même disque que le stockage : ce
-    /// qu'on y extrait rejoint le stockage sans copie.
+    /// Empty work folder, on the same drive as the storage: what gets
+    /// extracted there joins the storage without a copy.
     pub fn scratch(&self) -> io::Result<PathBuf> {
         let dir = self
             .root
@@ -117,8 +117,8 @@ impl Store {
         Ok(dir)
     }
 
-    /// Range le contenu de `dir` sous `key`, puis retire `dir`. Un fichier
-    /// déjà présent n'est pas gardé deux fois.
+    /// Stores the content of `dir` under `key`, then removes `dir`. A file
+    /// already present is not kept twice.
     pub fn ingest(&self, key: &str, dir: &Path, sha256: &str) -> io::Result<Manifest> {
         let mut manifest = Manifest {
             sha256: sha256.to_owned(),
@@ -135,23 +135,23 @@ impl Store {
         Ok(manifest)
     }
 
-    /// Déplace `file` dans le stockage. Avec `copy`, le contenu rangé est
-    /// une copie : `file` peut être lié dans un jeu (ancien stockage), où
-    /// une config réécrite sur place changerait aussi le contenu rangé.
+    /// Moves `file` into the storage. With `copy`, the stored content is a
+    /// copy: `file` may be linked into a game (old storage), where a config
+    /// rewritten in place would also change the stored content.
     fn take(&self, file: &Path, copy: bool) -> io::Result<Entry> {
         let size = fs::metadata(file)?.len();
         let hash = sha256_file(file)?;
         let blob = self.blob(&hash);
-        // Même taille : le même contenu est déjà là. Sinon, la copie rangée
-        // a été modifiée sur place (avant la règle des fichiers de config) :
-        // elle est remplacée par l'original.
+        // Same size: the same content is already there. Otherwise, the
+        // stored copy was edited in place (before the config file rule): it
+        // is replaced by the original.
         if !fs::metadata(&blob).is_ok_and(|m| m.len() == size) {
             if let Some(parent) = blob.parent() {
                 fs::create_dir_all(parent)?;
             }
             if copy || fs::rename(file, &blob).is_err() {
-                // Copie à côté puis renommage : un fichier rangé lié dans un
-                // jeu n'est jamais réécrit sur place.
+                // Copy next to it then rename: a stored file linked into a
+                // game is never rewritten in place.
                 let tmp = blob.with_extension("partial");
                 fs::copy(file, &tmp)?;
                 fs::rename(&tmp, &blob)?;
@@ -163,8 +163,8 @@ impl Store {
         }
     }
 
-    /// Range une copie de `file` (une config modifiée par le joueur), qui
-    /// reste où elle est.
+    /// Stores a copy of `file` (a config edited by the player), which stays
+    /// where it is.
     pub fn add_copy(&self, file: &Path) -> io::Result<Entry> {
         let _guard = LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let dir = self.scratch()?;
@@ -175,8 +175,8 @@ impl Store {
         entry
     }
 
-    /// Retire les paquets de `prefix` (un jeu, ou un mod d'un jeu). Leurs
-    /// fichiers partent au prochain ménage.
+    /// Removes the packages of `prefix` (a game, or a mod of a game). Their
+    /// files go at the next cleanup.
     pub fn remove_packages(&self, prefix: &str) -> io::Result<()> {
         match fs::remove_dir_all(self.root.join("packages").join(prefix)) {
             Err(e) if e.kind() != io::ErrorKind::NotFound => Err(e),
@@ -184,8 +184,7 @@ impl Store {
         }
     }
 
-    /// Place qu'occupent les paquets de `prefix`, chaque fichier compté une
-    /// fois.
+    /// Space taken by the packages of `prefix`, each file counted once.
     pub fn size_of(&self, prefix: &str) -> u64 {
         let mut seen = HashSet::new();
         let mut size = 0;
@@ -199,9 +198,9 @@ impl Store {
         size
     }
 
-    /// Ménage : retire les paquets que rien ne garde (`packages`, clés
-    /// enregistrées dans la base) passé le délai de grâce, puis les fichiers
-    /// qu'aucun paquet restant ni `blobs` (configs modifiées) n'utilise.
+    /// Cleanup: removes the packages that nothing keeps (`packages`, keys
+    /// recorded in the database) after the grace period, then the files
+    /// that no remaining package nor `blobs` (edited configs) uses.
     pub fn gc(&self, packages: &HashSet<String>, blobs: &HashSet<String>) -> io::Result<Freed> {
         let _guard = LOCK.lock().unwrap_or_else(|e| e.into_inner());
         let root = self.root.join("packages");
@@ -237,7 +236,7 @@ impl Store {
                 remove_empty_parents(&blob, &files);
             }
         }
-        // Restes d'une extraction interrompue (appli fermée en plein milieu).
+        // Leftovers of an interrupted extraction (app closed halfway).
         if let Ok(entries) = fs::read_dir(self.root.join("tmp")) {
             for entry in entries.flatten() {
                 let old = entry
@@ -265,7 +264,7 @@ impl Store {
     }
 }
 
-/// Clé d'un paquet d'après le chemin de son manifeste.
+/// Key of a package, from the path of its manifest.
 fn key_of(root: &Path, manifest: &Path) -> Option<String> {
     let rel = manifest.strip_prefix(root).ok()?;
     let key = slash(rel);
@@ -282,7 +281,7 @@ fn remove_empty_parents(path: &Path, root: &Path) {
     }
 }
 
-/// Fichiers sous `dir`, triés : (chemin relatif en `/`, chemin complet).
+/// Files under `dir`, sorted: (relative path with `/`, full path).
 fn walk(dir: &Path) -> io::Result<Vec<(String, PathBuf)>> {
     fn go(root: &Path, dir: &Path, out: &mut Vec<(String, PathBuf)>) -> io::Result<()> {
         for entry in fs::read_dir(dir)? {
@@ -312,9 +311,9 @@ fn slash(path: &Path) -> String {
         .join("/")
 }
 
-/// Fichier qu'un mod ou le jeu réécrit sur place (BepInEx enregistre ses
-/// `.cfg` ainsi) : il est copié dans le jeu, jamais lié, sinon l'écriture
-/// changerait le contenu rangé et tous les paquets qui le partagent.
+/// File that a mod or the game rewrites in place (BepInEx saves its `.cfg`
+/// files this way): it is copied into the game, never linked, or the write
+/// would change the stored content and every package that shares it.
 pub fn is_editable(path: &str, size: u64) -> bool {
     const EXTENSIONS: &[&str] = &[
         "cfg",

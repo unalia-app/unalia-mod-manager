@@ -1,14 +1,14 @@
-//! Brique **resolver** : de « je veux ce mod » à la liste ordonnée de ce
-//! qu'il faut installer.
+//! **resolver** block: from "I want this mod" to the ordered list of what
+//! needs to be installed.
 //!
-//! - dépendances d'abord, le mod demandé en dernier ;
-//! - chaque paquet une seule fois, même s'il est requis par plusieurs mods ;
-//! - ce qui est déjà installé dans une version suffisante est sauté ;
-//! - **un seul loader** : certains jeux ont plusieurs paquets loader
-//!   concurrents (Silksong : `BepInEx-BepInExPack_Silksong` et
-//!   `silksong_modding-BepInExPack_Silksong`). Le premier rencontré (ou
-//!   celui déjà installé) satisfait toutes les demandes de loader ;
-//! - les cycles et les arbres démesurés sont refusés.
+//! - dependencies first, the requested mod last;
+//! - each package once, even if several mods require it;
+//! - what is already installed in a recent enough version is skipped;
+//! - **a single loader**: some games have several competing loader packages
+//!   (Silksong: `BepInEx-BepInExPack_Silksong` and
+//!   `silksong_modding-BepInExPack_Silksong`). The first one met (or the one
+//!   already installed) satisfies every loader request;
+//! - cycles and oversized trees are refused.
 
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
@@ -16,7 +16,7 @@ use std::future::Future;
 
 use crate::sources::{Mod, ModVersion, SourceError};
 
-/// Au-delà, l'arbre est anormal (ou malveillant) : on arrête.
+/// Beyond this, the tree is abnormal (or malicious): we stop.
 const MAX_PACKAGES: usize = 250;
 
 #[derive(Debug, Clone, PartialEq)]
@@ -24,30 +24,30 @@ pub struct PlanStep {
     pub id: String,
     pub name: String,
     pub version: ModVersion,
-    /// Paquet loader (s'installe à la racine du jeu).
+    /// Loader package (installs at the game root).
     pub loader: bool,
-    /// Déjà installé dans une version plus ancienne : mise à jour.
+    /// Already installed in an older version: update.
     pub replaces: Option<String>,
 }
 
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct InstallPlan {
-    /// Dans l'ordre d'installation.
+    /// In install order.
     pub steps: Vec<PlanStep>,
 }
 
 impl InstallPlan {
-    /// Ce que l'utilisateur voit comme « + N dépendances ».
+    /// What the user sees as "+ N dependencies".
     pub fn dependency_count(&self) -> usize {
         self.steps.len().saturating_sub(1)
     }
 }
 
-/// Ce qui est déjà dans le jeu : identifiant → version installée.
+/// What is already in the game: id to installed version.
 #[derive(Debug, Clone, Default)]
 pub struct Installed {
     pub versions: HashMap<String, String>,
-    /// Paquet loader déjà installé, s'il y en a un.
+    /// Loader package already installed, if any.
     pub loader: Option<String>,
 }
 
@@ -74,9 +74,9 @@ pub enum ResolveError {
     TooMany,
 }
 
-/// Calcule le plan d'installation de `root`. `fetch` donne la fiche d'un
-/// paquet (source de mods), `is_loader` dit si un paquet est un loader
-/// (catalogue de jeux).
+/// Computes the install plan of `root`. `fetch` gives a package's page (mod
+/// source), `is_loader` says whether a package is a loader (game
+/// catalog).
 pub async fn resolve<F, Fut>(
     root: &str,
     installed: &Installed,
@@ -105,16 +105,16 @@ struct State<'a, L> {
     is_loader: &'a L,
     loader: Option<String>,
     planned: HashSet<String>,
-    /// Pile du parcours en cours, pour détecter les cycles.
+    /// Stack of the current walk, to detect cycles.
     visiting: Vec<String>,
     cache: HashMap<String, Mod>,
     steps: Vec<PlanStep>,
 }
 
 impl<L: Fn(&str) -> bool> State<'_, L> {
-    /// Parcours en profondeur, post-ordre : les dépendances d'un paquet sont
-    /// ajoutées avant lui. `required` : version minimale demandée par le
-    /// parent (`None` pour le mod demandé).
+    /// Depth-first walk, post-order: a package's dependencies are added
+    /// before it. `required`: minimum version asked by the parent (`None`
+    /// for the requested mod).
     async fn visit<F, Fut>(
         &mut self,
         id: String,
@@ -127,7 +127,7 @@ impl<L: Fn(&str) -> bool> State<'_, L> {
     {
         let loader = (self.is_loader)(&id);
         if loader && self.loader.as_ref().is_some_and(|chosen| chosen != &id) {
-            // Un autre loader est déjà là ou prévu : il fait l'affaire.
+            // Another loader is already there or planned: it will do.
             return Ok(());
         }
         if self.planned.contains(&id) {
@@ -172,7 +172,7 @@ impl<L: Fn(&str) -> bool> State<'_, L> {
                 available: version.number,
             });
         }
-        // Le mod demandé déjà installé à jour : rien à faire.
+        // The requested mod is already installed and up to date: nothing to do.
         if required.is_none()
             && self
                 .installed
@@ -209,8 +209,8 @@ impl<L: Fn(&str) -> bool> State<'_, L> {
     }
 }
 
-/// Compare deux numéros `1.2.3` composante par composante (numérique),
-/// ce que fait Thunderstore. Ce qui n'est pas un nombre compte pour 0.
+/// Compares two `1.2.3` numbers component by component (numerically), as
+/// Thunderstore does. Anything that isn't a number counts as 0.
 pub fn compare_versions(a: &str, b: &str) -> Ordering {
     let parse = |v: &str| -> Vec<u64> { v.split('.').map(|p| p.parse().unwrap_or(0)).collect() };
     let (a, b) = (parse(a), parse(b));

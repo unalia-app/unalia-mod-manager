@@ -1,7 +1,7 @@
-//! Brique **sources** : catalogues de mods.
+//! **sources** block: mod catalogs.
 //!
-//! Chaque source traduit son catalogue dans un format de mod neutre
-//! (SPEC §6.5), le seul que connaissent le reste du moteur et l'interface.
+//! Each source translates its catalog into a neutral mod format, the only
+//! one that the rest of the engine and the UI know.
 
 pub mod github;
 pub mod nexus;
@@ -12,11 +12,11 @@ use std::future::Future;
 
 use serde::Serialize;
 
-/// Identifiant d'un mod, unique dans sa source. Thunderstore :
-/// `namespace-nom`, ex. `Bigfootmech-Silksong_Skip_Intro`.
+/// A mod's id, unique within its source. Thunderstore: `namespace-name`,
+/// e.g. `Bigfootmech-Silksong_Skip_Intro`.
 pub type ModId = String;
 
-/// Ce qu'affiche une carte de la grille Découvrir.
+/// What a card of the Discover grid shows.
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ModSummary {
@@ -30,12 +30,12 @@ pub struct ModSummary {
     pub downloads: u64,
     /// Date ISO 8601.
     pub updated_at: String,
-    /// Mis en avant par la source (souvent les loaders et bibliothèques).
+    /// Featured by the source (often loaders and libraries).
     pub pinned: bool,
     pub deprecated: bool,
 }
 
-/// Fiche complète d'un mod (page de détail, installation).
+/// Full page of a mod (detail page, install).
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Mod {
@@ -48,13 +48,13 @@ pub struct Mod {
     pub categories: Vec<String>,
     pub downloads: Option<u64>,
     pub updated_at: String,
-    /// Page du mod sur la source : toujours accessible (SPEC §2.4).
+    /// The mod's page on the source: always reachable.
     pub source_url: String,
     pub website_url: Option<String>,
-    /// Lien de don de l'auteur (Ko-fi, Patreon…), s'il en a publié un.
+    /// The author's donation link (Ko-fi, Patreon…), if they published one.
     pub donation_url: Option<String>,
     pub deprecated: bool,
-    /// Versions, la plus récente en premier.
+    /// Versions, the most recent first.
     pub versions: Vec<ModVersion>,
 }
 
@@ -70,32 +70,31 @@ pub struct ModVersion {
     pub number: String,
     pub published_at: String,
     pub download_url: String,
-    /// Empreinte fournie par la source, si elle en publie une.
-    /// Thunderstore n'en publie pas : Modalia calcule la sienne au
-    /// téléchargement et la conserve.
+    /// Hash provided by the source, if it publishes one. Thunderstore
+    /// doesn't: Modalia computes its own at download time and keeps it.
     pub sha256: Option<String>,
     pub size: Option<u64>,
     pub dependencies: Vec<Dependency>,
 }
 
-/// Dépendance déclarée par une version.
+/// Dependency declared by a version.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Dependency {
     pub id: ModId,
-    /// Version minimale demandée (convention Thunderstore : on installe la
-    /// plus récente si elle est supérieure).
+    /// Minimum version asked (Thunderstore convention: we install the most
+    /// recent one if it is higher).
     pub min_version: String,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub enum Sort {
-    /// Les mieux notés par la communauté (Thunderstore : votes, Nexus :
+    /// The best rated by the community (Thunderstore: votes, Nexus:
     /// endorsements).
     #[default]
     Popular,
-    /// Les plus téléchargés.
+    /// The most downloaded.
     Downloads,
     Newest,
     Updated,
@@ -105,11 +104,11 @@ pub enum Sort {
 pub struct SearchQuery {
     pub text: String,
     pub sort: Sort,
-    /// À partir de 1.
+    /// Starts at 1.
     pub page: u32,
-    /// Inclure les bibliothèques techniques. Par défaut non : elles
-    /// trustent les « populaires » (tout le monde en dépend) alors que
-    /// Modalia les installe tout seul comme dépendances.
+    /// Include technical libraries. Off by default: they crowd the
+    /// "popular" list (everyone depends on them) while Modalia installs
+    /// them by itself as dependencies.
     pub include_libraries: bool,
 }
 
@@ -149,8 +148,8 @@ pub enum SourceError {
     },
 }
 
-/// Un catalogue de mods. `game` est l'identifiant du jeu propre à la source
-/// (Thunderstore : la communauté, ex. `hollow-knight-silksong`).
+/// A mod catalog. `game` is the source's own game id (Thunderstore: the
+/// community, e.g. `hollow-knight-silksong`).
 pub trait ModSource {
     fn name(&self) -> &'static str;
 
@@ -162,8 +161,8 @@ pub trait ModSource {
 
     fn get(&self, game: &str, id: &str) -> impl Future<Output = Result<Mod, SourceError>> + Send;
 
-    /// Description longue, en Markdown brut de la source : à nettoyer avant
-    /// tout affichage (SPEC §7, jamais de HTML brut).
+    /// Long description, in the source's raw Markdown: sanitize it before
+    /// any display (never raw HTML).
     fn description(
         &self,
         game: &str,

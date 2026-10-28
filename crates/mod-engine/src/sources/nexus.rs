@@ -1,13 +1,12 @@
-//! Source **Nexus Mods** (nexusmods.com).
+//! **Nexus Mods** source (nexusmods.com).
 //!
-//! - Recherche, fiche, fichiers et prérequis : API GraphQL v2, publique.
-//! - Compte et liens de téléchargement : API REST v1, avec la clé API de
-//!   l'utilisateur.
+//! - Search, mod page, files and requirements: public GraphQL v2 API.
+//! - Account and download links: REST v1 API, with the user's API key.
 //!
-//! Nexus réserve le téléchargement direct par l'API aux comptes Premium. Un
-//! compte gratuit clique sur « Mod Manager Download » sur le site, qui
-//! ouvre un lien `nxm://` : ce lien porte une clé temporaire qui autorise
-//! le téléchargement. Modalia ne contourne jamais cette règle.
+//! Nexus keeps direct downloads through the API for Premium accounts. A
+//! free account clicks "Mod Manager Download" on the site, which opens an
+//! `nxm://` link: that link carries a temporary key that allows the
+//! download. Modalia never works around this rule.
 
 use std::collections::HashMap;
 use std::sync::{Arc, RwLock};
@@ -26,10 +25,10 @@ pub const API_URL: &str = "https://api.nexusmods.com/v1";
 const NAME: &str = "Nexus Mods";
 const SOURCE_ID: &str = "nexus";
 const PAGE_SIZE: u32 = 24;
-/// Catégorie des bibliothèques sur Nexus : Modalia les installe tout seul.
+/// Nexus category of libraries: Modalia installs them by itself.
 const LIBRARIES: &str = "Modders Resources";
 
-/// Identifiant Modalia d'un mod Nexus : `nexus-<id>`.
+/// Modalia id of a Nexus mod: `nexus-<id>`.
 pub fn mod_key(mod_id: u32) -> String {
     format!("nexus-{mod_id}")
 }
@@ -39,7 +38,7 @@ pub fn parse_mod_key(key: &str) -> Option<u32> {
     key.strip_prefix("nexus-")?.parse().ok()
 }
 
-/// Communauté Modalia d'un jeu Nexus : `nexus:<domaine>`.
+/// Modalia community of a Nexus game: `nexus:<domain>`.
 pub fn domain_of(community: &str) -> Option<&str> {
     community
         .strip_prefix("nexus:")
@@ -54,7 +53,7 @@ pub struct Account {
     pub avatar_url: Option<String>,
 }
 
-/// Jeu trouvé sur Nexus d'après son nom (`Nexus::find_games`).
+/// Game found on Nexus from its name (`Nexus::find_games`).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FoundGame {
     pub name: String,
@@ -62,13 +61,13 @@ pub struct FoundGame {
     pub game_id: u32,
 }
 
-/// Lien `nxm://<domaine>/mods/<mod>/files/<fichier>?key=…&expires=…`.
+/// Link `nxm://<domain>/mods/<mod>/files/<file>?key=…&expires=…`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NxmLink {
     pub domain: String,
     pub mod_id: u32,
     pub file_id: u32,
-    /// Absents pour un compte Premium.
+    /// Missing for a Premium account.
     pub key: Option<String>,
     pub expires: Option<u64>,
 }
@@ -111,7 +110,7 @@ fn is_token(s: &str) -> bool {
             .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_'))
 }
 
-/// Un fichier téléchargeable d'un mod.
+/// A downloadable file of a mod.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ModFile {
@@ -122,19 +121,19 @@ pub struct ModFile {
     pub category: String,
     pub primary: bool,
     pub size: Option<u64>,
-    /// Secondes depuis l'époque Unix.
+    /// Seconds since the Unix epoch.
     pub uploaded_at: i64,
-    /// Note de l'auteur sur ce fichier (Markdown simple).
+    /// The author's note on this file (simple Markdown).
     pub description: String,
 }
 
-/// Ce qu'il faut savoir d'un mod pour l'installer.
+/// What we need to know about a mod to install it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ModInfo {
     pub mod_id: u32,
     pub name: String,
-    /// Description brute (BBCode) : on y cherche une source officielle de
-    /// l'auteur.
+    /// Raw description (BBCode): we look there for an official source of
+    /// the author.
     pub description: String,
     pub author: String,
     pub version: String,
@@ -144,9 +143,9 @@ pub struct ModInfo {
 }
 
 impl ModInfo {
-    /// Fichier à installer en un clic : le principal, sinon celui que son
-    /// nom désigne comme tel (« Main File », à côté des variantes de
-    /// couleur), sinon le plus récent des fichiers « MAIN ».
+    /// File to install in one click: the main one, else the one whose name
+    /// says so ("Main File", next to the color variants), else the most
+    /// recent of the "MAIN" files.
     pub fn main_file(&self) -> Option<&ModFile> {
         let main = self.files.iter().filter(|f| f.category == "MAIN");
         main.clone()
@@ -159,9 +158,9 @@ impl ModInfo {
             .or_else(|| main.max_by_key(|f| f.uploaded_at))
     }
 
-    /// Fichiers entre lesquels choisir (variantes, options), celui à
-    /// installer d'office en tête. Pour une ancienne version du jeu, chaque
-    /// fichier actuel tel qu'il était avant `before`.
+    /// Files to choose from (variants, options), the one to install by
+    /// default first. For an old version of the game, each current file as
+    /// it was before `before`.
     pub fn choices(&self, before: Option<&str>) -> Vec<&ModFile> {
         let main = self.main_file().map(|f| f.file_id);
         let mut current: Vec<&ModFile> = self
@@ -169,7 +168,7 @@ impl ModInfo {
             .iter()
             .filter(|f| CURRENT.contains(&f.category.as_str()))
             .collect();
-        // Le principal, puis par catégorie, les plus récents d'abord.
+        // The main file, then by category, the most recent first.
         current.sort_by_key(|f| {
             let rank = CURRENT.iter().position(|c| *c == f.category);
             (
@@ -193,9 +192,9 @@ impl ModInfo {
         list
     }
 
-    /// Le même fichier aujourd'hui (mise à jour, réinstallation), ou tel
-    /// qu'il était avant `before` : le plus récent du même nom. Plus de
-    /// fichier de ce nom : celui-ci, tel quel.
+    /// The same file today (update, reinstall), or as it was before
+    /// `before`: the most recent one with the same name. No file with that
+    /// name anymore: this one, as is.
     pub fn successor(&self, file_id: u32, before: Option<&str>) -> Option<&ModFile> {
         let old = self.files.iter().find(|f| f.file_id == file_id)?;
         let current = self
@@ -211,7 +210,7 @@ impl ModInfo {
         .or(Some(old))
     }
 
-    /// Le plus récent fichier du nom de `file` publié avant `before`.
+    /// The most recent file named like `file` published before `before`.
     fn as_of<'a>(&'a self, file: &'a ModFile, before: &str) -> Option<&'a ModFile> {
         self.files
             .iter()
@@ -220,10 +219,10 @@ impl ModInfo {
             .max_by_key(|f| f.uploaded_at)
     }
 
-    /// Fichier à installer pour un jeu resté sur une version sortie avant
-    /// `before` (date ISO) : le fichier principal tel qu'il était alors.
-    /// Remplacé, il passe en `OLD_VERSION` ou `ARCHIVED`, d'habitude sous
-    /// le même nom. `None` : le mod n'existait pas encore.
+    /// File to install for a game that stayed on a version released before
+    /// `before` (ISO date): the main file as it was then. Once replaced, it
+    /// moves to `OLD_VERSION` or `ARCHIVED`, usually under the same name.
+    /// `None`: the mod didn't exist yet.
     pub fn main_file_before(&self, before: &str) -> Option<&ModFile> {
         let older: Vec<&ModFile> = self
             .files
@@ -244,8 +243,8 @@ impl ModInfo {
             .or_else(|| newest(&|_| true))
     }
 
-    /// Fichier à installer en un clic, pour la version du jeu : avant
-    /// `before` si elle est ancienne, sinon le principal.
+    /// File to install in one click, for the game version: before `before`
+    /// if it is old, else the main one.
     pub fn file_for(&self, before: Option<&str>) -> Option<&ModFile> {
         before
             .and_then(|b| self.main_file_before(b))
@@ -253,21 +252,21 @@ impl ModInfo {
     }
 }
 
-/// Catégories des fichiers actuels d'un mod, dans l'ordre d'affichage. Les
-/// autres (`OLD_VERSION`, `ARCHIVED`) sont des versions remplacées.
+/// Categories of a mod's current files, in display order. The others
+/// (`OLD_VERSION`, `ARCHIVED`) are replaced versions.
 const CURRENT: [&str; 4] = ["MAIN", "OPTIONAL", "UPDATE", "MISCELLANEOUS"];
 
-/// Deux noms de fichier pour le même fichier, d'une version à l'autre
-/// (`WHITE_BLACK` devenu `White_Black`).
+/// Two file names for the same file, from one version to the next
+/// (`WHITE_BLACK` became `White_Black`).
 fn same_name(a: &str, b: &str) -> bool {
     a.trim().eq_ignore_ascii_case(b.trim())
 }
 
-/// Prérequis déclaré sur Nexus.
+/// Requirement declared on Nexus.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Requirement {
-    /// Mod Nexus du même jeu, sinon `None` (lien externe).
+    /// Nexus mod of the same game, else `None` (external link).
     pub mod_id: Option<u32>,
     pub name: String,
     pub url: Option<String>,
@@ -279,7 +278,7 @@ pub struct Nexus {
     graphql_url: String,
     api_url: String,
     api_key: Arc<RwLock<Option<String>>>,
-    /// Liens de téléchargement en HTTPS seulement, hors des tests.
+    /// HTTPS-only download links, outside tests.
     require_https: bool,
 }
 
@@ -288,7 +287,7 @@ impl Nexus {
         Self::with_urls(client, GRAPHQL_URL, API_URL)
     }
 
-    /// Pour les tests : faux serveurs.
+    /// For tests: fake servers.
     pub fn with_urls(client: Client, graphql_url: &str, api_url: &str) -> Self {
         Self {
             client,
@@ -307,7 +306,7 @@ impl Nexus {
         self.api_key.read().unwrap().is_some()
     }
 
-    /// Compte associé à la clé API (vérifie aussi la clé).
+    /// Account tied to the API key (also checks the key).
     pub async fn account(&self) -> Result<Account, SourceError> {
         let user: User = self.rest("/users/validate.json").await?;
         Ok(Account {
@@ -317,9 +316,9 @@ impl Nexus {
         })
     }
 
-    /// Jeux Nexus de ces noms, en une requête. Nom exact sans tenir compte
-    /// de la casse ni des ™ et ® (`games::auto::normalize`) : pas de
-    /// correspondance approchée, un nom ambigu ne renvoie rien.
+    /// Nexus games with these names, in one request. Exact name, ignoring
+    /// case, ™ and ® (`games::auto::normalize`): no fuzzy match, an
+    /// ambiguous name returns nothing.
     pub async fn find_games(&self, names: &[String]) -> Result<Vec<Option<FoundGame>>, SourceError> {
         if names.is_empty() {
             return Ok(Vec::new());
@@ -359,7 +358,7 @@ impl Nexus {
             .collect())
     }
 
-    /// Fiche d'installation d'un mod : nom, version, fichiers, prérequis.
+    /// Install sheet of a mod: name, version, files, requirements.
     pub async fn mod_info(&self, domain: &str, mod_id: u32) -> Result<ModInfo, SourceError> {
         let node = self.node(domain, mod_id).await?;
         let files = self.files(mod_id, node.game_id).await?;
@@ -375,7 +374,7 @@ impl Nexus {
         })
     }
 
-    /// Dernière version publiée de chaque mod, en une requête.
+    /// Latest published version of each mod, in one request.
     pub async fn latest_versions(
         &self,
         domain: &str,
@@ -404,8 +403,8 @@ impl Nexus {
             .collect())
     }
 
-    /// Adresse de téléchargement d'un fichier. Sans `link` (lien `nxm://`
-    /// du site), seul un compte Premium y a droit.
+    /// Download URL of a file. Without `link` (the site's `nxm://` link),
+    /// only a Premium account is allowed.
     pub async fn download_url(
         &self,
         domain: &str,
@@ -433,8 +432,8 @@ impl Nexus {
             })
     }
 
-    /// Fichiers de Nexus identiques, octet pour octet, au fichier
-    /// d'empreinte `md5` : (mod, fichier).
+    /// Nexus files identical, byte for byte, to the file with hash `md5`:
+    /// (mod, file).
     pub async fn md5_search(
         &self,
         domain: &str,
@@ -456,9 +455,9 @@ impl Nexus {
         }
     }
 
-    /// Lien de don de l'auteur : celui qu'il met dans sa description
-    /// (Ko-fi, Patreon…), sinon son PayPal si Nexus le rend public. Jamais
-    /// bloquant : sans réponse, pas de bouton.
+    /// The author's donation link: the one in their description (Ko-fi,
+    /// Patreon…), else their PayPal if Nexus makes it public. Never
+    /// blocking: no answer, no button.
     async fn donation_url(&self, domain: &str, mod_id: u32, description: &str) -> Option<String> {
         if let Some(url) = donation_link_in(description) {
             return Some(url);
@@ -709,7 +708,7 @@ impl ModSource for Nexus {
             .map(|f| ModVersion {
                 number: f.version.clone(),
                 published_at: iso_date(f.uploaded_at),
-                // Résolue à l'installation : elle dépend du compte.
+                // Resolved at install time: it depends on the account.
                 download_url: String::new(),
                 sha256: None,
                 size: f.size,
@@ -761,7 +760,7 @@ impl ModSource for Nexus {
     }
 }
 
-/// Sites de dons reconnus dans une description.
+/// Donation sites recognized in a description.
 const DONATION_HOSTS: [&str; 8] = [
     "ko-fi.com/",
     "patreon.com/",
@@ -773,7 +772,7 @@ const DONATION_HOSTS: [&str; 8] = [
     "liberapay.com/",
 ];
 
-/// Premier lien de don HTTPS d'une description, ex.
+/// First HTTPS donation link of a description, e.g.
 /// `https://ko-fi.com/author`.
 pub fn donation_link_in(text: &str) -> Option<String> {
     text.match_indices("https://").find_map(|(start, _)| {
@@ -793,7 +792,7 @@ pub fn donation_link_in(text: &str) -> Option<String> {
     })
 }
 
-/// Secondes Unix → date ISO 8601 (UTC), sans dépendance de calendrier.
+/// Unix seconds to ISO 8601 date (UTC), without a calendar dependency.
 pub(crate) fn iso_date(secs: i64) -> String {
     let days = secs.div_euclid(86_400);
     let rem = secs.rem_euclid(86_400);
@@ -815,9 +814,9 @@ pub(crate) fn iso_date(secs: i64) -> String {
     )
 }
 
-/// Les descriptions Nexus sont en BBCode, avec des `<br />`. On les traduit
-/// en Markdown simple ; l'interface nettoie ensuite comme toute description
-/// (SPEC §7). Les balises inconnues disparaissent, leur texte reste.
+/// Nexus descriptions are BBCode, with `<br />`. We translate them into
+/// simple Markdown; the UI then sanitizes them like any description.
+/// Unknown tags disappear, their text stays.
 pub fn bbcode_to_markdown(input: &str) -> String {
     let text = input
         .replace("<br />", "\n")
@@ -826,7 +825,7 @@ pub fn bbcode_to_markdown(input: &str) -> String {
         .replace("\r", "");
     let mut out = String::with_capacity(text.len());
     let mut rest = text.as_str();
-    // Pile des liens ouverts : `[url=…]texte[/url]` → `[texte](…)`.
+    // Stack of open links: `[url=…]text[/url]` becomes `[text](…)`.
     let mut links: Vec<String> = Vec::new();
     while let Some(start) = rest.find('[') {
         out.push_str(&rest[..start]);
@@ -873,11 +872,11 @@ pub fn bbcode_to_markdown(input: &str) -> String {
                     rest = &rest[end + "[/youtube]".len()..];
                 }
             }
-            // Mise en forme sans équivalent : on garde le texte.
+            // Formatting with no equivalent: keep the text.
             "size" | "/size" | "color" | "/color" | "font" | "/font" | "center" | "/center"
             | "right" | "/right" | "left" | "/left" | "u" | "/u" | "spoiler" | "/spoiler"
             | "/youtube" | "/img" => {}
-            // Pas une balise (ex. « [v1.2] ») : texte tel quel.
+            // Not a tag (e.g. "[v1.2]"): text as is.
             _ => {
                 out.push('[');
                 out.push_str(tag);
@@ -889,7 +888,7 @@ pub fn bbcode_to_markdown(input: &str) -> String {
     out
 }
 
-// ---------------------------------------------------------------- réponses
+// ---------------------------------------------------------------- responses
 
 #[derive(Deserialize)]
 struct GraphqlResponse<T> {
@@ -964,7 +963,7 @@ struct ModNode {
     summary: Option<String>,
     author: Option<String>,
     thumbnail_url: Option<String>,
-    /// 622 × 349 (la vignette simple fait 385 × 216) : nette sur les cartes.
+    /// 622 × 349 (the plain thumbnail is 385 × 216): sharp on the cards.
     #[serde(default)]
     thumbnail_large_url: Option<String>,
     picture_url: Option<String>,
@@ -1070,7 +1069,7 @@ struct User {
     name: String,
     #[serde(default)]
     is_premium: bool,
-    /// Malgré son nom, l'adresse de l'avatar.
+    /// Despite its name, the avatar URL.
     profile_url: Option<String>,
 }
 
@@ -1147,7 +1146,7 @@ mod tests {
         ] {
             assert_eq!(NxmLink::parse(bad), None, "{bad}");
         }
-        // Une clé qui pourrait casser l'URL est ignorée.
+        // A key that could break the URL is ignored.
         let odd = NxmLink::parse("nxm://cyberpunk2077/mods/1/files/2?key=a%26b&expires=3").unwrap();
         assert_eq!(odd.key, None);
     }
@@ -1222,7 +1221,7 @@ mod tests {
 
     #[test]
     fn an_older_game_gets_the_file_of_its_time() {
-        // 2026-10-20 et 2026-10-23, de part et d'autre de la 2.5.
+        // 2026-10-20 and 2026-10-23, on either side of 2.5.
         let (before, after) = (1_792_493_526, 1_792_752_726);
         let file = |id, name: &str, category: &str, at| ModFile {
             file_id: id,
@@ -1252,13 +1251,13 @@ mod tests {
         ]);
         assert_eq!(mod_.file_for(Some("2026-10-22")).unwrap().file_id, 2);
         assert_eq!(mod_.file_for(None).unwrap().file_id, 1);
-        // Renommé à chaque version : le plus récent d'avant.
+        // Renamed at each version: the most recent one from before.
         let renamed = info(vec![
             file(1, "Main v2", "MAIN", after),
             file(2, "Main v1", "ARCHIVED", before),
         ]);
         assert_eq!(renamed.file_for(Some("2026-10-22")).unwrap().file_id, 2);
-        // Publié après : rien de plus ancien, le fichier actuel.
+        // Published after: nothing older, the current file.
         let new = info(vec![file(1, "Main", "MAIN", after)]);
         assert_eq!(new.file_for(Some("2026-10-22")).unwrap().file_id, 1);
     }

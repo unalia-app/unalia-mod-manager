@@ -1,14 +1,14 @@
-//! Jeux reconnus **automatiquement** : un jeu sans profil (ni dans le schéma
-//! Thunderstore, ni dans `games/*.toml`) dont le moteur a un adaptateur, et
-//! dont le nom existe sur Nexus Mods. Son profil est déduit du disque et de
-//! Nexus, sans rien écrire à la main.
+//! Games recognized **automatically**: a game without a profile (neither in
+//! the Thunderstore schema nor in `games/*.toml`) whose engine has an
+//! adapter, and whose name exists on Nexus Mods. Its profile is derived
+//! from the disk and from Nexus, with nothing written by hand.
 //!
-//! Aujourd'hui : Unreal Engine (dossier de projet trouvé par `find_project`).
-//! Le nom doit correspondre exactement (casse, ™ et ® mis à part) : on ne
-//! devine pas. Un profil écrit à la main reste prioritaire.
+//! Today: Unreal Engine (project folder found by `find_project`). The name
+//! must match exactly (case, ™ and ® aside): we don't guess. A hand-written
+//! profile still wins.
 //!
-//! Les réponses de Nexus sont gardées sur disque (`NexusGames`) : le scan des
-//! jeux ne refait pas la requête à chaque fois.
+//! Nexus answers are kept on disk (`NexusGames`): the game scan doesn't
+//! repeat the request every time.
 
 use std::collections::HashMap;
 use std::fs;
@@ -23,15 +23,15 @@ use crate::loaders::rules::InstallRules;
 use crate::loaders::unreal::find_project;
 use crate::sources::nexus::FoundGame;
 
-/// Préfixe des profils automatiques : `auto-<domaine Nexus>`.
+/// Prefix of automatic profiles: `auto-<Nexus domain>`.
 const PREFIX: &str = "auto-";
 
-/// Un jeu trouvé sur Nexus est revérifié au bout d'un mois, un jeu absent
-/// au bout de trois jours (sa page peut ouvrir entre-temps).
+/// A game found on Nexus is checked again after a month, a missing game
+/// after three days (its page may open in the meantime).
 const FOUND_FOR_SECS: i64 = 30 * 24 * 3600;
 const MISSING_FOR_SECS: i64 = 3 * 24 * 3600;
 
-/// Nom comparable : sans ™, ® ni ©, espaces resserrés, en minuscules.
+/// Comparable name: without ™, ® or ©, collapsed spaces, lowercase.
 pub fn normalize(name: &str) -> String {
     name.chars()
         .filter(|c| !matches!(c, '™' | '®' | '©'))
@@ -42,7 +42,7 @@ pub fn normalize(name: &str) -> String {
         .to_lowercase()
 }
 
-/// Domaine Nexus d'un profil automatique.
+/// Nexus domain of an automatic profile.
 pub fn domain_of(profile_id: &str) -> Option<&str> {
     profile_id.strip_prefix(PREFIX)
 }
@@ -53,11 +53,11 @@ struct Template {
     frameworks: Vec<Framework>,
 }
 
-/// Profil d'un jeu Unreal trouvé sur Nexus. `None` si le dossier n'a pas
-/// un projet Unreal unique.
+/// Profile of an Unreal game found on Nexus. `None` if the folder doesn't
+/// hold a single Unreal project.
 pub fn unreal_profile(found: &FoundGame, game_dir: &Path) -> Option<GameProfile> {
     let project = find_project(game_dir)?;
-    // Embarqué et testé : une erreur ici est un bug de Modalia.
+    // Embedded and tested: an error here is a Modalia bug.
     let template: Template = toml::from_str(include_str!("../../../../games/auto/unreal.toml"))
         .expect("invalid Unreal template");
     Some(GameProfile {
@@ -84,8 +84,8 @@ pub fn unreal_profile(found: &FoundGame, game_dir: &Path) -> Option<GameProfile>
     })
 }
 
-/// Exécutables d'un jeu Unreal : celui de la racine (qui lance le jeu),
-/// puis celui du projet.
+/// Executables of an Unreal game: the root one (which launches the game),
+/// then the project's.
 fn unreal_exes(game_dir: &Path, project: &str) -> Vec<String> {
     const NOT_THE_GAME: [&str; 4] = ["unins", "crash", "setup", "redist"];
     let mut exes: Vec<String> = fs::read_dir(game_dir)
@@ -107,8 +107,8 @@ fn unreal_exes(game_dir: &Path, project: &str) -> Vec<String> {
     exes
 }
 
-/// Noms sous lesquels chercher sur Nexus un jeu ajouté à la main : son
-/// dossier, puis ses exécutables à la racine.
+/// Names to look up on Nexus for a manually added game: its folder, then
+/// its root executables.
 pub fn candidate_names(game_dir: &Path) -> Vec<String> {
     let mut names: Vec<String> = game_dir
         .file_name()
@@ -136,11 +136,11 @@ pub fn candidate_names(game_dir: &Path) -> Vec<String> {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct Entry {
     found: Option<FoundGame>,
-    /// Secondes depuis l'époque Unix.
+    /// Seconds since the Unix epoch.
     checked: i64,
 }
 
-/// Réponses de Nexus, par nom (`normalize`), gardées sur disque.
+/// Nexus answers, by name (`normalize`), kept on disk.
 #[derive(Debug, Default)]
 pub struct NexusGames {
     path: PathBuf,
@@ -148,7 +148,7 @@ pub struct NexusGames {
 }
 
 impl NexusGames {
-    /// Fichier illisible ou absent : on repart de zéro.
+    /// Unreadable or missing file: start from scratch.
     pub fn load(path: &Path) -> Self {
         let entries = fs::read_to_string(path)
             .ok()
@@ -160,8 +160,8 @@ impl NexusGames {
         }
     }
 
-    /// Réponse encore valable pour ce nom : `Some(None)` si Nexus ne le
-    /// connaît pas, `None` s'il faut redemander.
+    /// Answer still valid for this name: `Some(None)` if Nexus doesn't
+    /// know it, `None` if we need to ask again.
     pub fn fresh(&self, name: &str, now: i64) -> Option<Option<&FoundGame>> {
         let entry = self.entries.get(&normalize(name))?;
         let ttl = if entry.found.is_some() {
@@ -172,12 +172,12 @@ impl NexusGames {
         (now - entry.checked < ttl).then_some(entry.found.as_ref())
     }
 
-    /// Dernière réponse connue, même ancienne (Nexus injoignable).
+    /// Last known answer, even an old one (Nexus unreachable).
     pub fn last_known(&self, name: &str) -> Option<&FoundGame> {
         self.entries.get(&normalize(name))?.found.as_ref()
     }
 
-    /// Jeu déjà trouvé, d'après son domaine (profil d'un jeu ajouté à la main).
+    /// Game already found, by its domain (profile of a manually added game).
     pub fn by_domain(&self, domain: &str) -> Option<&FoundGame> {
         self.entries
             .values()
@@ -286,7 +286,7 @@ mod tests {
             ["Hogwarts Legacy", "HogwartsLegacy"]
         );
 
-        // Pas de projet Unreal : pas de profil.
+        // No Unreal project: no profile.
         assert!(unreal_profile(&hogwarts(), dir.path()).is_none());
     }
 }

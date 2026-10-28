@@ -1,17 +1,17 @@
-//! Brique **launch** : jouer, savoir si le jeu tourne, et mettre les
-//! changements en attente tant qu'il tourne (SPEC §3.6).
+//! **launch** block: play, know whether the game is running, and queue
+//! changes while it runs.
 //!
-//! Un jeu lancé tient ses fichiers ouverts : sous Windows, une DLL chargée
-//! ne peut pas être retirée, et un mod ajouté en cours de partie ne serait
-//! de toute façon chargé qu'au prochain lancement. Pendant une partie, les
-//! changements vont donc dans une file, appliquée à la fermeture du jeu.
+//! A running game keeps its files open: on Windows, a loaded DLL can't be
+//! removed, and a mod added mid-session would only load at the next launch
+//! anyway. During a session, changes therefore go into a queue, applied
+//! when the game closes.
 
 use std::path::{Path, PathBuf};
 
 use serde::{Deserialize, Serialize};
 use sysinfo::{ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
 
-/// Changement demandé pendant une partie.
+/// Change requested during a session.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", tag = "type")]
 pub enum PendingOp {
@@ -33,14 +33,14 @@ impl PendingOp {
     }
 }
 
-/// Ajoute `op` à la file en la simplifiant : un seul changement par mod, et
-/// deux changements qui s'annulent disparaissent.
+/// Adds `op` to the queue and simplifies it: one change per mod, and two
+/// changes that cancel out disappear.
 ///
-/// - désactiver puis réactiver : plus rien à faire ;
-/// - installer puis retirer un mod pas encore installé : plus rien à faire ;
-/// - activer ou désactiver un mod dont l'installation est en attente :
-///   l'installation reste, le basculement est ignoré ;
-/// - sinon, le dernier changement demandé remplace le précédent.
+/// - disable then enable again: nothing left to do;
+/// - install then remove a mod not yet installed: nothing left to do;
+/// - enable or disable a mod whose install is pending: the install stays,
+///   the toggle is ignored;
+/// - otherwise, the last requested change replaces the previous one.
 pub fn enqueue(queue: &[PendingOp], op: PendingOp) -> Vec<PendingOp> {
     let previous = queue.iter().find(|p| p.mod_id() == op.mod_id()).cloned();
     let mut next: Vec<PendingOp> = queue
@@ -63,9 +63,9 @@ pub fn enqueue(queue: &[PendingOp], op: PendingOp) -> Vec<PendingOp> {
     next
 }
 
-/// Le jeu tourne-t-il ? Vrai si un processus a été lancé depuis son dossier.
-/// Marche pour les jeux Steam comme pour ceux ajoutés à la main, quel que
-/// soit le nom de l'exécutable.
+/// Is the game running? True if a process was started from its folder.
+/// Works for Steam games as well as manually added ones, whatever the
+/// executable name.
 pub fn is_running(game_dir: &Path, running_exes: &[PathBuf]) -> bool {
     let dir = normalize(game_dir);
     running_exes.iter().any(|exe| {
@@ -74,8 +74,8 @@ pub fn is_running(game_dir: &Path, running_exes: &[PathBuf]) -> bool {
     })
 }
 
-/// Comparaison de chemins tolérante : séparateurs unifiés, et casse ignorée
-/// sous Windows (système de fichiers insensible à la casse).
+/// Lenient path comparison: unified separators, and case ignored on
+/// Windows (case-insensitive file system).
 fn normalize(path: &Path) -> String {
     let s = path.to_string_lossy().replace('\\', "/");
     let s = s.trim_end_matches('/');
@@ -86,7 +86,7 @@ fn normalize(path: &Path) -> String {
     }
 }
 
-/// Liste des exécutables en cours, rafraîchie à la demande.
+/// List of running executables, refreshed on demand.
 pub struct ProcessWatcher {
     system: System,
 }
@@ -114,14 +114,14 @@ impl ProcessWatcher {
     }
 }
 
-/// L'exécutable est-il un des launchers du jeu (comparaison sur le nom) ?
+/// Is the executable one of the game's launchers (compared by name)?
 pub fn is_launcher(exe: &Path, launchers: &[String]) -> bool {
     exe.file_name()
         .and_then(|n| n.to_str())
         .is_some_and(|name| launchers.iter().any(|l| l.eq_ignore_ascii_case(name)))
 }
 
-/// Le jeu tourne-t-il, son launcher mis à part ?
+/// Is the game running, its launcher aside?
 pub fn game_running(game_dir: &Path, running_exes: &[PathBuf], launchers: &[String]) -> bool {
     let game: Vec<PathBuf> = running_exes
         .iter()
@@ -131,7 +131,7 @@ pub fn game_running(game_dir: &Path, running_exes: &[PathBuf], launchers: &[Stri
     is_running(game_dir, &game)
 }
 
-/// Steam est-il ouvert ? (son exécutable parmi les processus).
+/// Is Steam open? (its executable among the processes).
 pub fn steam_running(running_exes: &[PathBuf]) -> bool {
     running_exes.iter().any(|exe| {
         exe.file_name().and_then(|n| n.to_str()).is_some_and(|n| {
@@ -140,15 +140,15 @@ pub fn steam_running(running_exes: &[PathBuf]) -> bool {
     })
 }
 
-/// Comment lancer un jeu.
+/// How to launch a game.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LaunchTarget {
-    /// Par Steam (`steam://rungameid/<id>`) : Steam gère les mises à jour,
-    /// le Steam Overlay et les éventuelles options de lancement.
+    /// Through Steam (`steam://rungameid/<id>`): Steam handles updates, the
+    /// Steam Overlay and any launch options.
     Steam(String),
-    /// Exécutable du jeu, pour un jeu ajouté à la main. Jamais un fichier
-    /// venu d'une archive de mod (SPEC §2.3) : uniquement les noms
-    /// d'exécutables connus du catalogue, dans le dossier du jeu.
+    /// The game's executable, for a manually added game. Never a file from
+    /// a mod archive: only executable names known to the
+    /// catalog, in the game folder.
     Executable(PathBuf),
 }
 
@@ -156,8 +156,8 @@ pub fn steam_target(app_id: u32) -> LaunchTarget {
     LaunchTarget::Steam(format!("steam://rungameid/{app_id}"))
 }
 
-/// Premier exécutable connu du profil présent dans le dossier du jeu. Sous
-/// Windows on préfère un `.exe`, sous macOS un `.app`.
+/// First executable of the profile found in the game folder. On Windows we
+/// prefer an `.exe`, on macOS an `.app`.
 pub fn executable_target(game_dir: &Path, exe_names: &[String]) -> Option<LaunchTarget> {
     let preferred = if cfg!(windows) {
         ".exe"
@@ -226,7 +226,7 @@ mod tests {
         let q = enqueue(&q, uninstall("a-A"));
         assert_eq!(q, [install("b-B"), uninstall("a-A")]);
 
-        // Basculer un mod dont l'installation attend : l'installation reste.
+        // Toggling a mod whose install is pending: the install stays.
         assert_eq!(
             enqueue(&q, toggle("b-B", false)),
             [uninstall("a-A"), install("b-B")]
@@ -250,7 +250,7 @@ mod tests {
             &exes(&["/games/Hollow Knight Silksong/bin/game"])
         ));
         assert!(!is_running(game, &exes(&["/usr/bin/zsh"])));
-        // Un dossier voisin au nom proche ne compte pas.
+        // A sibling folder with a similar name doesn't count.
         assert!(!is_running(
             game,
             &exes(&["/games/Hollow Knight Silksong Demo/game.exe"])

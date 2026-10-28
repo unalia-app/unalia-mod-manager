@@ -1,15 +1,14 @@
-//! Connexion « Log in with Nexus » (SSO), celle des gestionnaires de mods
-//! approuvés par Nexus : pas de clé à copier.
+//! "Log in with Nexus" (SSO), the login of mod managers approved by Nexus:
+//! no key to copy.
 //!
-//! 1. Modalia ouvre un WebSocket vers `sso.nexusmods.com` et s'annonce avec
-//!    un identifiant de session tiré au hasard.
-//! 2. Le navigateur ouvre la page d'autorisation de Nexus pour cette
-//!    session ; l'utilisateur clique « Authorise ».
-//! 3. Nexus renvoie la clé API par le WebSocket.
+//! 1. Modalia opens a WebSocket to `sso.nexusmods.com` and announces itself
+//!    with a random session id.
+//! 2. The browser opens Nexus's authorization page for this session; the
+//!    user clicks "Authorise".
+//! 3. Nexus sends the API key back through the WebSocket.
 //!
-//! Nexus réserve ce mode aux applications qu'il a approuvées (identifiant
-//! d'application). Sans approbation, la clé API personnelle reste la seule
-//! voie autorisée.
+//! Nexus keeps this mode for the applications it approved (application
+//! id). Without approval, the personal API key stays the only allowed way.
 
 use std::time::Duration;
 
@@ -21,9 +20,9 @@ use tokio_tungstenite::tungstenite::Message;
 pub const SSO_URL: &str = "wss://sso.nexusmods.com";
 pub const AUTHORIZE_URL: &str = "https://www.nexusmods.com/sso";
 
-/// Le temps de se connecter à Nexus dans le navigateur et de valider.
+/// Time to log in to Nexus in the browser and confirm.
 const WAIT_FOR_USER: Duration = Duration::from_secs(5 * 60);
-/// Le serveur ferme une connexion muette : on le relance régulièrement.
+/// The server closes a silent connection: we ping it regularly.
 const PING_EVERY: Duration = Duration::from_secs(30);
 
 #[derive(Debug, thiserror::Error)]
@@ -60,13 +59,13 @@ struct ReplyData {
     api_key: Option<String>,
 }
 
-/// Page d'autorisation de la session `id` pour l'application `application`.
+/// Authorization page of session `id` for application `application`.
 pub fn authorize_url(id: &str, application: &str) -> String {
     format!("{AUTHORIZE_URL}?id={id}&application={application}")
 }
 
-/// Mène la connexion jusqu'au bout et renvoie la clé API. `open` reçoit
-/// l'adresse de la page d'autorisation, à ouvrir dans le navigateur.
+/// Runs the login to the end and returns the API key. `open` receives the
+/// URL of the authorization page, to open in the browser.
 pub async fn login(
     sso_url: &str,
     application: &str,
@@ -116,7 +115,7 @@ async fn run(
                     let _ = socket.close(None).await;
                     return Ok(key);
                 }
-                // Session enregistrée : l'utilisateur peut valider.
+                // Session registered: the user can confirm.
                 if data.connection_token.is_some()
                     && let Some(open) = open.take()
                 {

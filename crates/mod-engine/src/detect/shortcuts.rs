@@ -1,22 +1,23 @@
-//! Jeux hors Steam ajoutés à Steam (« Ajouter un jeu non-Steam »), lus dans
-//! `userdata/<compte>/config/shortcuts.vdf`.
+//! Non-Steam games added to Steam ("Add a Non-Steam Game"), read from
+//! `userdata/<account>/config/shortcuts.vdf`.
 //!
-//! Lancer un tel jeu par Steam lui donne l'overlay de Steam (compteur FPS,
-//! captures, chat). Modalia lit ce fichier, et sait y ajouter un jeu à la
-//! demande (`add_shortcut`), Steam fermé, sans toucher aux autres.
+//! Launching such a game through Steam gives it the Steam overlay (FPS
+//! counter, screenshots, chat). Modalia reads this file, and can add a game
+//! to it on request (`add_shortcut`), with Steam closed, without touching
+//! the others.
 //!
-//! Le fichier est un VDF binaire : un octet de type, une clé terminée par un
-//! zéro, puis la valeur (`0x00` objet, `0x01` texte, `0x02` entier 32 bits,
-//! `0x08` fin d'objet).
+//! The file is a binary VDF: a type byte, a zero-terminated key, then the
+//! value (`0x00` object, `0x01` text, `0x02` 32-bit integer, `0x08` end of
+//! object).
 
 use std::fs;
 use std::io;
 use std::path::{Path, PathBuf};
 
-/// Raccourci d'un jeu hors Steam.
+/// Shortcut of a non-Steam game.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Shortcut {
-    /// Identifiant que Steam donne au raccourci.
+    /// Id that Steam gives the shortcut.
     pub app_id: u32,
     pub name: String,
     pub exe: PathBuf,
@@ -24,13 +25,13 @@ pub struct Shortcut {
 }
 
 impl Shortcut {
-    /// Adresse qui lance le raccourci par Steam.
+    /// URL that launches the shortcut through Steam.
     pub fn launch_url(&self) -> String {
         let game_id = (u64::from(self.app_id) << 32) | 0x0200_0000;
         format!("steam://rungameid/{game_id}")
     }
 
-    /// Le raccourci lance-t-il un exécutable de ce dossier ?
+    /// Does the shortcut launch an executable in this folder?
     pub fn points_into(&self, game_dir: &Path) -> bool {
         let dir = normalize(game_dir);
         [&self.exe, &self.start_dir].iter().any(|path| {
@@ -43,7 +44,7 @@ impl Shortcut {
     }
 }
 
-/// Raccourcis de tous les comptes Steam de la machine.
+/// Shortcuts of every Steam account on the machine.
 pub fn steam_shortcuts(steam_root: &Path) -> Vec<Shortcut> {
     let Ok(users) = fs::read_dir(steam_root.join("userdata")) else {
         return Vec::new();
@@ -55,12 +56,12 @@ pub fn steam_shortcuts(steam_root: &Path) -> Vec<Shortcut> {
         .collect()
 }
 
-/// Raccourci qui pointe dans le dossier du jeu, s'il y en a un.
+/// Shortcut that points into the game folder, if there is one.
 pub fn shortcut_for<'a>(shortcuts: &'a [Shortcut], game_dir: &Path) -> Option<&'a Shortcut> {
     shortcuts.iter().find(|s| s.points_into(game_dir))
 }
 
-/// Lit un `shortcuts.vdf`. Un fichier abîmé donne ce qui a pu être lu.
+/// Reads a `shortcuts.vdf`. A damaged file gives whatever could be read.
 pub fn parse(bytes: &[u8]) -> Vec<Shortcut> {
     let mut reader = Reader { bytes, at: 0 };
     let root = reader.object_partial();
@@ -77,8 +78,8 @@ pub fn parse(bytes: &[u8]) -> Vec<Shortcut> {
         .collect()
 }
 
-/// Un nœud du VDF binaire, gardé tel quel : réécrire le fichier ne doit rien
-/// perdre des raccourcis existants (étiquettes, options de lancement…).
+/// A node of the binary VDF, kept as is: rewriting the file must not lose
+/// anything from the existing shortcuts (tags, launch options…).
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Node {
     Map(Vec<(String, Node)>),
@@ -97,8 +98,8 @@ fn shortcut(fields: &[(String, Node)]) -> Option<Shortcut> {
     };
     let exe = text("exe")?;
     let name = text("appname").unwrap_or_default();
-    // Les raccourcis récents portent leur identifiant ; les anciens se
-    // calculent comme le fait Steam, à partir de l'exécutable et du nom.
+    // Recent shortcuts carry their id; old ones are computed like Steam
+    // does, from the executable and the name.
     let app_id = fields
         .iter()
         .find_map(|(k, v)| match v {
@@ -160,7 +161,7 @@ impl Reader<'_> {
         })
     }
 
-    /// Champs d'un objet jusqu'à sa fin.
+    /// Fields of an object up to its end.
     fn object(&mut self) -> Option<Vec<(String, Node)>> {
         let mut fields = Vec::new();
         loop {
@@ -173,7 +174,7 @@ impl Reader<'_> {
         }
     }
 
-    /// Comme `object`, mais garde ce qui a pu être lu d'un fichier abîmé.
+    /// Like `object`, but keeps whatever could be read from a damaged file.
     fn object_partial(&mut self) -> Vec<(String, Node)> {
         let mut fields = Vec::new();
         while let Some(kind) = self.byte() {
@@ -187,7 +188,7 @@ impl Reader<'_> {
                     match self.object() {
                         Some(inner) => fields.push((key, Node::Map(inner))),
                         None => {
-                            // Objet tronqué : ses entrées complètes comptent.
+                            // Truncated object: its complete entries count.
                             self.at = start;
                             fields.push((key, Node::Map(self.object_partial())));
                             break;
@@ -230,7 +231,7 @@ fn write_fields(out: &mut Vec<u8>, fields: &[(String, Node)]) {
     }
 }
 
-/// Raccourci à créer.
+/// Shortcut to create.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NewShortcut {
     pub name: String,
@@ -238,12 +239,12 @@ pub struct NewShortcut {
     pub start_dir: PathBuf,
 }
 
-/// Ajoute un jeu non-Steam au fichier `shortcuts.vdf` du compte (créé s'il
-/// n'existe pas), comme le fait « Ajouter un jeu non-Steam » de Steam.
-/// Steam doit être fermé : il garde ce fichier en mémoire et le réécrit en
-/// quittant. Les raccourcis existants sont gardés tels quels, et l'ancien
-/// fichier est sauvegardé à côté (`.unalia-backup`). Déjà présent pour cet
-/// exécutable : rien n'est écrit.
+/// Adds a non-Steam game to the account's `shortcuts.vdf` (created if
+/// missing), like Steam's "Add a Non-Steam Game" does. Steam must be
+/// closed: it keeps this file in memory and rewrites it on exit. Existing
+/// shortcuts are kept as is, and the old file is backed up next to it
+/// (`.unalia-backup`). Already there for this executable: nothing is
+/// written.
 pub fn add_shortcut(file: &Path, new: &NewShortcut) -> io::Result<Shortcut> {
     let existing = fs::read(file).ok();
     let mut root = existing
@@ -260,7 +261,7 @@ pub fn add_shortcut(file: &Path, new: &NewShortcut) -> io::Result<Shortcut> {
     let quoted = |p: &Path| format!("\"{}\"", p.display());
     let exe = quoted(&new.exe);
     let app_id = legacy_app_id(&exe, &new.name);
-    // Les champs que Steam écrit lui-même pour un jeu non-Steam.
+    // The fields Steam writes itself for a non-Steam game.
     let entry = Node::Map(vec![
         ("appid".into(), Node::Int(app_id)),
         ("AppName".into(), Node::Text(new.name.clone())),
@@ -285,7 +286,7 @@ pub fn add_shortcut(file: &Path, new: &NewShortcut) -> io::Result<Shortcut> {
         .find(|(k, _)| k.eq_ignore_ascii_case("shortcuts"))
     {
         Some((_, Node::Map(entries))) => {
-            // Clés « 0 », « 1 »… : la suivante.
+            // Keys "0", "1"…: the next one.
             let next = entries
                 .iter()
                 .filter_map(|(k, _)| k.parse::<u32>().ok())
@@ -316,13 +317,13 @@ pub fn add_shortcut(file: &Path, new: &NewShortcut) -> io::Result<Shortcut> {
     })
 }
 
-/// Dossier `config` du compte Steam à utiliser, de la source la plus sûre à
-/// la moins sûre :
-/// 1. sous Windows, le compte connecté que Steam ouvert écrit dans le
-///    registre (`ActiveProcess\ActiveUser`) ;
-/// 2. `loginusers.vdf` : le compte marqué le plus récent, sinon celui de la
-///    dernière connexion ;
-/// 3. le compte dont Steam a modifié les réglages le plus récemment.
+/// `config` folder of the Steam account to use, from the most reliable
+/// source to the least:
+/// 1. on Windows, the logged-in account that a running Steam writes to the
+///    registry (`ActiveProcess\ActiveUser`);
+/// 2. `loginusers.vdf`: the account marked most recent, else the one that
+///    logged in last;
+/// 3. the account whose settings Steam changed most recently.
 pub fn current_user_config(steam_root: &Path) -> Option<PathBuf> {
     let userdata = steam_root.join("userdata");
     let config = |account: u64| userdata.join(account.to_string()).join("config");
@@ -348,7 +349,7 @@ pub fn current_user_config(steam_root: &Path) -> Option<PathBuf> {
         .map(|(_, account)| config(account))
 }
 
-/// Compte connecté à Steam en ce moment (Windows seulement).
+/// Account logged in to Steam right now (Windows only).
 #[cfg(windows)]
 fn active_user() -> Option<u64> {
     use winreg::RegKey;
@@ -365,8 +366,8 @@ fn active_user() -> Option<u64> {
     None
 }
 
-/// Compte le plus récent de `loginusers.vdf`, en identifiant de compte (le
-/// nom du dossier de `userdata`).
+/// Most recent account in `loginusers.vdf`, as an account id (the name of
+/// its `userdata` folder).
 fn login_users(steam_root: &Path) -> Option<u64> {
     const STEAM_ID_BASE: u64 = 76_561_197_960_265_728;
     let text = fs::read_to_string(steam_root.join("config").join("loginusers.vdf")).ok()?;
@@ -394,15 +395,15 @@ fn login_users(steam_root: &Path) -> Option<u64> {
         .map(|(account, _, _)| *account)
 }
 
-/// Image de la bibliothèque Steam d'un raccourci : `kind` vaut `p`
-/// (jaquette), `_hero` (bannière), `_logo` ou `` (en-tête).
+/// Steam library image of a shortcut: `kind` is `p` (cover), `_hero`
+/// (banner), `_logo` or `` (header).
 pub fn grid_image(config: &Path, app_id: u32, kind: &str, extension: &str) -> PathBuf {
     config
         .join("grid")
         .join(format!("{app_id}{kind}.{extension}"))
 }
 
-/// CRC-32 (polynôme de zlib), comme Steam pour les anciens raccourcis.
+/// CRC-32 (zlib polynomial), as Steam uses for old shortcuts.
 fn crc32(bytes: &[u8]) -> u32 {
     let mut crc = 0xFFFF_FFFFu32;
     for &b in bytes {
@@ -418,8 +419,8 @@ fn crc32(bytes: &[u8]) -> u32 {
     !crc
 }
 
-/// Comparaison de chemins tolérante : séparateurs unifiés, casse ignorée
-/// sous Windows.
+/// Lenient path comparison: unified separators, case ignored on
+/// Windows.
 fn normalize(path: &Path) -> String {
     let s = path.to_string_lossy().replace('\\', "/");
     let s = s.trim_end_matches('/');
@@ -434,7 +435,7 @@ fn normalize(path: &Path) -> String {
 mod tests {
     use super::*;
 
-    /// Construit un `shortcuts.vdf` comme Steam l'écrit.
+    /// Builds a `shortcuts.vdf` the way Steam writes it.
     fn vdf(entries: &[&[(&str, Field)]]) -> Vec<u8> {
         let mut out = vec![0x00];
         out.extend(b"shortcuts\0");
@@ -503,7 +504,7 @@ mod tests {
             shortcuts[0].launch_url(),
             format!("steam://rungameid/{}", (0xC234_5678u64 << 32) | 0x0200_0000)
         );
-        // Sans identifiant : calculé comme Steam.
+        // No id: computed like Steam does.
         assert_eq!(
             shortcuts[1].app_id,
             crc32(b"\"C:\\Games\\Old\\old.exe\"Old shortcut") | 0x8000_0000
@@ -556,7 +557,7 @@ mod tests {
         assert_eq!(all[0].name, "Old game");
         assert_eq!(all[1].name, "Cyberpunk 2077");
         assert_eq!(all[1].app_id, added.app_id);
-        // L'ancien raccourci est réécrit à l'identique, étiquettes comprises.
+        // The old shortcut is rewritten unchanged, tags included.
         assert!(
             bytes
                 .windows(before.len() - 2)
@@ -567,7 +568,7 @@ mod tests {
             before
         );
 
-        // Une seconde fois : rien de plus.
+        // A second time: nothing more.
         assert_eq!(add_shortcut(&file, &new).unwrap(), added);
         assert_eq!(parse(&std::fs::read(&file).unwrap()).len(), 2);
     }
@@ -596,7 +597,7 @@ mod tests {
             std::fs::create_dir_all(root.path().join("userdata").join(account).join("config"))
                 .unwrap();
         }
-        // Rien d'autre : le compte dont les réglages ont bougé en dernier.
+        // Nothing else: the account whose settings moved last.
         std::fs::write(
             root.path().join("userdata/111/config/localconfig.vdf"),
             "old",
@@ -613,7 +614,7 @@ mod tests {
             Some(root.path().join("userdata/222/config"))
         );
 
-        // Sans « MostRecent » : la dernière connexion.
+        // No "MostRecent": the last login.
         let users = |a: &str, b: &str| {
             format!(
                 "\"users\"\n{{\n\"{}\"\n{{\n{a}\n}}\n\"{}\"\n{{\n{b}\n}}\n}}\n",
@@ -631,7 +632,7 @@ mod tests {
             current_user_config(root.path()),
             Some(root.path().join("userdata/111/config"))
         );
-        // « mostrecent » en minuscules, comme l'écrivent certaines versions.
+        // "mostrecent" in lowercase, as some versions write it.
         std::fs::write(
             &login,
             users("\"Timestamp\" \"900\"", "\"mostrecent\" \"1\""),

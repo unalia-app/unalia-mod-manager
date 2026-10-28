@@ -1,9 +1,9 @@
-//! Parseur minimal du format KeyValues de Valve (texte), utilisé par
-//! `libraryfolders.vdf` et les `appmanifest_*.acf`.
+//! Minimal parser for Valve's KeyValues text format, used by
+//! `libraryfolders.vdf` and the `appmanifest_*.acf` files.
 //!
-//! Gère : chaînes entre guillemets avec échappements (`\\`, `\"`, `\n`, `\t`),
-//! jetons sans guillemets, commentaires `//`, conditions `[$WIN32]` (ignorées),
-//! BOM UTF-8 et fins de ligne CRLF.
+//! Handles: quoted strings with escapes (`\\`, `\"`, `\n`, `\t`), unquoted
+//! tokens, `//` comments, `[$WIN32]` conditions (ignored), UTF-8 BOM and
+//! CRLF line endings.
 
 use std::fmt;
 
@@ -13,8 +13,8 @@ pub enum Value {
     Obj(Obj),
 }
 
-/// Liste ordonnée de paires clé/valeur. Les clés sont comparées sans tenir
-/// compte de la casse, comme le fait Steam.
+/// Ordered list of key/value pairs. Keys are compared case-insensitively,
+/// like Steam does.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Obj(Vec<(String, Value)>);
 
@@ -59,8 +59,8 @@ impl fmt::Display for ParseError {
 
 impl std::error::Error for ParseError {}
 
-/// Analyse un document KeyValues complet. Le résultat contient les paires de
-/// premier niveau (en général une seule, ex. `"libraryfolders" { ... }`).
+/// Parses a full KeyValues document. The result holds the top-level pairs
+/// (usually a single one, e.g. `"libraryfolders" { ... }`).
 pub fn parse(input: &str) -> Result<Obj, ParseError> {
     let input = input.strip_prefix('\u{feff}').unwrap_or(input);
     let mut lexer = Lexer {
@@ -233,8 +233,8 @@ mod tests {
 
     #[test]
     fn unescapes_windows_paths() {
-        let doc = parse(r#""path" "D:\\SteamLibrary\\Jeux \"bonus\"""#).unwrap();
-        assert_eq!(doc.str("path"), Some(r#"D:\SteamLibrary\Jeux "bonus""#));
+        let doc = parse(r#""path" "D:\\SteamLibrary\\Games \"bonus\"""#).unwrap();
+        assert_eq!(doc.str("path"), Some(r#"D:\SteamLibrary\Games "bonus""#));
     }
 
     #[test]
@@ -246,7 +246,7 @@ mod tests {
     #[test]
     fn handles_bom_crlf_comments_and_conditionals() {
         let doc = parse(
-            "\u{feff}// en-tête\r\n\"root\"\r\n{\r\n\t\"a\" \"1\" [$WIN32]\r\n\t// note\r\n\tb 2\r\n}\r\n",
+            "\u{feff}// header\r\n\"root\"\r\n{\r\n\t\"a\" \"1\" [$WIN32]\r\n\t// note\r\n\tb 2\r\n}\r\n",
         )
         .unwrap();
         let root = doc.obj("root").unwrap();

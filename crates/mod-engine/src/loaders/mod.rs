@@ -1,7 +1,7 @@
-//! Brique **loaders** : comment un mod s'installe dans un jeu.
+//! **Loaders** block: how a mod installs into a game.
 //!
-//! Un loader décide où va chaque fichier d'un paquet. C'est du code, peu
-//! nombreux, relu par le mainteneur (SPEC §6.3, §7 : revue renforcée).
+//! A loader decides where each file of a package goes. It is code, kept to a
+//! few loaders, reviewed by the maintainer with extra care.
 
 pub mod bepinex;
 pub mod bethesda;
@@ -14,19 +14,19 @@ use std::path::Path;
 
 use serde::{Deserialize, Serialize};
 
-/// Un fichier du paquet extrait, et sa destination dans le dossier du jeu.
-/// Chemins relatifs avec des `/`.
+/// A file of the extracted package, and its destination in the game folder.
+/// Relative paths with `/`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Placement {
     pub source: String,
     pub target: String,
 }
 
-/// Ce que l'on installe : un mod, ou le loader lui-même.
+/// What we install: a mod, or the loader itself.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PackageKind {
     Mod,
-    /// Paquet loader : le contenu de `root_folder` va à la racine du jeu.
+    /// Loader package: the content of `root_folder` goes to the game root.
     Loader {
         root_folder: String,
     },
@@ -35,10 +35,10 @@ pub enum PackageKind {
 pub trait Loader {
     fn id(&self) -> &'static str;
 
-    /// Le loader est-il déjà présent dans le jeu, installé hors de Modalia ?
+    /// Is the loader already in the game, installed outside Modalia?
     fn installed_manually(&self, game_dir: &Path) -> bool;
 
-    /// Destination de chaque fichier du paquet `package_id` (ex.
-    /// `Author-Name`). Les fichiers sans destination sont ignorés.
+    /// Destination of each file of the package `package_id` (e.g.
+    /// `Author-Name`). Files without a destination are skipped.
     fn place(&self, package_id: &str, kind: &PackageKind, files: &[String]) -> Vec<Placement>;
 }

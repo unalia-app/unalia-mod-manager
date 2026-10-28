@@ -1,5 +1,5 @@
-//! Connexion SSO de Nexus, contre un faux serveur WebSocket qui suit le
-//! protocole documenté par Nexus.
+//! Nexus SSO login, against a fake WebSocket server that follows the
+//! protocol documented by Nexus.
 
 use futures_util::{SinkExt, StreamExt};
 use mod_engine::sources::nexus_sso::{self, SsoError};
@@ -7,8 +7,8 @@ use serde_json::{Value, json};
 use tokio::net::TcpListener;
 use tokio_tungstenite::tungstenite::Message;
 
-/// Serveur d'une seule session : vérifie l'annonce, confirme la session,
-/// puis envoie `final_reply` une fois la page « ouverte ».
+/// Single-session server: checks the announcement, confirms the session,
+/// then sends `final_reply` once the page is "opened".
 async fn fake_sso(final_reply: Value) -> (String, tokio::task::JoinHandle<Value>) {
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let url = format!("ws://{}", listener.local_addr().unwrap());
