@@ -13,7 +13,7 @@ next-env.d.ts
 target/
 apps/desktop/src-tauri/gen/
 
-# OS / éditeurs
+# OS / editors
 .DS_Store
 Thumbs.db
 .idea/
@@ -24,7 +24,7 @@ Thumbs.db
 .env*
 !.env.example
 
-# Données locales : bases SQLite et journaux de l'appli ou des tests
+# Local data: SQLite databases and logs from the app or the tests
 *.db
 *.db-shm
 *.db-wal
@@ -32,23 +32,20 @@ Thumbs.db
 *.sqlite3
 *.log
 
-# Outils locaux (Claude Code)
+# Local tools (Claude Code)
 .claude/
 
-# Captures Playwright
+# Playwright screenshots
 .playwright-mcp/
 
-# Steam de démo (pnpm demo), contient des assets officiels
+# Demo Steam (pnpm demo), contains official assets
 .demo/
 
-# Clés privées (signature des mises à jour)
+# Private keys (update signing)
 *.key
 
-# Vidéos : enregistrements OBS et rendus, trop lourds pour le dépôt
-apps/video/public/clips/*
-!apps/video/public/clips/.gitkeep
-apps/video/public/proxies/
-apps/video/out/
-
-# Site vitrine : son propre dépôt git, dans le workspace pnpm pour @modalia/ui
+# Landing site: its own git repo, in the pnpm workspace for @modalia/ui
 apps/site/
+
+# Vercel CLI link
+.vercel
