@@ -1,116 +1,119 @@
-# Modalia : règles de design
+# Modalia: design rules
 
-Référence visuelle pour les humains et les agents IA. Le langage vient d'**Unalia** (unalia.app) : on le prolonge, on ne le réinvente pas. En cas de doute, ouvrir Unalia et faire pareil.
+Visual reference for humans and AI agents. The language comes from **Unalia** (unalia.app): we extend it, we don't reinvent it. When in doubt, open Unalia and do the same.
 
-Tokens : `packages/ui/src/styles.css`. Composants : `packages/ui/src/`.
+Tokens: `packages/ui/src/styles.css`. Components: `packages/ui/src/`.
 
-## Nom
+## Name
 
-- **Unalia** est la marque mère. Cette appli s'appelle **Unalia Mod Manager** : titre de fenêtre, installeur, stores.
-- Logo : « UNALIA » en italique gras, puis « Mod manager » en petit (majuscules, `fg-subtle`). Même composition dans l'intro, sous le mot.
-- Dans les phrases de l'interface : « Unalia » seul (« Unalia installs it right after »).
-- « Modalia » reste le nom de code interne : dépôt, paquets, base `modalia.db`. L'identifiant de l'appli est `app.unalia.modmanager` (l'ancien dossier `app.modalia.desktop` est repris au démarrage).
+- **Unalia** is the parent brand. This app is called **Unalia Mod Manager**: window title, installer, stores.
+- Logo: "UNALIA" in bold italic, then "Mod manager" small below (uppercase, `fg-subtle`). Same layout in the intro, under the word.
+- In UI sentences: "Unalia" alone ("Unalia installs it right after").
+- "Modalia" stays the internal codename: repo, packages, `modalia.db` database. The app id is `app.unalia.modmanager` (the old `app.modalia.desktop` folder is taken over at startup).
 
-## Principes
+## Principles
 
-1. **Sombre, une seule surface.** Fond `bg` (#0d0d0f) partout. La profondeur vient de transparences blanches et de flou, jamais de gris opaques empilés.
-2. **Le blanc hiérarchise.** Titre en `fg`, contenu en `fg-muted`, métadonnées en `fg-subtle`, détails techniques en `fg-faint`. Pas d'autre couleur de texte, sauf les états.
-3. **Seul l'accent change selon le jeu** (SPEC §4). Il est défini par `--accent` sur un conteneur et s'utilise via `accent`. Structure, typo, espacements et composants ne bougent jamais d'un jeu à l'autre.
-4. **Chaque état est dessiné** : chargement (squelettes), vide, erreur, indisponible. Pas de spinner seul au milieu d'un écran vide, pas de code d'erreur en premier plan.
-5. **Calme.** Une action principale par écran (bouton blanc `primary`). Le reste en `secondary` ou `outline`.
+1. **Dark, a single surface.** `bg` background (#0d0d0f) everywhere. Depth comes from white transparencies and blur, never from stacked opaque grays.
+2. **White sets the hierarchy.** Titles in `fg`, content in `fg-muted`, metadata in `fg-subtle`, technical details in `fg-faint`. No other text color, except states.
+3. **Only the accent changes with the game.** It is set by `--accent` on a container and used through `accent`. Layout, type, spacing and components never change from one game to another.
+4. **Every state is designed**: loading (skeletons), empty, error, unavailable. No lone spinner in the middle of an empty screen, no error code up front.
+5. **Calm.** One primary action per screen (white `primary` button). Everything else in `secondary` or `outline`.
 
 ## Tokens
 
-| Rôle | Classe | Valeur |
+| Role | Class | Value |
 |---|---|---|
-| Fond | `bg-bg` | `#0d0d0f` |
-| Surface (panneau) | `bg-surface` | blanc 3 % |
-| Surface survolée / active | `bg-surface-hover` | blanc 6 % |
-| Surface marquée (champ, chip) | `bg-surface-strong` | blanc 10 % |
-| Bordure | `border-line` | blanc 8 % |
-| Bordure marquée | `border-line-strong` | blanc 20 % |
-| Texte | `text-fg` / `-muted` / `-subtle` / `-faint` | blanc 100 / 60 / 40 / 25 % |
-| Accent du jeu | `accent` | `--accent`, neutre par défaut |
-| États | `success` `info` `warning` `danger` | emerald / blue / amber / red 400 |
+| Background | `bg-bg` | `#0d0d0f` |
+| Surface (panel) | `bg-surface` | white 3% |
+| Hovered / active surface | `bg-surface-hover` | white 6% |
+| Strong surface (field, chip) | `bg-surface-strong` | white 10% |
+| Border | `border-line` | white 8% |
+| Strong border | `border-line-strong` | white 20% |
+| Text | `text-fg` / `-muted` / `-subtle` / `-faint` | white 100 / 60 / 40 / 25% |
+| Game accent | `accent` | `--accent`, neutral by default |
+| States | `success` `info` `warning` `danger` | emerald / blue / amber / red 400 |
 
-Une couleur d'état s'emploie toujours en **contour 20 % + fond 10 % + texte plein** (voir `Badge`), jamais en aplat.
+A state color is always used as **20% outline + 10% background + solid text** (see `Badge`), never as a solid fill.
 
-### Accent du jeu
+### Game accent
 
-- Calculé par le moteur (`mod-engine::artwork`) à partir de la jaquette du cache de Steam. On prend la teinte dominante, avec une luminosité OKLCH fixe de 0,78 et un chroma entre 0,07 et 0,17. La couleur est ramenée dans le gamut sRGB, avec un contraste d'au moins 4,5:1 sur `bg`. Une jaquette grise ne produit pas d'accent, et l'interface reste alors neutre.
-- Un conteneur pose `style={{ "--accent": … }}` et l'utilitaire `accent-transition` : `--accent` est déclaré en `@property <color>`, ce qui donne un fondu de 700 ms quand on change de jeu.
-- Ne jamais coder un accent en dur dans un composant : `text-accent`, `bg-accent/10`, `border-accent/20`.
+- Computed by the engine (`mod-engine::artwork`) from the cover in Steam's cache. It takes the dominant hue, with a fixed OKLCH lightness of 0.78 and a chroma between 0.07 and 0.17. The color is brought back into the sRGB gamut, with a contrast of at least 4.5:1 on `bg`. A gray cover gives no accent, and the UI then stays neutral.
+- A container sets `style={{ "--accent": … }}` and the `accent-transition` utility: `--accent` is declared as an `@property <color>`, which gives a 700 ms fade when the game changes.
+- Never hard-code an accent in a component: `text-accent`, `bg-accent/10`, `border-accent/20`.
 
-### Ambiance
+### Ambience
 
-- La bannière du jeu (`hero`), floutée (`blur-2xl`) à 35 % d'opacité, s'estompe vers le bas, avec un halo radial teinté par l'accent par-dessus.
-- L'ambiance suit le jeu que l'utilisateur désigne (survol, flèches), jamais un jeu choisi par défaut.
-- Images : uniquement via `artworkUrl()` (protocole `artwork` du moteur), jamais par un chemin de fichier.
+- The game banner (`hero`), blurred (`blur-2xl`) at 35% opacity, fades out toward the bottom, with a radial glow tinted by the accent on top.
+- The ambience follows the game the user points at (hover, arrows), never a game picked by default.
+- Images: only through `artworkUrl()` (the engine's `artwork` protocol), never through a file path.
 
-## Typographie
+## Typography
 
-- **Poppins** (`font-sans`, par défaut) pour tout le texte.
-- **Inter Tight** (`font-tight`) pour les petits éléments denses : badges, raccourcis clavier, chiffres.
-- Titres : `font-semibold tracking-tight`. Le titre principal d'un écran suit le motif d'Unalia : première ligne en `fg`, suite en `fg-muted`.
-- Tailles courantes : titre d'écran `text-5xl`, texte `text-sm`, métadonnées `text-xs`, badges `text-[11px]`.
+- **Poppins** (`font-sans`, the default) for all text.
+- **Inter Tight** (`font-tight`) for small dense elements: badges, keyboard shortcuts, numbers.
+- Titles: `font-semibold tracking-tight`. The main title of a screen follows Unalia's pattern: first line in `fg`, the rest in `fg-muted`.
+- Common sizes: screen title `text-5xl`, text `text-sm`, metadata `text-xs`, badges `text-[11px]`.
 
-## Formes
+## Shapes
 
-- Rayons : `rounded-md` pour boutons et champs, `rounded-lg` pour lignes et vignettes, `rounded-xl` pour panneaux, `rounded-2xl` pour fenêtres modales.
-- Panneau standard : utilitaire `glass` (bordure `line`, fond `surface`, flou). Le réserver aux panneaux de taille raisonnable : `backdrop-filter` coûte cher sur de grandes surfaces (SPEC §4).
-- **Contrôle posé sur une image** (bouton ou badge sur une icône de mod ou une jaquette) : utilitaire `liquid-glass`, un verre sombre teinté avec un liseré clair, lisible sur une image claire comme sombre. Jamais de bouton blanc sur une image : il disparaît sur un fond clair.
-- Barres de défilement : la barre native est masquée (sous Windows, elle réserve sa colonne même transparente). La page a sa barre en surimpression (`OverlayScrollbar`), visible pendant le défilement ou au survol du bord droit, et qu'on peut attraper.
-- **Jamais de `glass` sur un élément répété ou animé** (cartes d'une grille, ligne qui se soulève) : le flou est recalculé à chaque image, et le survol saccade. Utiliser `rounded-xl border border-line bg-surface`, qui donne quasiment le même rendu sur fond sombre.
+- Radii: `rounded-md` for buttons and fields, `rounded-lg` for rows and thumbnails, `rounded-xl` for panels, `rounded-2xl` for modal dialogs.
+- Standard panel: the `glass` utility (`line` border, `surface` background, blur). Keep it for reasonably sized panels: `backdrop-filter` is expensive on large surfaces.
+- **Control placed over an image** (button or badge on a mod icon or a cover): the `liquid-glass` utility, a tinted dark glass with a light edge, readable over a light or a dark image. Never a white button over an image: it disappears on a light background.
+- Scrollbars: the native bar is hidden (on Windows, it reserves its column even when transparent). The page has its own overlay bar (`OverlayScrollbar`), shown while scrolling or when hovering the right edge, and it can be grabbed.
+- **Never `glass` on a repeated or animated element** (cards of a grid, a row that lifts): the blur is recomputed at each frame, and hover stutters. Use `rounded-xl border border-line bg-surface`, which looks almost the same on a dark background.
 
-## Mouvement
+## Motion
 
-- Animer uniquement `transform` et `opacity`.
-- Courbe `ease-out` (`cubic-bezier(0.32, 0.72, 0, 1)`, celle des modales d'Unalia) pour les entrées et les panneaux. Les durées vont de 150 ms (survol) à 500 ms (entrée d'écran).
-- Entrées : `animate-fade-up` pour les blocs d'écran (décalés de 60 ms), `animate-row-in` pour les lignes de liste (décalées de 30 ms).
-- Chargement : `Skeleton` (reflet `animate-shimmer`), aux dimensions du contenu final.
-- Bouton principal : le libellé glisse au survol (effet repris du `MainButton` d'Unalia).
-- `prefers-reduced-motion` est respecté globalement.
-- **Intro de lancement** (`components/intro.tsx`, environ 1,6 s) : les lettres de MODALIA apparaissent une à une (fondu, légère montée, du flou au net, jamais masquées : une lettre à moitié coupée se lit comme un bug), un reflet irisé les traverse, un halo s'ouvre et une ligne se trace. Le logo s'envole ensuite vers l'en-tête (FLIP : on part d'un grand texte et on le réduit, pour garder des lettres nettes). Pendant l'intro, les entrées `animate-fade-up` de l'écran sont en pause (`.intro-pending`) et reprennent au moment de l'envol. Un clic ou une touche passe l'intro. Elle se joue une fois par lancement.
-- Piège Tailwind v4 : `translate-*`, `scale-*` et `rotate-*` utilisent les propriétés CSS `translate`, `scale` et `rotate`, pas `transform`.
-  - Une transition explicite doit les nommer : `transition-[opacity,translate]`, pas `transition-[opacity,transform]`, sinon l'effet saute au lieu de s'animer. `transition-transform` et `transition` les couvrent déjà.
-  - Sur un élément animé par une keyframe en `transform`, ne pas mettre de classe `translate-*` : les deux s'additionnent.
+- Only animate `transform` and `opacity`.
+- `ease-out` curve (`cubic-bezier(0.32, 0.72, 0, 1)`, the one of Unalia's dialogs) for entrances and panels. Durations go from 150 ms (hover) to 500 ms (screen entrance).
+- Entrances: `animate-fade-up` for screen blocks (staggered by 60 ms), `animate-row-in` for list rows (staggered by 30 ms).
+- Loading: `Skeleton` (`animate-shimmer` sheen), at the size of the final content.
+- Primary button: the label slides on hover (effect taken from Unalia's `MainButton`).
+- `prefers-reduced-motion` is respected globally.
+- **Launch intro** (`components/intro.tsx`, about 1.6 s): the letters of UNALIA appear one by one (fade, slight rise, from blur to sharp, never clipped: a half-cut letter reads as a bug), an iridescent sheen crosses them, a glow opens and a line draws itself. The logo then flies to the header (FLIP: start from large text and scale it down, to keep the letters sharp). During the intro, the screen's `animate-fade-up` entrances are paused (`.intro-pending`) and resume when the flight starts. A click or a key skips the intro. It plays once per launch.
+- Tailwind v4 trap: `translate-*`, `scale-*` and `rotate-*` use the CSS properties `translate`, `scale` and `rotate`, not `transform`.
+  - An explicit transition must name them: `transition-[opacity,translate]`, not `transition-[opacity,transform]`, or the effect jumps instead of animating. `transition-transform` and `transition` already cover them.
+  - On an element animated by a `transform` keyframe, don't add a `translate-*` class: the two add up.
 
-## Composants (`@modalia/ui`)
+## Components (`@modalia/ui`)
 
-| Composant | Usage |
+| Component | Use |
 |---|---|
-| `Button` | `primary` (blanc, une seule action principale), `secondary` (texte), `outline` (verre), `danger` (action qui retire quelque chose, dans une confirmation). Tailles `sm` `md` `lg` `icon`. `isLoading` remplace le contenu par un `Spinner`. |
-| `Dialog` | Fenêtre de confirmation, reprise de l'`AlertDialog` d'Unalia : `DialogHeader` (`DialogTitle`, `DialogDescription`), contenu, `DialogFooter` (Cancel en `secondary`, l'action à droite). Échap et un clic à côté ferment, sauf pendant l'action (`onClose` absent). |
-| `Badge` | Étiquette en pilule : `neutral`, `accent` ou un état. |
-| `SearchField` | Champ de recherche en verre clair, avec un élément optionnel à droite. |
-| `Segmented` | Choix exclusif à indicateur glissant : `tabs` (onglets d'écran, soulignés à l'accent) ou `pills` (tri, filtres ; hauteur h-10 comme un `SearchField` compact, pour s'aligner dans une barre d'outils). |
-| `Skeleton` | Bloc de chargement. |
-| `Kbd` | Touche ou raccourci clavier. |
-| `cn` | Fusion de classes, connaît les tokens maison. |
+| `Button` | `primary` (white, a single primary action), `secondary` (text), `outline` (glass), `danger` (action that removes something, in a confirmation). Sizes `sm` `md` `lg` `icon`. `isLoading` replaces the content with a `Spinner`. |
+| `Dialog` | Confirmation dialog, taken from Unalia's `AlertDialog`: `DialogHeader` (`DialogTitle`, `DialogDescription`), content, `DialogFooter` (Cancel as `secondary`, the action on the right). Escape and a click outside close it, except during the action (no `onClose`). |
+| `Badge` | Pill label: `neutral`, `accent` or a state. |
+| `SearchField` | Light glass search field, with an optional element on the right. |
+| `Segmented` | Exclusive choice with a sliding indicator: `tabs` (screen tabs, underlined in the accent) or `pills` (sort, filters; h-10 height like a compact `SearchField`, to line up in a toolbar). |
+| `Select` | Dropdown menu with a panel that detaches from the trigger. |
+| `Skeleton` | Loading block. |
+| `Kbd` | Key or keyboard shortcut. |
+| `ToastStack` | The app's toasts (see below). |
+| `GitHubIcon`, `DiscordIcon` | Brand icons (Simple Icons), in the text color. |
+| `cn` | Class merging that knows the custom tokens. |
 
-Avant de créer un composant, vérifier qu'il n'existe pas dans Unalia (`components/ui/`) : on le porte ici plutôt que d'en dessiner un nouveau.
+Before creating a component, check that it doesn't exist in Unalia (`components/ui/`): port it here rather than designing a new one.
 
 ## Toasts
 
-- **Rares.** Seulement pour ce qui n'a pas d'autre place à l'écran : « Undo » après un retrait, ou une erreur sans endroit où s'afficher. Jamais pour confirmer une réussite que l'écran montre déjà.
-- Pastille sombre opaque, en bas au centre, sans flou ni liseré coloré. Action en texte à l'accent (« Undo »). Erreur : petite icône rouge, détail technique replié derrière « Details ».
-- Pas de croix : le toast part seul après 4 s, le survol met le minuteur en pause. Deux au plus à l'écran.
-- Les détails d'une erreur liée à un élément (bouton Install…) se déplient sur place, pas dans un toast.
+- **Rare.** Only for what has no other place on screen: "Undo" after a removal, or an error with nowhere to show. Never to confirm a success the screen already shows.
+- Opaque dark pill, bottom center, without blur or colored edge. Action as accent text ("Undo"). Error: small red icon, technical detail folded behind "Details".
+- No cross: the toast leaves by itself after 4 s, hover pauses the timer. Two at most on screen.
+- The details of an error tied to an element (Install button…) unfold in place, not in a toast.
 
-## Fenêtre
+## Window
 
-- Pas de barre de titre système sous macOS (`titleBarStyle: Overlay`). L'en-tête (`AppHeader`) est la zone de déplacement (`data-tauri-drag-region` sur l'élément lui-même, ses boutons restent cliquables). Il reste collé en haut, avec un fond flouté une fois la page défilée. Son contenu commence après les feux tricolores (`pl-22`).
-- Un élément `fixed` (barre flottante, menu) se rend dans `document.body` via `createPortal` : un ancêtre animé en `transform` (les entrées `animate-fade-up`) devient sinon sa référence, et l'élément sort de l'écran.
-- Cartes de mods : petit bouton « Install » au survol (visible en continu pendant l'installation ou après un échec), sans mode sélection. Le moteur installe dépendances et loader tout seul.
-- `overflow-clip` plutôt que `overflow-hidden` sur les conteneurs d'écran : `hidden` crée un conteneur de défilement et casse `position: sticky`.
-- Un texte tronqué (`truncate`) coupe aussi les jambages (g, j, p) : lui donner un `pb-1`.
-- Sous Windows : effets Mica/acrylique à évaluer.
+- No system title bar. The header (`AppHeader`) is the drag area (`data-tauri-drag-region` on the element itself, its buttons stay clickable). It sticks to the top, with a blurred background once the page is scrolled. On macOS its content starts after the traffic lights (`pl-22`); on Windows, Modalia draws its own window buttons.
+- A `fixed` element (floating bar, menu) renders into `document.body` through `createPortal`: otherwise an ancestor animated with `transform` (the `animate-fade-up` entrances) becomes its reference, and the element leaves the screen.
+- Mod cards: small "Install" button on hover (always visible during the install or after a failure), no selection mode. The engine installs dependencies and the loader by itself.
+- `overflow-clip` rather than `overflow-hidden` on screen containers: `hidden` creates a scroll container and breaks `position: sticky`.
+- Truncated text (`truncate`) also cuts descenders (g, j, p): give it a `pb-1`.
+- The credits pill (GitHub, Discord, author) sits bottom left on every page, small: the app is open source, not an ad for its maintainer.
 
-## Textes
+## Copy
 
-- **L'interface est en anglais.** Le code, ses commentaires et cette documentation restent en français. Une vraie traduction communautaire viendra plus tard (SPEC §10).
-- Ton direct, phrases courtes, sans jargon : « Add a game by picking its folder », pas « Select an installation directory ».
-- Une erreur dit ce qui s'est passé et quoi faire (« Couldn't load mods. Check your connection. »). Le détail technique va dans un `<details>` « Technical details ».
-- Casse de phrase, y compris pour les titres et les boutons : « Add a game manually », pas « Add A Game Manually ».
-- Guillemets typographiques “ ” autour d'une saisie de l'utilisateur.
-- Pas de tiret cadratin ni demi-cadratin.
+- **Everything is in English**: the interface, the code, its comments and the docs. A real community translation of the interface will come later.
+- Direct tone, short sentences, no jargon: "Add a game by picking its folder", not "Select an installation directory".
+- An error says what happened and what to do ("Couldn't load mods. Check your connection."). The technical detail goes in a "Technical details" `<details>`.
+- Sentence case, including titles and buttons: "Add a game manually", not "Add A Game Manually".
+- Curly quotes “ ” around user input.
+- No em dash or en dash.

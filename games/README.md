@@ -1,5 +1,5 @@
-# Profils de jeux
+# Game profiles
 
-Un fichier par jeu absent du schéma Thunderstore, ou avec des cas particuliers : source des mods, frameworks, dossier inhabituel, anti-triche connu.
+One file per game missing from the Thunderstore schema, or with special cases: mod source, frameworks, unusual folder, known anti-cheat.
 
-Les profils sont de la **donnée pure** : ils ne contiennent ni n'exécutent jamais de code (voir `SPEC.md`, sections 6.3 et 7). Format : voir `cyberpunk-2077.toml` et `crates/mod-engine/src/games/builtin.rs`.
+Profiles are **pure data**: they never contain or run code. Format: see `cyberpunk-2077.toml` and `crates/mod-engine/src/games/builtin.rs`. Unreal games with a Nexus Mods page don't need a profile: they are recognized automatically from `auto/unreal.toml`.

@@ -5,7 +5,8 @@ Thanks for helping. Game profiles, bug reports and fixes are the most useful con
 ## Before you start
 
 - **Open an issue before any new feature or screen.** We agree on the idea first, so your work does not get turned down.
-- Bug fixes and game profiles can go straight to a merge request.
+- Bug fixes and game profiles can go straight to a pull request.
+- Questions and ideas are welcome on [Discord](https://discord.gg/AMtDVqygh5).
 - Security problems never go in a public issue: see [SECURITY.md](SECURITY.md).
 
 ## Run the project
@@ -33,7 +34,7 @@ The code still uses the project's codename, **Modalia** (`@modalia/*` packages, 
 | `games/` | Game profiles: data only, never code |
 | `fixtures/` | Fake games and archives for the tests |
 
-The product reference is `SPEC.md`, the design rules are in `DESIGN.md`. Both are in French.
+How the app is built: [ARCHITECTURE.md](ARCHITECTURE.md). Design rules: [DESIGN.md](DESIGN.md). Everything (code, comments, docs, interface) is in English.
 
 ## Rules that are not negotiable
 
@@ -44,16 +45,22 @@ The product reference is `SPEC.md`, the design rules are in `DESIGN.md`. Both ar
 
 Code that touches players' files (`crates/mod-engine/src/loaders/`, `deploy.rs`, `archive.rs`, `installer/`) gets a stricter review, and needs tests on the fixtures.
 
+## Using AI tools
+
+Allowed, as long as you read, understand and test what you submit, and say so in the pull request when a tool wrote a significant part. Don't add AI tools as commit co-authors. Details: [AI_POLICY.md](AI_POLICY.md).
+
 ## Adding a game profile
 
-A profile is a TOML file in `games/` for a game that is not in the Thunderstore schema, or that needs special handling (mod source, frameworks, unusual folder, known anti-cheat). Start from `games/cyberpunk-2077.toml`. The format lives in `crates/mod-engine/src/games/schema.rs`.
+A profile is a TOML file in `games/` for a game that is not in the Thunderstore schema, or that needs special handling (mod source, frameworks, unusual folder, known anti-cheat). Start from `games/cyberpunk-2077.toml`. The format lives in `crates/mod-engine/src/games/builtin.rs`.
+
+Unreal games with a Nexus Mods page need no profile: they are recognized automatically. Write one only to add something the app can't guess (launchers, game versions, frameworks).
 
 ## Interface changes
 
 - Use the existing components and tokens (`packages/ui`, `DESIGN.md`). No one-off colors or spacings.
 - The interface is in English.
-- **Every merge request that changes the interface includes screenshots or a short video.**
-- The maintainer may touch up the interface of a merge request to keep it consistent. You stay credited with a `Co-authored-by` line.
+- **Every pull request that changes the interface includes screenshots or a short video.**
+- The maintainer may touch up the interface of a pull request to keep it consistent. You stay credited with a `Co-authored-by` line.
 
 ## Commits
 
@@ -72,7 +79,7 @@ Example: `✨ feat(mods) install mods shipped as rar archives`
 
 ## License of your contributions
 
-By opening a merge request, you agree that your contribution is licensed under the GNU GPL v3 with the [additional permission for UnRAR](LICENSE-EXCEPTION.md), like the rest of the code.
+By opening a pull request, you agree that your contribution is licensed under the GNU GPL v3 with the [additional permission for UnRAR](LICENSE-EXCEPTION.md), like the rest of the code.
 
 ## Code of conduct
 
