@@ -7,6 +7,7 @@ All notable changes to Unalia Mod Manager. The format follows [Keep a Changelog]
 ### Fixed
 
 - The Discord link opens the server again: the old invite had expired.
+- Nexus Mods: updating a mod whose file name holds its version (`PBZSkipIntro 1.0.0`, then `1.1.0`) installs the new file instead of the old one again.
 
 ## [0.1.3] - 2026-10-29
 

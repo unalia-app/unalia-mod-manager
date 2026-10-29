@@ -193,8 +193,9 @@ impl ModInfo {
     }
 
     /// The same file today (update, reinstall), or as it was before
-    /// `before`: the most recent one with the same name. No file with that
-    /// name anymore: this one, as is.
+    /// `before`: the most recent one with the same name, version aside. No
+    /// file with that name anymore: this one as is, unless the author moved
+    /// it to the old versions, then the main file.
     pub fn successor(&self, file_id: u32, before: Option<&str>) -> Option<&ModFile> {
         let old = self.files.iter().find(|f| f.file_id == file_id)?;
         let current = self
@@ -205,6 +206,10 @@ impl ModInfo {
             .max_by_key(|f| f.uploaded_at);
         match before {
             Some(before) => self.as_of(current.unwrap_or(old), before),
+            // Reinstalling a replaced file would offer the update forever.
+            None if !CURRENT.contains(&old.category.as_str()) => {
+                current.or_else(|| self.main_file())
+            }
             None => current,
         }
         .or(Some(old))
@@ -257,9 +262,29 @@ impl ModInfo {
 const CURRENT: [&str; 4] = ["MAIN", "OPTIONAL", "UPDATE", "MISCELLANEOUS"];
 
 /// Two file names for the same file, from one version to the next
-/// (`WHITE_BLACK` became `White_Black`).
+/// (`WHITE_BLACK` became `White_Black`, `PBZSkipIntro 1.0.0` became
+/// `PBZSkipIntro 1.1.0`).
 fn same_name(a: &str, b: &str) -> bool {
-    a.trim().eq_ignore_ascii_case(b.trim())
+    if a.trim().eq_ignore_ascii_case(b.trim()) {
+        return true;
+    }
+    let (a, b) = (without_version(a), without_version(b));
+    !a.is_empty() && a == b
+}
+
+/// A file name in lowercase, without the words that are a version (`1.1.0`,
+/// `v2`): what stays the same from one upload to the next.
+fn without_version(name: &str) -> String {
+    name.to_lowercase()
+        .split(|c: char| c.is_whitespace() || matches!(c, '-' | '_' | '(' | ')' | '[' | ']'))
+        .filter(|word| {
+            let number = word.strip_prefix('v').unwrap_or(word);
+            !(number.starts_with(|c: char| c.is_ascii_digit())
+                && number.chars().all(|c| c.is_ascii_digit() || c == '.'))
+        })
+        .filter(|word| !word.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ")
 }
 
 /// Requirement declared on Nexus.
@@ -1260,5 +1285,58 @@ mod tests {
         // Published after: nothing older, the current file.
         let new = info(vec![file(1, "Main", "MAIN", after)]);
         assert_eq!(new.file_for(Some("2026-10-22")).unwrap().file_id, 1);
+    }
+
+    #[test]
+    fn an_update_finds_the_file_renamed_with_its_version() {
+        let file = |id, name: &str, category: &str, at| ModFile {
+            file_id: id,
+            name: name.into(),
+            version: String::new(),
+            category: category.into(),
+            primary: false,
+            size: None,
+            uploaded_at: at,
+            description: String::new(),
+        };
+        let info = |files| ModInfo {
+            mod_id: 12,
+            name: String::new(),
+            description: String::new(),
+            author: String::new(),
+            version: String::new(),
+            thumbnail_url: None,
+            files,
+            requirements: Vec::new(),
+        };
+        // Skip Intro on Phantom Blade Zero: the version is in the name.
+        let skip = info(vec![
+            file(9, "PBZSkipIntro 1.0.0", "OLD_VERSION", 1),
+            file(94, "PBZSkipIntro 1.1.0", "MAIN", 2),
+        ]);
+        assert_eq!(skip.successor(9, None).unwrap().file_id, 94);
+        // Variants keep their own file.
+        let variants = info(vec![
+            file(1, "Dark v1", "OLD_VERSION", 1),
+            file(2, "Light v1", "OLD_VERSION", 1),
+            file(3, "Dark v2", "MAIN", 2),
+            file(4, "Light v2", "OPTIONAL", 2),
+        ]);
+        assert_eq!(variants.successor(2, None).unwrap().file_id, 4);
+        // Renamed for good and moved to the old versions: the main file.
+        let renamed = info(vec![
+            file(1, "Old name", "OLD_VERSION", 1),
+            file(2, "New name", "MAIN", 2),
+        ]);
+        assert_eq!(renamed.successor(1, None).unwrap().file_id, 2);
+        // Still current under another name: kept as is.
+        let optional = info(vec![
+            file(1, "Main", "MAIN", 2),
+            file(2, "Extra", "OPTIONAL", 1),
+        ]);
+        assert_eq!(optional.successor(2, None).unwrap().file_id, 2);
+        // Names made only of a version are compared as they are.
+        assert!(!same_name("1.0", "2.0"));
+        assert!(same_name("Mod_v1.2", "mod v1.3"));
     }
 }
