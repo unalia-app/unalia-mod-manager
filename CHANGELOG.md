@@ -4,6 +4,14 @@ All notable changes to Unalia Mod Manager. The format follows [Keep a Changelog]
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-10-29
+
+### Fixed
+
+- Game covers: when the cover published by Thunderstore doesn't download (Valheim), the one from the game's Steam page is used instead of no cover at all.
+- Nexus Mods: a mod whose version is written differently on its page and on its file (`1.0` and `1.0.0`) is no longer offered as an update.
+- Nexus Mods: cancelling an install that waits for its turn stops it and removes it from the list right away.
+
 ## [0.1.1] - 2026-10-29
 
 ### Added
