@@ -4,13 +4,14 @@ import { Badge, Button, Skeleton, cn } from "@modalia/ui";
 import { ArrowLeft, Download, ExternalLink, Globe, Heart, Package, RotateCw, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { type CSSProperties, type ReactNode, useEffect, useState } from "react";
+import { type CSSProperties, type ReactNode, useEffect, useMemo, useState } from "react";
 
 import { Ambience } from "@/components/ambience";
 import { AppHeader } from "@/components/app-header";
 import { GameSwitcher } from "@/components/game/game-switcher";
 import { PlayButton } from "@/components/game/play-button";
 import { Markdown } from "@/components/markdown";
+import { GalleryStrip, ImageViewer, descriptionImages, useGallery } from "@/components/mod/gallery";
 import { InstallButton } from "@/components/mod/install-button";
 import { Notice } from "@/components/notice";
 import { useAccent } from "@/hooks/use-accent";
@@ -151,6 +152,22 @@ function ModDetailsView({
 				? "Nexus asks free accounts to confirm each download on its website"
 				: undefined;
 
+	// The main picture, then the screenshots of the description.
+	const markdown = description.status === "ready" ? description.value : "";
+	const candidates = useMemo(
+		() => [...new Set([...mod.images.slice(0, 1), ...descriptionImages(markdown)])],
+		[mod.images, markdown],
+	);
+	const { images, measured } = useGallery(candidates);
+	const [viewing, setViewing] = useState<number | null>(null);
+	const zoom = useMemo(
+		() => ({
+			can: (src: string) => images.includes(src),
+			open: (src: string) => setViewing(images.indexOf(src)),
+		}),
+		[images],
+	);
+
 	return (
 		<>
 			<section className="mt-6 flex items-start gap-6">
@@ -207,6 +224,11 @@ function ModDetailsView({
 				</div>
 			</section>
 
+			<GalleryStrip candidates={candidates} images={images} measured={measured} onOpen={setViewing} />
+			{viewing !== null && (
+				<ImageViewer images={images} index={viewing} onIndex={setViewing} onClose={() => setViewing(null)} />
+			)}
+
 			{mod.deprecated && (
 				<div className="mt-6 max-w-2xl rounded-xl border border-warning/20 bg-warning/10 px-4 py-3 text-xs text-warning">
 					Its author marked this mod as deprecated. It may not work with the current version of the game.
@@ -227,7 +249,9 @@ function ModDetailsView({
 					)}
 					{description.status === "ready" &&
 						(description.value.trim() ? (
-							<Markdown internalLink={(href) => modLink(href, game)}>{description.value}</Markdown>
+							<Markdown internalLink={(href) => modLink(href, game)} zoom={zoom}>
+								{description.value}
+							</Markdown>
 						) : (
 							<p className="text-sm text-fg-subtle">The author didn't write a description.</p>
 						))}

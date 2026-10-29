@@ -20,22 +20,20 @@ const schema = {
 	protocols: { ...defaultSchema.protocols, href: ["https"], src: ["https"] },
 };
 
-function img({ src, alt }: ComponentProps<"img">) {
-	return typeof src === "string" && src.startsWith("https://") ? (
-		<img src={src} alt={alt ?? ""} loading="lazy" decoding="async" referrerPolicy="no-referrer" />
-	) : null;
-}
-
 /**
  * `internalLink`: app page for a link in the description (another mod of
  * the same game), else `null` and the link opens in the browser.
+ * `zoom`: the image opens in the viewer, when it is one of the mod's
+ * screenshots (not a badge).
  */
 export function Markdown({
 	children,
 	internalLink,
+	zoom,
 }: {
 	children: string;
 	internalLink?: (href: string) => string | null;
+	zoom?: { can: (src: string) => boolean; open: (src: string) => void };
 }) {
 	const router = useRouter();
 	const components: Components = useMemo(
@@ -61,9 +59,23 @@ export function Markdown({
 					</a>
 				);
 			},
-			img,
+			img: ({ src, alt }: ComponentProps<"img">) => {
+				if (typeof src !== "string" || !src.startsWith("https://")) return null;
+				const zoomable = zoom?.can(src) ?? false;
+				return (
+					<img
+						src={src}
+						alt={alt ?? ""}
+						loading="lazy"
+						decoding="async"
+						referrerPolicy="no-referrer"
+						onClick={zoomable ? () => zoom?.open(src) : undefined}
+						className={zoomable ? "cursor-zoom-in" : undefined}
+					/>
+				);
+			},
 		}),
-		[internalLink, router],
+		[internalLink, router, zoom],
 	);
 
 	return (
