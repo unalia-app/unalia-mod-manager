@@ -3,7 +3,7 @@ mod catalog;
 mod mods;
 mod support;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -39,6 +39,9 @@ struct Library {
     /// One image downloaded at a time: two simultaneous requests for the
     /// same image don't write the same file in parallel.
     art_downloads: tauri::async_runtime::Mutex<()>,
+    /// Image URLs that failed this session (a Thunderstore cover that
+    /// answers 403): not asked again before falling back on Steam.
+    art_failed: Mutex<HashSet<String>>,
 }
 
 #[derive(Clone)]
@@ -639,18 +642,26 @@ async fn source_artwork(app: &AppHandle, app_id: u32, kind: ArtworkKind) -> Opti
         ArtworkKind::Hero | ArtworkKind::HeroBlur => remote.hero.map(|u| (u, "hero")),
         ArtworkKind::Header | ArtworkKind::Logo => None,
     };
-    // Otherwise, the public images of the game's Steam page: useful for a
-    // game not opened in Steam yet, or a GOG or Epic copy of a game also
-    // sold on Steam.
-    let (url, name) = match thunderstore {
-        Some(found) => found,
-        None => steam_store_art(&app.state::<Catalog>().client, app_id, kind).await?,
-    };
+    if let Some((url, name)) = thunderstore
+        && let Some(file) = cached_artwork(app, app_id, &url, name).await
+    {
+        return Some(file);
+    }
+    // Otherwise, or if Thunderstore's image doesn't download, the public
+    // images of the game's Steam page: useful for a game not opened in
+    // Steam yet, or a GOG or Epic copy of a game also sold on Steam.
+    let (url, name) = steam_store_art(&app.state::<Catalog>().client, app_id, kind).await?;
+    cached_artwork(app, app_id, &url, name).await
+}
+
+/// Image downloaded once into the app cache, as `<app_id>-<name>.<ext>`.
+async fn cached_artwork(app: &AppHandle, app_id: u32, url: &str, name: &str) -> Option<PathBuf> {
+    let library = app.state::<Library>();
     // Without the query (`?t=...` of Steam store images).
     let extension = url
         .split(['?', '#'])
         .next()
-        .unwrap_or(&url)
+        .unwrap_or(url)
         .rsplit('.')
         .next()
         .filter(|e| e.len() <= 4 && e.chars().all(|c| c.is_ascii_alphanumeric()))
@@ -663,6 +674,9 @@ async fn source_artwork(app: &AppHandle, app_id: u32, kind: ArtworkKind) -> Opti
         .join(format!("{app_id}-{name}.{extension}"));
     let _guard = library.art_downloads.lock().await;
     if !file.is_file() {
+        if library.art_failed.lock().unwrap().contains(url) {
+            return None;
+        }
         let client = app.state::<Catalog>().client.clone();
         // One image: a single connection, 20 MB at most.
         let options = download::Options {
@@ -671,9 +685,10 @@ async fn source_artwork(app: &AppHandle, app_id: u32, kind: ArtworkKind) -> Opti
             space_factor: 1.0,
             ..download::Options::default()
         };
-        download::download(&client, &url, &file, &options, |_, _| {})
-            .await
-            .ok()?;
+        if download::download(&client, url, &file, &options, |_, _| {}).await.is_err() {
+            library.art_failed.lock().unwrap().insert(url.to_owned());
+            return None;
+        }
     }
     Some(file)
 }
