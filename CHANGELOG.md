@@ -4,6 +4,8 @@ All notable changes to Unalia Mod Manager. The format follows [Keep a Changelog]
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-10-29
+
 ### Fixed
 
 - Help & Feedback: messages now reach the team. Before, they were lost after the "Thanks" screen.
