@@ -1,0 +1,171 @@
+[
+	{
+		"name": "AzuCraftyBoxes",
+		"full_name": "Azumatt-AzuCraftyBoxes",
+		"owner": "Azumatt",
+		"package_url": "https://valheim.hexium.gg/mods/Azumatt/AzuCraftyBoxes",
+		"donation_link": null,
+		"date_created": "2026-07-04T21:14:09.000000Z",
+		"date_updated": "2026-10-12T05:03:17.000000Z",
+		"uuid4": "55122d54-5151-4763-9540-6e4e70db8c38",
+		"rating_score": 92,
+		"is_pinned": false,
+		"is_deprecated": false,
+		"has_nsfw_content": false,
+		"categories": [
+			"Mechanics",
+			"Open Source",
+			"Quality of Life",
+			"Valheim 1.0",
+			"Client (& Server)"
+		],
+		"versions": [
+			{
+				"name": "AzuCraftyBoxes",
+				"full_name": "Azumatt-AzuCraftyBoxes-1.8.28",
+				"description": "AzuCraftyBoxes is a Valheim mod that allows players to access and use resources from nearby containers when crafting and building, based on a configurable range and item restrictions. Restrictions are controlled by the yaml file Azumatt.AzuCraftyBoxes.yml",
+				"icon": "https://cdn.hexium.gg/upload/48/icon.png?10338",
+				"version_number": "1.8.28",
+				"dependencies": [
+					"denikson-BepInExPack_Valheim-5.4.2360"
+				],
+				"suggestions": [],
+				"download_url": "https://cdn.hexium.gg/upload/48/1.8.28.zip",
+				"downloads": 27344,
+				"date_created": "2026-10-12T05:03:17.000000Z",
+				"website_url": "https://discord.gg/pdHgy6Bsng",
+				"is_active": true,
+				"uuid4": "00002862-0000-4000-8000-000000002862",
+				"file_size": 423803
+			},
+			{
+				"name": "AzuCraftyBoxes",
+				"full_name": "Azumatt-AzuCraftyBoxes-1.8.27",
+				"description": "AzuCraftyBoxes is a Valheim mod that allows players to access and use resources from nearby containers when crafting and building, based on a configurable range and item restrictions. Restrictions are controlled by the yaml file Azumatt.AzuCraftyBoxes.yml",
+				"icon": "https://cdn.hexium.gg/upload/48/icon.png?7877",
+				"version_number": "1.8.27",
+				"dependencies": [
+					"denikson-BepInExPack_Valheim-5.4.2360"
+				],
+				"suggestions": [],
+				"download_url": "https://cdn.hexium.gg/upload/48/1.8.27.zip",
+				"downloads": 28369,
+				"date_created": "2026-10-02T03:37:40.000000Z",
+				"website_url": "https://discord.gg/pdHgy6Bsng",
+				"is_active": true,
+				"uuid4": "00001ec5-0000-4000-8000-000000001ec5",
+				"file_size": 423173
+			}
+		]
+	},
+	{
+		"name": "CDEV_BeRightBack",
+		"full_name": "CDEVx-CDEV_BeRightBack",
+		"owner": "CDEVx",
+		"package_url": "https://valheim.hexium.gg/mods/CDEVx/CDEV_BeRightBack",
+		"donation_link": null,
+		"date_created": "2026-10-29T08:41:07.000000Z",
+		"date_updated": "2026-10-29T08:41:08.000000Z",
+		"uuid4": "ce491361-c4a7-4c33-9d9e-ba5d22f35e21",
+		"rating_score": 0,
+		"is_pinned": false,
+		"is_deprecated": false,
+		"has_nsfw_content": false,
+		"categories": [
+			"Client-only"
+		],
+		"versions": [
+			{
+				"name": "CDEV_BeRightBack",
+				"full_name": "CDEVx-CDEV_BeRightBack-0.1.0",
+				"description": "A \"Be right back\" screen for streamers from the pause menu: the game pauses, your character dances under your text. Presets with emotes, their order, text place and size, lighting. Client-only.",
+				"icon": "https://cdn.hexium.gg/upload/2760/icon.png?13977",
+				"version_number": "0.1.0",
+				"dependencies": [
+					"denikson-BepInExPack_Valheim-5.4.2360"
+				],
+				"suggestions": [],
+				"download_url": "https://cdn.hexium.gg/upload/2760/0.1.0.zip",
+				"downloads": 1,
+				"date_created": "2026-10-29T08:41:08.000000Z",
+				"website_url": "",
+				"is_active": true,
+				"uuid4": "00003699-0000-4000-8000-000000003699",
+				"file_size": 706600
+			}
+		]
+	},
+	{
+		"name": "Verdants_Ascent_Main_Builder_Pack",
+		"full_name": "incompletionists-Verdants_Ascent_Main_Builder_Pack",
+		"owner": "incompletionists",
+		"package_url": "https://valheim.hexium.gg/mods/incompletionists/Verdants_Ascent_Main_Builder_Pack",
+		"donation_link": null,
+		"date_created": "2026-10-29T08:19:28.000000Z",
+		"date_updated": "2026-10-29T08:19:29.000000Z",
+		"uuid4": "00000ac7-0000-4000-8000-000000000ac7",
+		"rating_score": 0,
+		"is_pinned": false,
+		"is_deprecated": false,
+		"has_nsfw_content": false,
+		"categories": [
+			"Modpack",
+			"Client-only"
+		],
+		"versions": [
+			{
+				"name": "Verdants_Ascent_Main_Builder_Pack",
+				"full_name": "incompletionists-Verdants_Ascent_Main_Builder_Pack-0.1.0",
+				"description": "Admin/builder modpack for the Verdant's Ascent RPG server - the tools the VA RPG admins build with: Fires building, terrain, companions and NPC mods plus the server's building and admin tools.",
+				"icon": "https://cdn.hexium.gg/upload/2759/icon.png?13972",
+				"version_number": "0.1.0",
+				"dependencies": [
+					"denikson-BepInExPack_Valheim-5.4.2360",
+					"JereKuusela-Expand_World_Data-1.79.0",
+					"JereKuusela-Expand_World_Prefabs-1.65.0",
+					"JereKuusela-Infinity_Hammer-1.91.0",
+					"JereKuusela-Server_devcommands-1.116.0",
+					"JereKuusela-World_Edit_Commands-1.82.0",
+					"ValheimModding-YamlDotNet-16.3.1",
+					"ComfyMods-Gizmo-1.16.0",
+					"ComfyMods-BetterZeeLog-1.17.0",
+					"shudnal-ConditionalConfigSync-1.0.11",
+					"JereKuusela-ESP-1.41.0",
+					"shudnal-GammaOfNightLights-1.0.10",
+					"JereKuusela-Item_Stand_All_Items-1.26.0",
+					"ValheimModding-Jotunn-2.30.2",
+					"BentoG-MissingPieces-2.3.2",
+					"ValheimModding-JsonDotNET-13.0.4",
+					"JereKuusela-Structure_Tweaks-1.37.0",
+					"MSchmoecker-TimeoutLimit-0.2.0",
+					"JereKuusela-Upgrade_World-1.87.0",
+					"incompletionists-FiresUnifiedCore-0.2.986",
+					"incompletionists-FiresVAngarde-0.2.56",
+					"incompletionists-FiresGhettoNetworking-1.6.9",
+					"incompletionists-FiresAdminPrefabs-1.1.328",
+					"incompletionists-FiresAllTheItems-0.0.53",
+					"incompletionists-FiresCompanions-0.1.117",
+					"incompletionists-FiresDiscordIntegration-1.0.43",
+					"incompletionists-FiresMonsterOverhaul-0.0.46",
+					"incompletionists-FiresRPGmaker-0.0.791",
+					"incompletionists-FiresWayshrines-1.2.11",
+					"incompletionists-VAInventory-1.0.368",
+					"incompletionists-FiresAdminTerrain-0.2.1240",
+					"incompletionists-FiresSnowmen-0.3.42",
+					"incompletionists-FiresTossinShade-0.3.284",
+					"incompletionists-FiresSteamworksPatcher-1.1.2",
+					"Legacy_Modding-Vedr-0.8.65",
+					"JereKuusela-Spawner_Tweaks-1.31.0"
+				],
+				"suggestions": [],
+				"download_url": "https://cdn.hexium.gg/upload/2759/0.1.0.zip",
+				"downloads": 2,
+				"date_created": "2026-10-29T08:19:29.000000Z",
+				"website_url": "https://github.com/fire-VA",
+				"is_active": true,
+				"uuid4": "00003694-0000-4000-8000-000000003694",
+				"file_size": 55924
+			}
+		]
+	}
+]

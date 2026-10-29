@@ -180,16 +180,23 @@ export async function refreshInstalled(appId: number) {
 	});
 }
 
-/** Starts the install (without waiting): the state follows in the store. `files`: picked Nexus files. */
-export function install(appId: number, modId: string, name?: string, files?: number[]): Promise<void> {
+// Source picked for each install: a retry (or the file picker) keeps it.
+const sources = new Map<string, string>();
+
+/**
+ * Starts the install (without waiting): the state follows in the store.
+ * `files`: picked Nexus files. `source`: picked in Discover (`hexium`).
+ */
+export function install(appId: number, modId: string, name?: string, files?: number[], source?: string): Promise<void> {
 	const k = key(appId, modId);
+	if (source) sources.set(k, source);
 	const current = snapshot.active.get(k);
 	if (current && current.status !== "error" && current.status !== "website") return Promise.resolve();
 	update((s) => {
 		s.active.set(k, { status: "queued", name: name ?? current?.name });
 	});
 	inFlight.add(k);
-	return installMod(appId, modId, files)
+	return installMod(appId, modId, files, sources.get(k))
 		.finally(() => inFlight.delete(k))
 		.then(
 			(outcome) =>
@@ -216,6 +223,7 @@ export function install(appId: number, modId: string, name?: string, files?: num
 						if (updates) s.updates.set(appId, updates.filter((u) => u.modId !== modId));
 					}
 					s.active.delete(k);
+					sources.delete(k);
 				}),
 			(error: unknown) =>
 				update((s) => {

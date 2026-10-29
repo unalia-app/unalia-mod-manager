@@ -249,3 +249,42 @@ async fn verified_github_copies_spare_the_website() {
         );
     }
 }
+
+#[tokio::test]
+#[ignore]
+async fn hexium_catalog_matches_the_real_api() {
+    use mod_engine::sources::hexium::Hexium;
+    use mod_engine::sources::thunderstore::Thunderstore;
+
+    let client = mod_engine::http_client();
+    let hexium = Hexium::new(client.clone(), Thunderstore::new(client));
+    let communities = hexium.communities().await.unwrap();
+    assert!(communities.iter().any(|c| c == "valheim"));
+
+    let page = hexium
+        .search(
+            "valheim",
+            &SearchQuery {
+                sort: Sort::Downloads,
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(page.items.len(), 20);
+    assert!(page.has_more);
+    let first = &page.items[0];
+    let found = hexium.get("valheim", &first.id).await.unwrap();
+    assert_eq!(found.source, "hexium");
+    let latest = found.latest().unwrap();
+    assert!(latest.download_url.starts_with("https://"));
+    let readme = hexium
+        .description("valheim", &found.id, &latest.number)
+        .await
+        .unwrap();
+    assert!(!readme.is_empty());
+
+    // A dependency only published on Thunderstore comes from there.
+    let fallback = hexium.get("valheim", "RandyKnapp-EpicLoot").await.unwrap();
+    assert_eq!(fallback.source, "thunderstore");
+}

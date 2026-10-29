@@ -4,6 +4,7 @@
 //! one that the rest of the engine and the UI know.
 
 pub mod github;
+pub mod hexium;
 pub mod nexus;
 pub mod nexus_sso;
 pub mod thunderstore;

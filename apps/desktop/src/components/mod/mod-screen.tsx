@@ -14,7 +14,15 @@ import { Markdown } from "@/components/markdown";
 import { InstallButton } from "@/components/mod/install-button";
 import { Notice } from "@/components/notice";
 import { useAccent } from "@/hooks/use-accent";
-import { type DependencyInfo, type ModDetails, type SteamGame, getMod, modDescription, sourceName } from "@/lib/engine";
+import {
+	type DependencyInfo,
+	type ModDetails,
+	SOURCE_LABEL,
+	type SteamGame,
+	getMod,
+	modDescription,
+	sourceName,
+} from "@/lib/engine";
 import { compactNumber, relativeDate } from "@/lib/format";
 import { findGame, gameHref, modHref } from "@/lib/games-store";
 import { useNexusAccount } from "@/lib/nexus";
@@ -27,6 +35,8 @@ export function ModScreen() {
 	const params = useSearchParams();
 	const appId = Number(params.get("game"));
 	const modId = params.get("id") ?? "";
+	// Opened from Hexium's Discover: the mod is looked up on Hexium first.
+	const hexium = params.get("source") === "hexium";
 
 	const [game, setGame] = useState<SteamGame | null>(null);
 	const [details, setDetails] = useState<Load<ModDetails>>({ status: "loading" });
@@ -43,7 +53,7 @@ export function ModScreen() {
 				if (!current) return;
 				setGame(found);
 				if (!found?.profile) throw new Error("This game isn't supported.");
-				const community = found.profile.community;
+				const community = hexium ? `hexium:${found.profile.community}` : found.profile.community;
 				return getMod(community, modId).then((mod) => ({ mod, community }));
 			})
 			.then((loaded) => {
@@ -61,7 +71,7 @@ export function ModScreen() {
 		return () => {
 			current = false;
 		};
-	}, [appId, modId, attempt]);
+	}, [appId, modId, hexium, attempt]);
 
 	const retry = () => setAttempt((a) => a + 1);
 
@@ -123,9 +133,14 @@ function ModDetailsView({
 	const latest = mod.versions[0];
 	const community = game.profile?.community ?? "";
 	const nexus = game.profile?.nexus ?? null;
-	const source = sourceName(game);
+	const hexium = mod.source === "hexium";
+	const source = SOURCE_LABEL[mod.source] ?? sourceName(game);
 	// Nexus doesn't publish a stable author page by name: plain text.
-	const authorUrl = nexus ? null : `https://thunderstore.io/c/${community}/p/${mod.author}/`;
+	const authorUrl = nexus
+		? null
+		: hexium
+			? `https://${community}.hexium.gg/teams/${mod.author}`
+			: `https://thunderstore.io/c/${community}/p/${mod.author}/`;
 	const extraDependencies = mod.dependencies.filter((d) => !d.loader).length;
 	const account = useNexusAccount();
 	const hint = !nexus
@@ -187,6 +202,7 @@ function ModDetailsView({
 						modName={mod.name}
 						dependencyCount={extraDependencies}
 						hint={hint}
+						source={mod.source}
 					/>
 				</div>
 			</section>
@@ -225,7 +241,12 @@ function ModDetailsView({
 							<ul className="-mx-1">
 								{mod.dependencies.map((d) => (
 									<li key={d.id}>
-										<DependencyRow dependency={d} appId={game.appId} nexus={Boolean(nexus)} />
+										<DependencyRow
+											dependency={d}
+											appId={game.appId}
+											nexus={Boolean(nexus)}
+											source={mod.source}
+										/>
 									</li>
 								))}
 							</ul>
@@ -263,7 +284,18 @@ function ModDetailsView({
 	);
 }
 
-function DependencyRow({ dependency: d, appId, nexus }: { dependency: DependencyInfo; appId: number; nexus: boolean }) {
+function DependencyRow({
+	dependency: d,
+	appId,
+	nexus,
+	source,
+}: {
+	dependency: DependencyInfo;
+	appId: number;
+	nexus: boolean;
+	/** Source of the mod that needs it: a Hexium mod's dependency is looked up on Hexium first. */
+	source: string;
+}) {
 	const router = useRouter();
 	// Thunderstore publishes each version's icon at a predictable URL.
 	const icon = nexus ? undefined : `https://gcdn.thunderstore.io/live/repository/icons/${d.id}-${d.minVersion}.png`;
@@ -297,7 +329,7 @@ function DependencyRow({ dependency: d, appId, nexus }: { dependency: Dependency
 	return (
 		<button
 			type="button"
-			onClick={() => router.push(modHref(appId, d.id))}
+			onClick={() => router.push(modHref(appId, d.id, source))}
 			className="flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-1 py-1.5 text-left transition-colors hover:bg-surface-hover"
 		>
 			{content}

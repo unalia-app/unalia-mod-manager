@@ -26,6 +26,7 @@
 | Source | Games | Loaders and frameworks |
 |---|---|---|
 | [Thunderstore](https://thunderstore.io) | Every game listed there (Hollow Knight: Silksong, Lethal Company, Valheim…) | BepInEx, MelonLoader, Shimloader, UMM, Northstar… |
+| [Hexium](https://hexium.gg) | Its games also on Thunderstore (Valheim, Sunkenland…), as a second source in Discover | Same as Thunderstore |
 | [Nexus Mods](https://www.nexusmods.com) | Cyberpunk 2077 | Cyber Engine Tweaks, RED4ext, redscript, ArchiveXL, TweakXL, Codeware |
 | Nexus Mods | Unreal Engine games, recognized on their own by their name on Nexus (Phantom Blade Zero, Hogwarts Legacy…) | `.pak` mods, LogicMods, UE4SS |
 | Nexus Mods | Skyrim Special Edition, Fallout 4 | Plugins, archives and loose files, `plugins.txt` kept in sync |
@@ -39,7 +40,7 @@ Next on the list: script extenders and FOMOD installers for Bethesda games, more
 - **Nothing is ever run.** The app copies and links files. It never launches an `.exe`, a script or an installer found in a mod.
 - **Your game files are never modified.** Mods are linked into the game folder, never written over original files. Your saves are never touched.
 - **Everything is reversible.** Every file placed is recorded. Remove all your mods, or uninstall the app with its data, and the game folder is back to how it was. An install either fully succeeds or rolls back.
-- **Mods come from their official source.** Downloaded over HTTPS from Thunderstore, Nexus Mods or the author's GitHub, never re-hosted. Authors are credited and their page is one click away.
+- **Mods come from their official source.** Downloaded over HTTPS from Thunderstore, Hexium, Nexus Mods or the author's GitHub, never re-hosted. Authors are credited and their page is one click away.
 - **Signed updates.** The app checks every update against its public key before installing it. Windows code signing: see the [code signing policy](CODE_SIGNING.md).
 - **Open source.** Read the code, build it yourself.
 
@@ -70,7 +71,7 @@ Unalia Mod Manager is a sibling of [Unalia](https://unalia.app), the game backlo
 
 Made by [REVERSS](https://github.com/IIREVERSSII).
 
-Mods and their metadata come from [Thunderstore](https://thunderstore.io), [Nexus Mods](https://www.nexusmods.com) and the authors' GitHub releases. Each mod belongs to its author, credited in the app with a link to its page. Game artwork comes from Steam and belongs to the games' publishers.
+Mods and their metadata come from [Thunderstore](https://thunderstore.io), [Hexium](https://hexium.gg), [Nexus Mods](https://www.nexusmods.com) and the authors' GitHub releases. Each mod belongs to its author, credited in the app with a link to its page. Game artwork comes from Steam and belongs to the games' publishers.
 
 The app is built on [Tauri](https://tauri.app), [Next.js](https://nextjs.org), [React](https://react.dev) and many other open source projects. `.rar` archives are read with UnRAR by Alexander Roshal. Every license is in [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md), also shipped with the app (Settings > Support).
 

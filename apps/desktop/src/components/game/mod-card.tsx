@@ -7,18 +7,12 @@ import { useState } from "react";
 
 import { InstallStateBadge } from "@/components/mod/install-button";
 import { uninstallWithUndo } from "@/components/mod/uninstall";
-import type { ModSummary } from "@/lib/engine";
+import { type ModSummary, SOURCE_LABEL } from "@/lib/engine";
 import { compactNumber, relativeDate } from "@/lib/format";
 import { usePendingOp } from "@/lib/game-status";
 import { modHref } from "@/lib/games-store";
 import { cancel, install, overallProgress, useActiveInstall, useInstalled, useModUpdate } from "@/lib/installs";
 import { openExternal } from "@/lib/open";
-
-/** Display name of a mod's source (`ModSummary.source`). */
-const SOURCE_LABEL: Record<string, string> = {
-	nexus: "Nexus Mods",
-	thunderstore: "Thunderstore",
-};
 
 /**
  * Card of the Discover grid, in the spirit of Unalia's game cards.
@@ -59,7 +53,7 @@ export function ModCard({
 			)}
 		>
 			<Link
-				href={modHref(appId, mod.id)}
+				href={modHref(appId, mod.id, mod.source)}
 				aria-label={mod.name}
 				className="absolute inset-0 z-10 rounded-xl focus-visible:outline-none"
 			/>
@@ -114,7 +108,7 @@ export function ModCard({
 					)}
 				</div>
 
-				<QuickInstall appId={appId} modId={mod.id} name={mod.name} />
+				<QuickInstall appId={appId} modId={mod.id} name={mod.name} source={mod.source} />
 			</div>
 
 			<div className="flex flex-1 flex-col px-1 pt-2.5 pb-1">
@@ -150,7 +144,17 @@ export function ModCard({
  * progress; once installed, it becomes "Uninstall" ("Installed" badge at
  * the top of the card).
  */
-function QuickInstall({ appId, modId, name }: { appId: number; modId: string; name: string }) {
+function QuickInstall({
+	appId,
+	modId,
+	name,
+	source,
+}: {
+	appId: number;
+	modId: string;
+	name: string;
+	source: string;
+}) {
 	const installed = useInstalled(appId)?.some((m) => m.id === modId);
 	const update = useModUpdate(appId, modId);
 	const active = useActiveInstall(appId, modId);
@@ -195,7 +199,11 @@ function QuickInstall({ appId, modId, name }: { appId: number; modId: string; na
 			aria-label={busy ? `Cancel installing ${name}` : `${label} ${name}`}
 			title={failed ? active.message : website ? "Click Slow download on Nexus Mods, Unalia does the rest" : undefined}
 			onClick={() =>
-				void (busy ? cancel(appId, modId) : website ? openExternal(website) : install(appId, modId, name))
+				void (busy
+					? cancel(appId, modId)
+					: website
+						? openExternal(website)
+						: install(appId, modId, name, undefined, source))
 			}
 			className={cn(
 				"group/quick absolute right-2 bottom-2 z-20 flex h-7 min-w-[4.5rem] cursor-pointer items-center justify-center gap-1.5 rounded-full px-2.5 font-tight text-[11px] font-semibold shadow-lg transition-[opacity,translate,background-color] duration-200 ease-out",

@@ -21,6 +21,7 @@ export function InstallButton({
 	modName,
 	dependencyCount,
 	hint,
+	source,
 }: {
 	appId: number;
 	modId: string;
@@ -28,6 +29,8 @@ export function InstallButton({
 	dependencyCount: number;
 	/** Detail under the button (e.g. confirmation on Nexus for a free account). */
 	hint?: string;
+	/** Source the mod page comes from (`ModDetails.source`). */
+	source?: string;
 }) {
 	const installed = useInstalled(appId)?.find((m) => m.id === modId);
 	const active = useActiveInstall(appId, modId);
@@ -35,7 +38,7 @@ export function InstallButton({
 	const update = useModUpdate(appId, modId);
 
 	// The result (success or error) arrives through the store, which the button follows.
-	const start = () => void install(appId, modId, modName);
+	const start = () => void install(appId, modId, modName, undefined, source);
 
 	if (active?.status === "queued" || active?.status === "running") {
 		const progress = active.status === "running" ? active.progress : null;

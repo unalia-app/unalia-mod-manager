@@ -9,7 +9,7 @@ import { Ambience } from "@/components/ambience";
 import { AppHeader } from "@/components/app-header";
 import { GameCover } from "@/components/game-cover";
 import { AntiCheatBanner } from "@/components/game/anti-cheat-banner";
-import { Discover } from "@/components/game/discover";
+import { Discover, useOnHexium } from "@/components/game/discover";
 import { GameUpdatedBanner } from "@/components/game/game-updated-banner";
 import { GameVersion } from "@/components/game/game-version";
 import { MissingModsBanner } from "@/components/game/missing-mods-banner";
@@ -38,6 +38,7 @@ export function GameScreen() {
 	const [tab, setTab] = useState<Tab>("discover");
 	const accent = useAccent(game?.appId ?? null);
 	const installedCount = useInstalled(appId)?.length ?? 0;
+	const onHexium = useOnHexium(game?.profile?.community ?? "");
 	// Header "Play": only when the banner's one has left the screen, never
 	// both at once.
 	const heroPlay = useRef<HTMLDivElement>(null);
@@ -117,7 +118,7 @@ export function GameScreen() {
 								<p className="mt-1.5 text-sm text-fg-subtle">
 									{game.profile.nexus
 										? "Mods from Nexus Mods. Unalia puts every file in the right place and installs the frameworks they need, from their authors."
-										: "Community mods from Thunderstore. Unalia installs the loader and dependencies for you."}
+										: `Community mods from ${onHexium ? "Thunderstore and Hexium" : "Thunderstore"}. Unalia installs the loader and dependencies for you.`}
 								</p>
 							</div>
 							<div ref={heroPlay} className="flex shrink-0 animate-fade-up flex-col items-end pb-1 [animation-delay:90ms]">

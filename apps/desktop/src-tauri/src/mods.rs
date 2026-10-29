@@ -439,7 +439,15 @@ pub async fn check_updates(
         )
         .await);
     }
-    Ok(installer::available_updates(&catalog.thunderstore, &game.community, &installed).await)
+    // Each mod is checked on the source it came from.
+    let (hexium, thunderstore): (Vec<InstalledMod>, Vec<InstalledMod>) =
+        installed.into_iter().partition(|m| m.source == "hexium");
+    let (mut updates, from_hexium) = tokio::join!(
+        installer::available_updates(&catalog.thunderstore, &game.community, &thunderstore),
+        installer::available_updates(&catalog.hexium, &game.community, &hexium),
+    );
+    updates.extend(from_hexium);
+    Ok(updates)
 }
 
 #[derive(Clone, Serialize)]
@@ -461,6 +469,7 @@ pub async fn install_mod(
     app_id: u32,
     mod_id: String,
     files: Option<Vec<u32>>,
+    source: Option<String>,
 ) -> Result<Outcome<Vec<InstalledMod>>, String> {
     let game = library.game(app_id).ok_or(UNKNOWN_GAME)?;
     if game.profile.nexus.is_some() {
@@ -489,21 +498,35 @@ pub async fn install_mod(
             Err(NexusFailure::Error(message)) => Err(message),
         };
     }
+    // A new mod comes from the source picked in Discover, an update from
+    // the one it was installed from.
+    let source = match source {
+        Some(source) => Some(source),
+        None => mods
+            .state
+            .lock()
+            .await
+            .get(&game_key(app_id), &mod_id)
+            .map_err(crate::support::logged)?
+            .map(|m| m.source)
+            .filter(|s| !s.is_empty()),
+    };
     if mods.is_running(&game) {
         queue(
             &app,
             app_id,
             PendingOp::Install {
                 mod_id: mod_id.clone(),
+                source: source.clone(),
             },
         )
         .await?;
         // The game runs, but nothing prevents downloading: only the
         // deployment waits for it to close.
-        tauri::async_runtime::spawn(prefetch(app.clone(), app_id, game, mod_id));
+        tauri::async_runtime::spawn(prefetch(app.clone(), app_id, game, mod_id, source));
         return Ok(Outcome::Queued);
     }
-    match run_install(&app, app_id, &game, &mod_id).await {
+    match run_install(&app, app_id, &game, &mod_id, source.as_deref()).await {
         Ok(value) => Ok(Outcome::Done { value }),
         Err(InstallError::Cancelled) => Ok(Outcome::Cancelled),
         Err(error) => Err(error_message(&error)),
@@ -513,7 +536,13 @@ pub async fn install_mod(
 /// Downloads and extracts a queued install in the background. A failure
 /// here is no big deal: the install tries again when the game closes and
 /// reports the error then.
-async fn prefetch(app: AppHandle, app_id: u32, game: KnownGame, mod_id: String) {
+async fn prefetch(
+    app: AppHandle,
+    app_id: u32,
+    game: KnownGame,
+    mod_id: String,
+    source: Option<String>,
+) {
     let catalog = app.state::<Catalog>();
     let mods = app.state::<Mods>();
     let games_catalog = catalog.games(&app).await;
@@ -521,7 +550,7 @@ async fn prefetch(app: AppHandle, app_id: u32, game: KnownGame, mod_id: String) 
     // List of installed mods, without holding the database during the download.
     let existing = mods.state.lock().await.list(&key).unwrap_or_default();
     let installer = Installer {
-        source: &catalog.thunderstore,
+        source: &catalog.repository(source.as_deref()),
         catalog: games_catalog.as_deref(),
         client: &catalog.client,
         paths: &mods.paths,
@@ -548,6 +577,7 @@ async fn run_install(
     app_id: u32,
     game: &KnownGame,
     mod_id: &str,
+    source: Option<&str>,
 ) -> Result<Vec<InstalledMod>, InstallError> {
     let catalog = app.state::<Catalog>();
     let mods = app.state::<Mods>();
@@ -555,7 +585,7 @@ async fn run_install(
     // Before waiting its turn: a queued install can be canceled.
     let cancel = mods.begin(app_id, mod_id);
     let installer = Installer {
-        source: &catalog.thunderstore,
+        source: &catalog.repository(source),
         catalog: games_catalog.as_deref(),
         client: &catalog.client,
         paths: &mods.paths,
@@ -1441,7 +1471,7 @@ async fn apply_pending(app: &AppHandle, app_id: u32, game: &KnownGame) {
     let mut failed = Vec::new();
     for op in ops {
         let result = match &op {
-            PendingOp::Install { mod_id } if game.profile.nexus.is_some() => {
+            PendingOp::Install { mod_id, .. } if game.profile.nexus.is_some() => {
                 match run_nexus_install(app, app_id, game, mod_id, NexusFile::Main).await {
                     Ok(_) => Ok(()),
                     Err(NexusFailure::Website(_) | NexusFailure::NextFile(_)) => {
@@ -1454,10 +1484,12 @@ async fn apply_pending(app: &AppHandle, app_id: u32, game: &KnownGame) {
                     Err(NexusFailure::Error(message)) => Err(message),
                 }
             }
-            PendingOp::Install { mod_id } => run_install(app, app_id, game, mod_id)
-                .await
-                .map(|_| ())
-                .map_err(|e| error_message(&e)),
+            PendingOp::Install { mod_id, source } => {
+                run_install(app, app_id, game, mod_id, source.as_deref())
+                    .await
+                    .map(|_| ())
+                    .map_err(|e| error_message(&e))
+            }
             PendingOp::SetEnabled { mod_id, enabled } => {
                 let mut state = mods.state.lock().await;
                 installer::set_enabled(&mut state, &mods.paths, &key, &game.dir, mod_id, *enabled)

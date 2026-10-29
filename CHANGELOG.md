@@ -6,6 +6,7 @@ All notable changes to Unalia Mod Manager. The format follows [Keep a Changelog]
 
 ### Added
 
+- Hexium source (hexium.gg) for the games it hosts, Valheim first: a Thunderstore / Hexium switch in Discover. Dependencies published only on Thunderstore come from there, and each mod updates from the source it was installed from.
 - Skyrim Special Edition and Fallout 4 (Steam), with mods from Nexus Mods: plugins, archives and loose files go to `Data/`, and the game's `plugins.txt` follows the mods you turn on. Script extenders and mods with an installer that asks for options (FOMOD) come next.
 - Unreal Engine games with a Nexus Mods page are recognized on their own, from Steam or added by hand, with UE4SS when a mod needs it.
 - Games with an anti-cheat (Easy Anti-Cheat, BattlEye) warn that mods can get you banned online, on their page and once before you start.

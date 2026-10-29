@@ -19,6 +19,7 @@ Only the services that host the games' mods and images, to do what you ask:
 | Service | Why |
 |---|---|
 | Thunderstore | Browse and download mods |
+| Hexium | Browse and download mods, for the games it hosts |
 | Nexus Mods | Browse and download mods, with your API key if you connected it. Recognize Unreal games by their name |
 | GitHub | Download frameworks and mods published there by their authors. Check for a new version of the app at startup |
 | Steam (CDN) | Game covers that are not in your local Steam cache |

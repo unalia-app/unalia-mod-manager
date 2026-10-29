@@ -7,6 +7,7 @@ repository.workspace = true
 description = "Modalia engine: game detection, sources, loaders, mod deployment"
 
 [dependencies]
+flate2 = "1"
 fs4 = "1"
 reqwest = { version = "0.13", features = ["json", "query", "gzip"] }
 rusqlite = { version = "0.40", features = ["bundled"] }

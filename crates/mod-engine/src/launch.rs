@@ -16,7 +16,12 @@ use sysinfo::{ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
 #[serde(rename_all = "camelCase", tag = "type")]
 pub enum PendingOp {
     #[serde(rename_all = "camelCase")]
-    Install { mod_id: String },
+    Install {
+        mod_id: String,
+        /// Source picked in Discover (`hexium`). `None`: the game's source.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        source: Option<String>,
+    },
     #[serde(rename_all = "camelCase")]
     SetEnabled { mod_id: String, enabled: bool },
     #[serde(rename_all = "camelCase")]
@@ -26,7 +31,7 @@ pub enum PendingOp {
 impl PendingOp {
     pub fn mod_id(&self) -> &str {
         match self {
-            Self::Install { mod_id }
+            Self::Install { mod_id, .. }
             | Self::SetEnabled { mod_id, .. }
             | Self::Uninstall { mod_id } => mod_id,
         }
@@ -198,7 +203,10 @@ mod tests {
     }
 
     fn install(id: &str) -> PendingOp {
-        PendingOp::Install { mod_id: id.into() }
+        PendingOp::Install {
+            mod_id: id.into(),
+            source: None,
+        }
     }
     fn toggle(id: &str, enabled: bool) -> PendingOp {
         PendingOp::SetEnabled {

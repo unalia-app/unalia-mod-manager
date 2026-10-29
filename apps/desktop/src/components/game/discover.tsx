@@ -6,7 +6,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { ModCard, ModCardSkeleton } from "@/components/game/mod-card";
 import { Notice } from "@/components/notice";
-import { type ModSort, type ModSummary, searchMods } from "@/lib/engine";
+import { type ModSort, type ModSummary, SOURCE_LABEL, hexiumCommunities, searchMods } from "@/lib/engine";
 import { compactNumber } from "@/lib/format";
 
 const SORTS: { value: ModSort; label: string }[] = [
@@ -15,6 +15,34 @@ const SORTS: { value: ModSort; label: string }[] = [
 	{ value: "newest", label: "Newest" },
 	{ value: "updated", label: "Updated" },
 ];
+
+type Source = "thunderstore" | "hexium";
+
+const SOURCES: { value: Source; label: string }[] = [
+	{ value: "thunderstore", label: SOURCE_LABEL.thunderstore },
+	{ value: "hexium", label: SOURCE_LABEL.hexium },
+];
+
+// Asked once per session: the list barely moves.
+let hexiumList: Promise<string[]> | null = null;
+
+/** The game is also on Hexium: Discover offers both sources. */
+export function useOnHexium(community: string): boolean {
+	const [onHexium, setOnHexium] = useState(false);
+	useEffect(() => {
+		if (community.startsWith("nexus:")) return;
+		let current = true;
+		hexiumList ??= hexiumCommunities().catch(() => {
+			hexiumList = null;
+			return [];
+		});
+		void hexiumList.then((list) => current && setOnHexium(list.includes(community)));
+		return () => {
+			current = false;
+		};
+	}, [community]);
+	return onHexium;
+}
 
 const GRID = "grid grid-cols-[repeat(auto-fill,minmax(15rem,1fr))] gap-4";
 
@@ -25,8 +53,16 @@ type Results = {
 	hasMore: boolean;
 };
 
-/** Discover tab: search, sort and a grid that loads on scroll. */
-export function Discover({ community, appId }: { community: string; appId: number }) {
+/**
+ * Discover tab: search, sort and a grid that loads on scroll. A game also
+ * on Hexium gets a source switch: each source keeps its own list.
+ */
+export function Discover({ community: gameCommunity, appId }: { community: string; appId: number }) {
+	const onHexium = useOnHexium(gameCommunity);
+	const [picked, setPicked] = useState<Source>("thunderstore");
+	const source: Source = onHexium ? picked : "thunderstore";
+	const community = source === "hexium" ? `hexium:${gameCommunity}` : gameCommunity;
+	const sourceLabel = gameCommunity.startsWith("nexus:") ? "Nexus Mods" : SOURCE_LABEL[source];
 	const [text, setText] = useState("");
 	const query = useDebounced(text.trim(), 250);
 	const [sort, setSort] = useState<ModSort>("popular");
@@ -83,6 +119,7 @@ export function Discover({ community, appId }: { community: string; appId: numbe
 	return (
 		<div>
 			<div className="flex flex-wrap items-center gap-3">
+				{onHexium && <Segmented label="Mod source" items={SOURCES} value={source} onChange={setPicked} />}
 				<SearchField
 					value={text}
 					onChange={(e) => setText(e.target.value)}
@@ -134,7 +171,7 @@ export function Discover({ community, appId }: { community: string; appId: numbe
 						<Notice icon={<PackageSearch className="size-5 text-fg-muted" />} title="No mods found">
 							{query
 								? `No mod matches “${query}”. Try fewer words.`
-								: `This game has no mods on ${community.startsWith("nexus:") ? "Nexus Mods" : "Thunderstore"} yet.`}
+								: `This game has no mods on ${sourceLabel} yet.`}
 						</Notice>
 					</div>
 				)}

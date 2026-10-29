@@ -73,6 +73,8 @@ export function gameHref(appId: number): string {
 	return `/game/?id=${appId}`;
 }
 
-export function modHref(appId: number, modId: string): string {
-	return `/mod/?game=${appId}&id=${encodeURIComponent(modId)}`;
+/** `source`: `hexium` for a mod found on Hexium, else the game's source. */
+export function modHref(appId: number, modId: string, source?: string): string {
+	const from = source === "hexium" ? "&source=hexium" : "";
+	return `/mod/?game=${appId}&id=${encodeURIComponent(modId)}${from}`;
 }

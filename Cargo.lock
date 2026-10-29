@@ -2582,6 +2582,7 @@ dependencies = [
 name = "mod-engine"
 version = "0.1.0"
 dependencies = [
+ "flate2",
  "fs4",
  "futures-util",
  "image",

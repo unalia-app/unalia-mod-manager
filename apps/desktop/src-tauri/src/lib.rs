@@ -863,6 +863,7 @@ pub fn run() {
             catalog::search_mods,
             catalog::get_mod,
             catalog::mod_description,
+            catalog::hexium_communities,
             mods::installed_mods,
             mods::install_mod,
             mods::cancel_install,

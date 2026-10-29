@@ -855,6 +855,7 @@ async fn the_old_storage_moves_to_packages_without_downloading() {
             package: String::new(),
             legacy_store_dir: legacy.to_string_lossy().into_owned(),
             files: Vec::new(),
+            source: String::new(),
             deployment: Deployment {
                 files: placements.iter().map(|p| p.target.clone()).collect(),
                 created_dirs: Vec::new(),

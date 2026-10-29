@@ -47,7 +47,7 @@ scripts/                Demo library, license file, updater manifest
 |---|---|
 | **detect** | Reads Steam's `libraryfolders.vdf` and `appmanifest_*.acf` files to list games and their folders, without a heavy disk walk. Identifies the engine by file signatures (`UnityPlayer.dll` for Unity, `Engine/` plus `.pak` files for Unreal…) and spots known anti-cheats. Also reads and writes Steam's non-Steam shortcuts. |
 | **games** | What the app knows about each game: Thunderstore's ecosystem schema (cached on disk), hand-written profiles (`games/*.toml`, embedded in the binary), and Unreal games recognized automatically from their name on Nexus Mods (`games/auto.rs`). Pure data, no code. |
-| **sources** | One catalog per source, translated into a neutral mod format (`ModSummary`, `ModDetail`): **Thunderstore**, **Nexus Mods** (GraphQL v2 for search, REST v1 with the user's key for downloads, `nxm://` links for free accounts, SSO login) and **GitHub** releases (frameworks and authors who publish there). |
+| **sources** | One catalog per source, translated into a neutral mod format (`ModSummary`, `ModDetail`): **Thunderstore**, **Hexium** (Thunderstore-compatible, searched in memory since it has no search API, falls back to Thunderstore for the mods it doesn't host), **Nexus Mods** (GraphQL v2 for search, REST v1 with the user's key for downloads, `nxm://` links for free accounts, SSO login) and **GitHub** releases (frameworks and authors who publish there). |
 | **resolver** | From "I want this mod" to an ordered install plan: dependencies first, each package once, a single loader, cycles refused. |
 | **loaders** | Where each file of a package goes, by family: Thunderstore schema rules (BepInEx, MelonLoader, Shimloader…), REDengine (Cyberpunk 2077), Unreal (`.pak`, LogicMods, UE4SS), Bethesda (`Data/`, `plugins.txt`). Frameworks (RED4ext, UE4SS…) are described by the game profile and installed from their authors' GitHub release. Loaders are code: few of them, reviewed with extra care. |
 | **download** | Parallel chunked downloads with resume, cancel, disk space check and SHA-256 hash. |
@@ -70,6 +70,6 @@ scripts/                Demo library, license file, updater manifest
 
 ## Tests
 
-- The engine is tested end to end on fake games (`fixtures/`) against fake Thunderstore, Nexus and GitHub servers that serve real archives: install, uninstall, enable and disable, rollback on failure, booby-trapped archives, resumed downloads.
+- The engine is tested end to end on fake games (`fixtures/`) against fake Thunderstore, Hexium, Nexus and GitHub servers that serve real archives: install, uninstall, enable and disable, rollback on failure, booby-trapped archives, resumed downloads.
 - `cargo test -p mod-engine` runs them. Tests against the real APIs are ignored by default: `cargo test -p mod-engine --test live -- --ignored`.
 - Real-game checks happen on Windows before each release.

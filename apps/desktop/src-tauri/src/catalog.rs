@@ -1,6 +1,7 @@
 //! Catalog of moddable games (Thunderstore schema, hand-written profiles)
 //! and mod commands. Each command goes to the game's source: Thunderstore,
-//! or Nexus Mods for the `nexus:<domain>` communities.
+//! Hexium for the `hexium:<community>` communities (a second source for
+//! some Thunderstore games), or Nexus Mods for the `nexus:<domain>` ones.
 
 use std::path::Path;
 use std::sync::{Arc, Mutex as SyncMutex};
@@ -10,9 +11,10 @@ use mod_engine::HttpClient;
 use mod_engine::games::auto::{self, NexusGames};
 use mod_engine::games::{GameCatalog, GameProfile, SCHEMA_URL, load_catalog};
 use mod_engine::sources::github::GitHub;
+use mod_engine::sources::hexium::Hexium;
 use mod_engine::sources::nexus::{self, FoundGame, Nexus, mod_key};
 use mod_engine::sources::thunderstore::{MOD_MANAGERS, Thunderstore};
-use mod_engine::sources::{Mod, ModSource, ModSummary, Page, SearchQuery, Sort};
+use mod_engine::sources::{Mod, ModSource, ModSummary, Page, SearchQuery, Sort, SourceError};
 use serde::Serialize;
 use tauri::async_runtime::Mutex;
 use tauri::{AppHandle, Manager, State};
@@ -23,6 +25,7 @@ const SCHEMA_MAX_AGE: Duration = Duration::from_secs(24 * 3600);
 pub struct Catalog {
     pub(crate) client: HttpClient,
     pub(crate) thunderstore: Thunderstore,
+    pub(crate) hexium: Hexium,
     pub(crate) nexus: Nexus,
     pub(crate) github: GitHub,
     games: Mutex<Option<Arc<GameCatalog>>>,
@@ -36,6 +39,7 @@ impl Catalog {
         let client = mod_engine::http_client();
         Self {
             thunderstore: Thunderstore::new(client.clone()),
+            hexium: Hexium::new(client.clone(), Thunderstore::new(client.clone())),
             nexus: Nexus::new(client.clone()),
             github: GitHub::new(client.clone())
                 .with_cache_file(cache_dir.join("github-releases.json"))
@@ -94,6 +98,15 @@ impl Catalog {
         auto::unreal_profile(&found, game_dir)
     }
 
+    /// Thunderstore or Hexium, by its id (`InstalledMod::source`, the
+    /// source picked in Discover). Anything else: Thunderstore.
+    pub(crate) fn repository(&self, source: Option<&str>) -> Repository<'_> {
+        match source {
+            Some(HEXIUM) => Repository::Hexium(&self.hexium),
+            _ => Repository::Thunderstore(&self.thunderstore),
+        }
+    }
+
     /// Catalog loaded once per session (disk cache, else network). `None`
     /// if neither is available: the app goes on with engine detection.
     pub async fn games(&self, app: &AppHandle) -> Option<Arc<GameCatalog>> {
@@ -111,6 +124,70 @@ impl Catalog {
         }
         games.clone()
     }
+}
+
+const HEXIUM: &str = "hexium";
+
+/// `hexium:valheim` gives `valheim`: the Thunderstore community, browsed on
+/// Hexium.
+fn hexium_community(community: &str) -> Option<&str> {
+    community.strip_prefix("hexium:")
+}
+
+/// Thunderstore-compatible repositories: the same game, the same mod ids.
+#[derive(Clone, Copy)]
+pub(crate) enum Repository<'a> {
+    Thunderstore(&'a Thunderstore),
+    Hexium(&'a Hexium),
+}
+
+impl ModSource for Repository<'_> {
+    fn name(&self) -> &'static str {
+        match self {
+            Self::Thunderstore(s) => s.name(),
+            Self::Hexium(s) => s.name(),
+        }
+    }
+
+    async fn search(
+        &self,
+        game: &str,
+        query: &SearchQuery,
+    ) -> Result<Page<ModSummary>, SourceError> {
+        match self {
+            Self::Thunderstore(s) => s.search(game, query).await,
+            Self::Hexium(s) => s.search(game, query).await,
+        }
+    }
+
+    async fn get(&self, game: &str, id: &str) -> Result<Mod, SourceError> {
+        match self {
+            Self::Thunderstore(s) => s.get(game, id).await,
+            Self::Hexium(s) => s.get(game, id).await,
+        }
+    }
+
+    async fn description(
+        &self,
+        game: &str,
+        id: &str,
+        version: &str,
+    ) -> Result<String, SourceError> {
+        match self {
+            Self::Thunderstore(s) => s.description(game, id, version).await,
+            Self::Hexium(s) => s.description(game, id, version).await,
+        }
+    }
+}
+
+/// Communities also hosted on Hexium: their Discover gets a Hexium tab.
+/// Hexium unreachable: none, Thunderstore alone.
+#[tauri::command]
+pub async fn hexium_communities(catalog: State<'_, Catalog>) -> Result<Vec<String>, String> {
+    Ok(catalog.hexium.communities().await.unwrap_or_else(|error| {
+        log::warn!("couldn't list Hexium games: {error}");
+        Vec::new()
+    }))
 }
 
 /// A game's mods for the Discover grid. Loaders and mod managers are
@@ -138,10 +215,11 @@ pub async fn search_mods(
             .await
             .map_err(crate::support::logged);
     }
-    let (games, page) = tokio::join!(
-        catalog.games(&app),
-        catalog.thunderstore.search(&community, &query),
-    );
+    let (repository, community) = match hexium_community(&community) {
+        Some(c) => (catalog.repository(Some(HEXIUM)), c),
+        None => (catalog.repository(None), community.as_str()),
+    };
+    let (games, page) = tokio::join!(catalog.games(&app), repository.search(community, &query));
     let mut page = page.map_err(crate::support::logged)?;
     page.items.retain(|m| {
         !MOD_MANAGERS.contains(&m.id.as_str())
@@ -189,10 +267,11 @@ pub async fn get_mod(
     if let Some(domain) = nexus::domain_of(&community) {
         return nexus_mod(&app, &catalog, &community, domain, &id).await;
     }
-    let (games, found) = tokio::join!(
-        catalog.games(&app),
-        catalog.thunderstore.get(&community, &id),
-    );
+    let (repository, community) = match hexium_community(&community) {
+        Some(c) => (catalog.repository(Some(HEXIUM)), c),
+        None => (catalog.repository(None), community.as_str()),
+    };
+    let (games, found) = tokio::join!(catalog.games(&app), repository.get(community, &id));
     let found = found.map_err(crate::support::logged)?;
     let dependencies = found
         .latest()
@@ -276,6 +355,8 @@ pub async fn mod_description(
 ) -> Result<String, String> {
     let result = if nexus::domain_of(&community).is_some() {
         catalog.nexus.description(&community, &id, &version).await
+    } else if let Some(community) = hexium_community(&community) {
+        catalog.hexium.description(community, &id, &version).await
     } else {
         catalog
             .thunderstore

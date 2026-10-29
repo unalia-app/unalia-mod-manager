@@ -187,6 +187,19 @@ export type Mod = Omit<ModSummary, "iconUrl" | "downloads" | "pinned"> & {
 
 export type Page<T> = { items: T[]; total: number; hasMore: boolean };
 
+/** Display name of a mod's source (`ModSummary.source`). */
+export const SOURCE_LABEL: Record<string, string> = {
+	hexium: "Hexium",
+	nexus: "Nexus Mods",
+	thunderstore: "Thunderstore",
+};
+
+/** Thunderstore communities also hosted on Hexium (e.g. `valheim`). */
+export function hexiumCommunities(): Promise<string[]> {
+	if (!isTauri()) return Promise.resolve([]);
+	return invoke("hexium_communities");
+}
+
 export function searchMods(community: string, text: string, sort: ModSort, page: number): Promise<Page<ModSummary>> {
 	return invoke("search_mods", { community, text, sort, page });
 }
@@ -235,6 +248,8 @@ export type InstalledMod = {
 	package: string;
 	/** Installed Nexus files, in the order they are placed. */
 	files: number[];
+	/** Source it was installed from (`thunderstore`, `hexium`), empty: the game's source. */
+	source: string;
 	/** Previous versions, kept to go back without downloading again, the most recent first. */
 	previousVersions: PreviousVersion[];
 };
@@ -288,9 +303,12 @@ export type InstallOutcome =
 	/** Nexus mod with several files: to pick, the advised one first. */
 	| { status: "choose"; files: NexusModFile[] };
 
-/** `files`: picked Nexus files, placed in this order. */
-export function installMod(appId: number, modId: string, files?: number[]): Promise<InstallOutcome> {
-	return invoke("install_mod", { appId, modId, files: files ?? null });
+/**
+ * `files`: picked Nexus files, placed in this order. `source`: picked in
+ * Discover (`hexium`); without it, an update keeps the mod's source.
+ */
+export function installMod(appId: number, modId: string, files?: number[], source?: string): Promise<InstallOutcome> {
+	return invoke("install_mod", { appId, modId, files: files ?? null, source: source ?? null });
 }
 
 /** Stops a running or queued install (the game is not touched). */

@@ -340,6 +340,7 @@ fn store_paths_can_be_rebased_after_a_move() {
         package: String::new(),
         legacy_store_dir: dir.into(),
         files: Vec::new(),
+        source: String::new(),
         deployment: Deployment::default(),
         placements: Vec::new(),
         edits: Default::default(),
@@ -395,6 +396,7 @@ fn pending_changes_survive_a_restart() {
     let ops = vec![
         PendingOp::Install {
             mod_id: "a-A".into(),
+            source: Some("hexium".into()),
         },
         PendingOp::SetEnabled {
             mod_id: "b-B".into(),

@@ -177,10 +177,12 @@ impl Package {
                 .map(|(a, _)| a.to_owned())
                 .unwrap_or_default(),
             version: version.clone(),
-            icon_url: Some(format!(
-                "https://gcdn.thunderstore.io/live/repository/icons/{}-{version}.png",
-                step.id
-            )),
+            icon_url: step.icon_url.clone().or_else(|| {
+                Some(format!(
+                    "https://gcdn.thunderstore.io/live/repository/icons/{}-{version}.png",
+                    step.id
+                ))
+            }),
             download_url: step.version.download_url.clone(),
             sha256: step.version.sha256.clone(),
             file_id: None,
@@ -242,7 +244,10 @@ impl<S: ModSource> Installer<'_, S> {
                 )
                 .await
             {
-                Ok(record) => done.push(Done { record, previous }),
+                Ok(mut record) => {
+                    record.source = step.source.to_owned();
+                    done.push(Done { record, previous })
+                }
                 Err(error) => {
                     rollback(&self.paths.store(), target.game_dir, &done);
                     return Err(error);
@@ -605,6 +610,7 @@ fn deploy_package(
         package: key,
         legacy_store_dir: String::new(),
         files: package.file_id.into_iter().collect(),
+        source: String::new(),
         deployment,
         placements,
         edits,

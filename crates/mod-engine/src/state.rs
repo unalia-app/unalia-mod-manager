@@ -43,6 +43,10 @@ pub struct InstalledMod {
     /// Installed Nexus files, in the order they are placed (the main file
     /// then its variants): picked up again by updates.
     pub files: Vec<u32>,
+    /// Source it was installed from (`thunderstore`, `hexium`): its
+    /// updates come from there. Empty: the game's source (mods installed
+    /// before it was recorded, Nexus games).
+    pub source: String,
     #[serde(skip)]
     pub deployment: Deployment,
     /// Where each storage file goes: reused as is to enable again, undo a
@@ -117,6 +121,7 @@ CREATE TABLE IF NOT EXISTS installed_mods (
     files        TEXT NOT NULL DEFAULT '[]',
     package      TEXT NOT NULL DEFAULT '',
     edits        TEXT NOT NULL DEFAULT '{}',
+    source       TEXT NOT NULL DEFAULT '',
     PRIMARY KEY (game, id)
 );
 
@@ -242,9 +247,10 @@ impl State {
             tx.execute(
                 "INSERT OR REPLACE INTO installed_mods
                  (game, id, name, author, version, icon_url, loader_root, enabled, explicit,
-                  sha256, installed_at, store_dir, deployment, placements, files, package, edits)
+                  sha256, installed_at, store_dir, deployment, placements, files, package, edits,
+                  source)
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15,
-                         ?16, ?17)",
+                         ?16, ?17, ?18)",
                 params![
                     m.game,
                     m.id,
@@ -263,6 +269,7 @@ impl State {
                     serde_json::to_string(&m.files)?,
                     m.package,
                     serde_json::to_string(&m.edits)?,
+                    m.source,
                 ],
             )?;
         }
@@ -519,6 +526,7 @@ fn migrate(conn: &Connection) -> rusqlite::Result<()> {
         ("files", "'[]'"),
         ("package", "''"),
         ("edits", "'{}'"),
+        ("source", "''"),
     ] {
         let present = conn
             .prepare("SELECT 1 FROM pragma_table_info('installed_mods') WHERE name = ?1")?
@@ -548,6 +556,7 @@ fn row(r: &rusqlite::Row<'_>) -> rusqlite::Result<Row> {
             installed_at: r.get("installed_at")?,
             package: r.get("package")?,
             legacy_store_dir: r.get("store_dir")?,
+            source: r.get("source")?,
             files: Vec::new(),
             deployment: Deployment::default(),
             placements: Vec::new(),

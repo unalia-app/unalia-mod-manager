@@ -288,7 +288,7 @@ function ModRow({ mod: m, appId }: { mod: InstalledMod; appId: number }) {
 		>
 			<button
 				type="button"
-				onClick={() => router.push(modHref(appId, m.id))}
+				onClick={() => router.push(modHref(appId, m.id, m.source))}
 				className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 text-left"
 			>
 				<ModThumb src={m.iconUrl} dimmed={!enabled || removing} />

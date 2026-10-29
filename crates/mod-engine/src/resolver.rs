@@ -24,6 +24,10 @@ pub struct PlanStep {
     pub id: String,
     pub name: String,
     pub version: ModVersion,
+    /// Source the package comes from (`Mod::source`): a dependency can come
+    /// from another source than the requested mod.
+    pub source: &'static str,
+    pub icon_url: Option<String>,
     /// Loader package (installs at the game root).
     pub loader: bool,
     /// Already installed in an older version: update.
@@ -200,6 +204,8 @@ impl<L: Fn(&str) -> bool> State<'_, L> {
         self.planned.insert(id.clone());
         self.steps.push(PlanStep {
             replaces: self.installed.versions.get(&id).cloned(),
+            source: package.source,
+            icon_url: package.images.into_iter().next(),
             name: package.name,
             id,
             version,
