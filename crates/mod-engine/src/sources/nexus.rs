@@ -297,6 +297,10 @@ pub struct Requirement {
     pub url: Option<String>,
 }
 
+/// Sent with every request, as the API acceptable use policy asks: the same
+/// name from one version to the next, and the current version.
+const APPLICATION_NAME: &str = "Unalia Mod Manager";
+
 #[derive(Debug, Clone)]
 pub struct Nexus {
     client: Client,
@@ -580,6 +584,8 @@ impl Nexus {
         let response = self
             .client
             .post(&self.graphql_url)
+            .header("Application-Name", APPLICATION_NAME)
+            .header("Application-Version", env!("CARGO_PKG_VERSION"))
             .json(&json!({ "query": query, "variables": variables }))
             .send()
             .await
@@ -608,7 +614,7 @@ impl Nexus {
             .client
             .get(format!("{}{path}", self.api_url))
             .header("apikey", key)
-            .header("Application-Name", "Unalia Mod Manager")
+            .header("Application-Name", APPLICATION_NAME)
             .header("Application-Version", env!("CARGO_PKG_VERSION"))
             .send()
             .await

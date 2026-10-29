@@ -4,6 +4,10 @@ All notable changes to Unalia Mod Manager. The format follows [Keep a Changelog]
 
 ## [Unreleased]
 
+### Fixed
+
+- Nexus Mods: every request names the app and its version, as the Nexus API policy asks (only some did).
+
 ## [0.1.4] - 2026-10-29
 
 ### Added
