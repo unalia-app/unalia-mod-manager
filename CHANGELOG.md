@@ -4,6 +4,8 @@ All notable changes to Unalia Mod Manager. The format follows [Keep a Changelog]
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-10-29
+
 ### Added
 
 - Hexium source (hexium.gg) for the games it hosts, Valheim first: a Thunderstore / Hexium switch in Discover. Dependencies published only on Thunderstore come from there, and each mod updates from the source it was installed from.
@@ -18,6 +20,11 @@ All notable changes to Unalia Mod Manager. The format follows [Keep a Changelog]
 ### Changed
 
 - New notifications, stacked at the bottom of the window: hover to keep them, swipe to dismiss.
+- Bigger game cover on the game's page.
+
+### Fixed
+
+- Phantom Blade Zero: UE4SS goes next to the game's real executable (`platform/steam`), in the build made for the game, so its Lua mods start.
 
 ## [0.1.0] - 2026-10-27
 
