@@ -58,7 +58,7 @@ jobs:
 
       # NSIS only: the updater and the uninstaller (hooks) rely on it.
       # Without the private key, no `.sig` and `updater-manifest.mjs` fails.
-      # Executable signing (SignPath): to wire here through
+      # Executable signing (none yet, see CODE_SIGNING.md): to wire here through
       # `bundle.windows.signCommand`, to sign before the updater's `.sig`.
       - name: Build
         env:

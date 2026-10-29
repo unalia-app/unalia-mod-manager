@@ -41,7 +41,7 @@ Next on the list: script extenders and FOMOD installers for Bethesda games, more
 - **Your game files are never modified.** Mods are linked into the game folder, never written over original files. Your saves are never touched.
 - **Everything is reversible.** Every file placed is recorded. Remove all your mods, or uninstall the app with its data, and the game folder is back to how it was. An install either fully succeeds or rolls back.
 - **Mods come from their official source.** Downloaded over HTTPS from Thunderstore, Hexium, Nexus Mods or the author's GitHub, never re-hosted. Authors are credited and their page is one click away.
-- **Signed updates.** The app checks every update against its public key before installing it. Windows code signing: see the [code signing policy](CODE_SIGNING.md).
+- **Signed updates.** The app checks every update against its public key before installing it. The installer isn't code signed yet: [how to check it](CODE_SIGNING.md).
 - **Open source.** Read the code, build it yourself.
 
 Details: [SECURITY.md](SECURITY.md) and [PRIVACY.md](PRIVACY.md).

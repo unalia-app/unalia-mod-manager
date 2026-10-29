@@ -1,12 +1,17 @@
 # Code signing policy
 
-Free code signing provided by [SignPath.io](https://about.signpath.io), certificate by [SignPath Foundation](https://signpath.org).
+The Windows installer is not code signed yet. Windows SmartScreen may warn about an unknown app, and a few antivirus engines that rely on heuristics may flag it. Once a code signing certificate is in place, this page will say who issued it.
 
-## What is signed
+## How to check the installer
 
-Only the Windows installer and the app it contains, built by the [release workflow](.github/workflows/release.yml) on GitHub Actions from a tagged commit of this repository. Nothing built on a personal machine is signed, and no third-party binary is signed in our name.
+- **Get it from the source.** Download it only from [GitHub Releases](https://github.com/unalia-app/unalia-mod-manager/releases) or from [mods.unalia.app](https://mods.unalia.app), which links there.
+- **Compare the hash.** GitHub shows the SHA-256 of every release file. In PowerShell, run `Get-FileHash .\unalia-mod-manager-setup.exe` and compare.
+- **See how it was built.** Every installer is built by the [release workflow](.github/workflows/release.yml) on GitHub Actions from a tagged commit of this repository. Nothing built on a personal machine is published.
+- **Build it yourself.** The steps are in the [README](README.md#build-from-source).
 
-Each release is also signed with the updater key, whose public half is in `apps/desktop/src-tauri/tauri.conf.json`: the app refuses any update that doesn't match it.
+## Signed updates
+
+Each release is signed with the updater key, whose public half is in `apps/desktop/src-tauri/tauri.conf.json`: the app refuses any update that doesn't match it. This applies today, with or without a code signing certificate.
 
 ## Team roles
 
@@ -15,7 +20,7 @@ Each release is also signed with the updater key, whose public half is in `apps/
 | Committers and reviewers | [Members of the unalia-app organization](https://github.com/orgs/unalia-app/people) |
 | Approvers | [Owners of the unalia-app organization](https://github.com/orgs/unalia-app/people?query=role%3Aowner) |
 
-Today the project has a single maintainer, [REVERSS](https://github.com/IIREVERSSII), who holds every role. Changes from other contributors are reviewed before they are merged, and every signing request is approved by hand.
+Today the project has a single maintainer, [REVERSS](https://github.com/IIREVERSSII), who holds every role. Changes from other contributors are reviewed before they are merged, and every release is tagged by hand.
 
 ## Privacy
 
