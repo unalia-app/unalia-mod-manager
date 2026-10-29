@@ -159,19 +159,30 @@ function ModDetailsView({
 		[mod.images, markdown],
 	);
 	const { images, measured } = useGallery(candidates);
+	// The header's picture opens too, even when it is too small for the row
+	// (a Thunderstore icon).
+	const main = mod.images[0];
+	const viewable = useMemo(
+		() => (main && !images.includes(main) ? [main, ...images] : images),
+		[main, images],
+	);
 	const [viewing, setViewing] = useState<number | null>(null);
 	const zoom = useMemo(
 		() => ({
-			can: (src: string) => images.includes(src),
-			open: (src: string) => setViewing(images.indexOf(src)),
+			can: (src: string) => viewable.includes(src),
+			open: (src: string) => setViewing(viewable.indexOf(src)),
 		}),
-		[images],
+		[viewable],
 	);
 
 	return (
 		<>
 			<section className="mt-6 flex items-start gap-6">
-				<ModIcon src={mod.images[0]} className="size-28 animate-fade-up rounded-xl shadow-2xl shadow-black/50" />
+				<ModIcon
+					src={main}
+					onOpen={main ? () => zoom.open(main) : undefined}
+					className="size-28 animate-fade-up rounded-xl shadow-2xl shadow-black/50"
+				/>
 				<div className="min-w-0 flex-1 animate-fade-up [animation-delay:60ms]">
 					<h1 className="truncate pb-1 text-4xl leading-tight font-semibold tracking-tight">{mod.name}</h1>
 					<p className="text-sm text-fg-subtle">
@@ -224,9 +235,14 @@ function ModDetailsView({
 				</div>
 			</section>
 
-			<GalleryStrip candidates={candidates} images={images} measured={measured} onOpen={setViewing} />
+			<GalleryStrip
+				candidates={candidates}
+				images={images}
+				measured={measured}
+				onOpen={(index) => setViewing(viewable.indexOf(images[index] ?? ""))}
+			/>
 			{viewing !== null && (
-				<ImageViewer images={images} index={viewing} onIndex={setViewing} onClose={() => setViewing(null)} />
+				<ImageViewer images={viewable} index={viewing} onIndex={setViewing} onClose={() => setViewing(null)} />
 			)}
 
 			{mod.deprecated && (
@@ -361,12 +377,20 @@ function DependencyRow({
 	);
 }
 
-function ModIcon({ src, className }: { src?: string; className?: string }) {
+/** `onOpen`: the picture opens in the viewer once it has loaded. */
+function ModIcon({ src, className, onOpen }: { src?: string; className?: string; onOpen?: () => void }) {
 	const [status, setStatus] = useState<"loading" | "loaded" | "missing">(src ? "loading" : "missing");
+	const open = onOpen && status === "loaded" ? onOpen : undefined;
 	return (
 		<span
+			role={open ? "button" : undefined}
+			tabIndex={open ? 0 : undefined}
+			aria-label={open ? "View the picture" : undefined}
+			onClick={open}
+			onKeyDown={open ? (e) => (e.key === "Enter" || e.key === " ") && open() : undefined}
 			className={cn(
 				"relative flex shrink-0 items-center justify-center overflow-hidden border border-line bg-white/[0.04]",
+				open && "cursor-zoom-in transition hover:brightness-110",
 				className,
 			)}
 		>

@@ -8,7 +8,7 @@ All notable changes to Unalia Mod Manager. The format follows [Keep a Changelog]
 
 ### Added
 
-- Mod page: a row of screenshots, taken from the main picture and the images of the description. Click one, or an image in the description, to see it full screen and browse with the arrows.
+- Mod page: a row of screenshots, taken from the main picture and the images of the description, with arrows when they don't all fit. Click one, the mod's picture or an image in the description to see it full screen and browse with the arrows.
 
 ### Fixed
 

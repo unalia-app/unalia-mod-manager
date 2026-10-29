@@ -2,7 +2,7 @@
 
 import { cn } from "@modalia/ui";
 import { ChevronLeft, ChevronRight, X } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 /**
@@ -46,7 +46,8 @@ export function useGallery(candidates: string[]) {
 /**
  * Row of thumbnails. Every candidate loads hidden: only the large ones show.
  * Nothing at all with fewer than two screenshots, the header already shows
- * the main picture.
+ * the main picture. The scrollbars are hidden in the app and a mouse wheel
+ * scrolls the page: arrows at each end when there is more to see.
  */
 export function GalleryStrip({
 	candidates,
@@ -60,38 +61,88 @@ export function GalleryStrip({
 	onOpen: (index: number) => void;
 }) {
 	const shown = images.length >= 2;
+	const row = useRef<HTMLDivElement>(null);
+	const [ends, setEnds] = useState({ left: false, right: false });
+
+	const measure = useCallback(() => {
+		const el = row.current;
+		if (!el) return;
+		const left = el.scrollLeft > 4;
+		const right = el.scrollLeft + el.clientWidth < el.scrollWidth - 4;
+		setEnds((e) => (e.left === left && e.right === right ? e : { left, right }));
+	}, []);
+
+	// Again when a thumbnail shows up (`images` changes the width of the row)
+	// and when the window is resized.
+	useEffect(() => {
+		measure();
+		window.addEventListener("resize", measure);
+		return () => window.removeEventListener("resize", measure);
+	}, [measure, images]);
+
+	const scroll = (direction: number) => {
+		const el = row.current;
+		el?.scrollBy({ left: direction * el.clientWidth * 0.8, behavior: "smooth" });
+	};
+
 	return (
-		<div className={cn("-mx-1 mt-6 flex gap-3 overflow-x-auto px-1 pb-2", !shown && "hidden")}>
-			{candidates.map((src) => {
-				const index = images.indexOf(src);
-				return (
+		<div className={cn("relative mt-6", !shown && "hidden")}>
+			<div ref={row} onScroll={measure} className="-mx-1 flex gap-3 overflow-x-auto px-1">
+				{candidates.map((src) => {
+					const index = images.indexOf(src);
+					return (
+						<button
+							key={src}
+							type="button"
+							onClick={() => onOpen(index)}
+							aria-label={`Image ${index + 1} of ${images.length}`}
+							className={cn(
+								"aspect-video h-28 shrink-0 cursor-zoom-in overflow-hidden rounded-lg border border-line bg-white/[0.04] transition hover:border-white/25 hover:brightness-110",
+								index < 0 && "hidden",
+							)}
+						>
+							<img
+								src={src}
+								alt=""
+								decoding="async"
+								referrerPolicy="no-referrer"
+								onLoad={(e) =>
+									measured(
+										src,
+										e.currentTarget.naturalWidth >= MIN_WIDTH && e.currentTarget.naturalHeight >= MIN_HEIGHT,
+									)
+								}
+								onError={() => measured(src, false)}
+								className="size-full object-cover"
+							/>
+						</button>
+					);
+				})}
+			</div>
+			{ends.left && (
+				<div className="pointer-events-none absolute inset-y-0 left-0 flex w-20 items-center bg-gradient-to-r from-bg to-transparent">
 					<button
-						key={src}
 						type="button"
-						onClick={() => onOpen(index)}
-						aria-label={`Image ${index + 1} of ${images.length}`}
-						className={cn(
-							"aspect-video h-28 shrink-0 cursor-zoom-in overflow-hidden rounded-lg border border-line bg-white/[0.04] transition hover:border-white/25 hover:brightness-110",
-							index < 0 && "hidden",
-						)}
+						aria-label="Previous images"
+						onClick={() => scroll(-1)}
+						className={cn(ROUND, "pointer-events-auto relative size-9")}
 					>
-						<img
-							src={src}
-							alt=""
-							decoding="async"
-							referrerPolicy="no-referrer"
-							onLoad={(e) =>
-								measured(
-									src,
-									e.currentTarget.naturalWidth >= MIN_WIDTH && e.currentTarget.naturalHeight >= MIN_HEIGHT,
-								)
-							}
-							onError={() => measured(src, false)}
-							className="size-full object-cover"
-						/>
+						<ChevronLeft className="size-5" />
 					</button>
-				);
-			})}
+				</div>
+			)}
+			{ends.right && (
+				<div className="pointer-events-none absolute inset-y-0 right-0 flex w-20 items-center justify-end bg-gradient-to-l from-bg to-transparent">
+					<button
+						type="button"
+						aria-label="Next images"
+						onClick={() => scroll(1)}
+						className={cn(ROUND, "pointer-events-auto relative size-9")}
+					>
+						<ChevronRight className="size-5" />
+					</button>
+				</div>
+			)}
 		</div>
 	);
 }
