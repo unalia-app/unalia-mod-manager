@@ -900,7 +900,7 @@ pub fn bbcode_to_markdown(input: &str) -> String {
             // Formatting with no equivalent: keep the text.
             "size" | "/size" | "color" | "/color" | "font" | "/font" | "center" | "/center"
             | "right" | "/right" | "left" | "/left" | "u" | "/u" | "spoiler" | "/spoiler"
-            | "/youtube" | "/img" => {}
+            | "/youtube" | "/img" | "/*" => {}
             // Not a tag (e.g. "[v1.2]"): text as is.
             _ => {
                 out.push('[');
@@ -1179,11 +1179,13 @@ mod tests {
     #[test]
     fn converts_bbcode() {
         let md = bbcode_to_markdown(
-            "[size=5][b]Title[/b][/size]<br />See [url=https://x.io]the docs[/url].<br />[list][*]one[*]two[/list][img]https://i.io/a.png[/img] [v1.2]",
+            "[size=5][b]Title[/b][/size]<br />See [url=https://x.io]the docs[/url].<br />[list][*]one[*]two[/*][/list][img]https://i.io/a.png[/img] [v1.2]",
         );
         assert!(md.contains("**Title**"), "{md}");
         assert!(md.contains("[the docs](https://x.io)"), "{md}");
         assert!(md.contains("- one\n- two"), "{md}");
+        // Closed list items (`[/*]`) leave nothing behind.
+        assert!(!md.contains("[/*]"), "{md}");
         assert!(md.contains("![](https://i.io/a.png)"), "{md}");
         assert!(md.contains("[v1.2]"), "{md}");
     }
