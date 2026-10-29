@@ -250,14 +250,17 @@ export function settleBackgroundInstalls(appId: number) {
 
 /**
  * Cancels an install: running or queued, the engine stops (the game is not
- * touched, what was downloaded stays cached); waiting for the Nexus site,
- * we simply forget it.
+ * touched, what was downloaded stays cached). Waiting for the Nexus site,
+ * its `nxm://` link may already be in the engine, queued behind another
+ * install: it is stopped too, else we simply forget it.
  */
 export async function cancel(appId: number, modId: string) {
 	const active = snapshot.active.get(key(appId, modId));
-	if (active?.status === "queued" || active?.status === "running") {
+	if (active && active.status !== "error") {
 		const stopped = await cancelInstall(appId, modId);
-		if (stopped) return;
+		// Running: its end clears it. Waiting its turn: it only stops when
+		// its turn comes, so it leaves the list now.
+		if (stopped && active.status === "running") return;
 	}
 	clearError(appId, modId);
 }
