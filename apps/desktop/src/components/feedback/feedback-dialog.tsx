@@ -154,6 +154,7 @@ export function FeedbackDialog() {
 									className="w-full resize-none bg-transparent text-sm text-fg/80 outline-none placeholder:text-white/22"
 								/>
 								{error && <p className="text-xs text-danger">{error}</p>}
+								<p className="text-xs text-fg-faint">Sent with your app and Windows versions.</p>
 							</div>
 						</div>
 

@@ -897,6 +897,7 @@ pub fn run() {
             mods::reset_game,
             mods::cancel_pending,
             mods::check_updates,
+            support::send_feedback,
             mods::game_status,
             mods::play_game,
             mods::cancel_starting,

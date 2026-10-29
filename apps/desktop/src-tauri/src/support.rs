@@ -15,6 +15,10 @@ const LOG_NAME: &str = "unalia";
 /// Log lines attached to the report: the last ones, the most useful.
 const TAIL_LINES: usize = 150;
 
+/// Route of the site that forwards Help & Feedback messages to the team's
+/// Discord. The webhook stays on the server, out of the app's code.
+const FEEDBACK_URL: &str = "https://mods.unalia.app/api/feedback";
+
 /// Log to a file (500 KB, the previous one kept once), and to the terminal
 /// in dev.
 pub fn log_plugin() -> tauri::plugin::TauriPlugin<tauri::Wry> {
@@ -60,12 +64,6 @@ pub struct Diagnostics {
 
 #[tauri::command]
 pub fn diagnostics(app: AppHandle) -> Diagnostics {
-    let info = os_info::get();
-    let os = match info.edition() {
-        // "Core" is the internal name of the Home edition.
-        Some(edition) => format!("{} {}", edition.replace(" Core", " Home"), info.version()),
-        None => format!("{} {}", info.os_type(), info.version()),
-    };
     let log = log_file(&app)
         .and_then(|file| fs::read_to_string(file).ok())
         .map(|text| {
@@ -75,10 +73,53 @@ pub fn diagnostics(app: AppHandle) -> Diagnostics {
         })
         .unwrap_or_default();
     Diagnostics {
-        os,
+        os: os_name(),
         arch: std::env::consts::ARCH,
         log,
     }
+}
+
+/// System and version (e.g. "Windows 11 Home 10.0.26200").
+fn os_name() -> String {
+    let info = os_info::get();
+    match info.edition() {
+        // "Core" is the internal name of the Home edition.
+        Some(edition) => format!("{} {}", edition.replace(" Core", " Home"), info.version()),
+        None => format!("{} {}", info.os_type(), info.version()),
+    }
+}
+
+#[derive(Deserialize, Serialize)]
+#[serde(rename_all = "lowercase")]
+pub enum FeedbackKind {
+    Bug,
+    Feature,
+    General,
+}
+
+/// Sends a Help & Feedback message, with the app and Windows versions.
+#[tauri::command]
+pub async fn send_feedback(
+    app: AppHandle,
+    kind: FeedbackKind,
+    message: String,
+) -> Result<(), String> {
+    let client = app.state::<crate::catalog::Catalog>().client.clone();
+    let body = serde_json::json!({
+        "type": kind,
+        "message": message,
+        "version": app.package_info().version.to_string(),
+        "os": os_name(),
+    });
+    client
+        .post(FEEDBACK_URL)
+        .json(&body)
+        .send()
+        .await
+        .and_then(|response| response.error_for_status())
+        .map_err(logged)?;
+    log::info!("feedback sent");
+    Ok(())
 }
 
 /// Opens the log folder in the file explorer.

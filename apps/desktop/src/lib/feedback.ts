@@ -1,9 +1,10 @@
+import { invoke, isTauri } from "@tauri-apps/api/core";
 import { useSyncExternalStore } from "react";
 
 /**
  * Tester feedback (taken from Unalia: "beta" bubble and Help & Feedback
- * dialog). Sending isn't wired: Unalia Mod Manager has no server yet.
- * `submitFeedback` is the only place to replace.
+ * dialog). The engine sends it to the site, which forwards it to the team's
+ * Discord (support.rs).
  */
 
 export type FeedbackType = "bug" | "feature" | "general";
@@ -15,10 +16,10 @@ export const MESSAGE_MAX = 1000;
 
 const SENT_KEY = "modalia.feedbackSent";
 
-/** To wire to the future server. For now, nothing is sent. */
+/** Sends the message. Throws when it didn't arrive, so the user can retry. */
 export async function submitFeedback(feedback: Feedback): Promise<void> {
-	if (process.env.NODE_ENV === "development") console.info("[feedback] not sent (no backend yet)", feedback);
-	await new Promise((resolve) => setTimeout(resolve, 400));
+	if (isTauri()) await invoke("send_feedback", { kind: feedback.type, message: feedback.message });
+	else console.info("[feedback] not sent outside the app", feedback);
 	try {
 		localStorage.setItem(SENT_KEY, "1");
 	} catch {
