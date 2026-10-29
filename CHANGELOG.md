@@ -4,6 +4,8 @@ All notable changes to Unalia Mod Manager. The format follows [Keep a Changelog]
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-10-29
+
 ### Added
 
 - Mod page: a row of screenshots, taken from the main picture and the images of the description. Click one, or an image in the description, to see it full screen and browse with the arrows.
