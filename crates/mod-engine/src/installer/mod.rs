@@ -6,6 +6,7 @@
 //! nothing is recorded.
 
 mod nexus;
+mod variants;
 
 pub use nexus::{NexusFile, NexusInstall, available_updates_nexus};
 
@@ -139,6 +140,10 @@ pub enum InstallError {
     /// the advised file first.
     #[error("choose which files of this mod to install")]
     ChooseFiles(Vec<crate::sources::nexus::ModFile>),
+    /// The archive holds the mod several times, one folder per variant:
+    /// the user picks one.
+    #[error("choose which variant of this mod to install")]
+    ChooseVariant(Vec<String>),
     /// Free account: this file downloads from the Nexus website.
     #[error("this file downloads from the Nexus Mods website")]
     NexusWebsite { file_id: u32 },

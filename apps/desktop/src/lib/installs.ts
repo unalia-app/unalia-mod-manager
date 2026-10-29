@@ -39,6 +39,9 @@ export type ActiveInstall = { name?: string } & (
 /** Nexus mod with several files: the choice asked of the user. */
 export type FileChoice = { appId: number; modId: string; name?: string; files: NexusModFile[] };
 
+/** Archive with one folder per variant: the choice asked of the user. */
+export type VariantChoice = { appId: number; modId: string; name?: string; variants: string[] };
+
 /** Install that just failed: shown in a dialog, not only on its card. */
 export type InstallFailure = { appId: number; modId: string; name?: string; message: string; details: string | null };
 
@@ -48,10 +51,18 @@ type Snapshot = {
 	/** Available updates per game (checked once per session). */
 	updates: Map<number, ModUpdate[]>;
 	choice: FileChoice | null;
+	variantChoice: VariantChoice | null;
 	failure: InstallFailure | null;
 };
 
-let snapshot: Snapshot = { installed: new Map(), active: new Map(), updates: new Map(), choice: null, failure: null };
+let snapshot: Snapshot = {
+	installed: new Map(),
+	active: new Map(),
+	updates: new Map(),
+	choice: null,
+	variantChoice: null,
+	failure: null,
+};
 const listeners = new Set<() => void>();
 
 function update(change: (draft: Snapshot) => void) {
@@ -60,6 +71,7 @@ function update(change: (draft: Snapshot) => void) {
 		active: new Map(snapshot.active),
 		updates: new Map(snapshot.updates),
 		choice: snapshot.choice,
+		variantChoice: snapshot.variantChoice,
 		failure: snapshot.failure,
 	};
 	change(draft);
@@ -96,8 +108,18 @@ function listenOnce() {
 	);
 	// `nxm://` link from the site ("Mod Manager Download" button): the
 	// engine installs by itself, the UI learns about the end here.
-	void onNexusInstalled(({ appId, modId, name, missing, error, cancelled, website }) => {
+	void onNexusInstalled(({ appId, modId, name, missing, error, cancelled, website, variants }) => {
 		const k = key(appId, modId);
+		// Downloaded, but the archive holds several variants: the picker
+		// takes over, the install resumes from the cached archive.
+		if (variants) {
+			update((s) => {
+				const known = s.active.get(k)?.name;
+				s.active.delete(k);
+				s.variantChoice = { appId, modId, name: name ?? known, variants };
+			});
+			return;
+		}
 		// A file of a multiple choice arrived: the next one's page is open,
 		// we wait for its link.
 		if (website) {
@@ -186,8 +208,16 @@ const sources = new Map<string, string>();
 /**
  * Starts the install (without waiting): the state follows in the store.
  * `files`: picked Nexus files. `source`: picked in Discover (`hexium`).
+ * `variant`: picked folder of an archive with variants.
  */
-export function install(appId: number, modId: string, name?: string, files?: number[], source?: string): Promise<void> {
+export function install(
+	appId: number,
+	modId: string,
+	name?: string,
+	files?: number[],
+	source?: string,
+	variant?: string,
+): Promise<void> {
 	const k = key(appId, modId);
 	if (source) sources.set(k, source);
 	const current = snapshot.active.get(k);
@@ -196,7 +226,7 @@ export function install(appId: number, modId: string, name?: string, files?: num
 		s.active.set(k, { status: "queued", name: name ?? current?.name });
 	});
 	inFlight.add(k);
-	return installMod(appId, modId, files, sources.get(k))
+	return installMod(appId, modId, files, sources.get(k), variant)
 		.finally(() => inFlight.delete(k))
 		.then(
 			(outcome) =>
@@ -212,6 +242,11 @@ export function install(appId: number, modId: string, name?: string, files?: num
 					if (outcome.status === "choose") {
 						s.active.delete(k);
 						s.choice = { appId, modId, name, files: outcome.files };
+						return;
+					}
+					if (outcome.status === "chooseVariant") {
+						s.active.delete(k);
+						s.variantChoice = { appId, modId, name, variants: outcome.variants };
 						return;
 					}
 					// Canceled: nothing changed, nothing to show.
@@ -277,6 +312,20 @@ export function settleFileChoice(files: number[] | null) {
 		s.choice = null;
 	});
 	if (choice && files?.length) void install(choice.appId, choice.modId, choice.name, files);
+}
+
+/** Variant picking in progress (dialog open), else `null`. */
+export function useVariantChoice(): VariantChoice | null {
+	return useSyncExternalStore(subscribe, () => snapshot.variantChoice, () => null);
+}
+
+/** Installs the picked variant (or closes the dialog without doing anything). */
+export function settleVariantChoice(variant: string | null) {
+	const choice = snapshot.variantChoice;
+	update((s) => {
+		s.variantChoice = null;
+	});
+	if (choice && variant) void install(choice.appId, choice.modId, choice.name, undefined, undefined, variant);
 }
 
 export function useInstallFailure(): InstallFailure | null {

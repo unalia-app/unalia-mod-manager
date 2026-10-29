@@ -25,6 +25,7 @@ const MIRROR_CANDIDATES: usize = 4;
 use serde::Serialize;
 
 use super::{
+    variants,
     Done, Fetched, InstallError, Installer, Package, Progress, Target, deploy_package, files_of,
     keep_replaced, replaced, rollback,
 };
@@ -79,6 +80,7 @@ impl Installer<'_, Nexus> {
         mod_id: u32,
         file: NexusFile<'_>,
         before: Option<&str>,
+        variant: Option<&str>,
         mut on_progress: impl FnMut(Progress),
     ) -> Result<NexusInstall, InstallError> {
         on_progress(Progress::Resolving);
@@ -250,6 +252,20 @@ impl Installer<'_, Nexus> {
             self.fetch_parts(target, &adapter, parts, whole, &mut on_progress)
                 .await?,
         ];
+        // One folder per variant in the archive: the picked one, else the
+        // one installed before, else the user picks (the archive stays
+        // cached for that).
+        if let Some(variants) = variants::variants_of(&fetched[0].placements) {
+            let previous = existing.iter().find(|m| m.id == fetched[0].package.id);
+            let pick = variant
+                .filter(|v| variants.names.iter().any(|n| n == v))
+                .map(str::to_owned)
+                .or_else(|| previous.and_then(|p| variants.used_by(&p.placements)));
+            match pick {
+                Some(pick) => variants.keep(&mut fetched[0].placements, &pick),
+                None => return Err(InstallError::ChooseVariant(variants.names)),
+            }
+        }
         let mut planned: HashSet<String> = HashSet::from([main_id]);
         let mut queue: Vec<&Framework> = Vec::new();
         let declared = frameworks.iter().filter(|f| {

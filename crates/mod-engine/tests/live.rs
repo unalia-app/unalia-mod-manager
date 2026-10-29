@@ -170,6 +170,7 @@ async fn real_framework_archives_land_in_the_right_place() {
             7780,
             NexusFile::Main,
             None,
+            None,
             |_| {},
         )
         .await
@@ -237,6 +238,7 @@ async fn verified_github_copies_spare_the_website() {
                 &github,
                 mod_id,
                 NexusFile::Main,
+                None,
                 None,
                 |_| {},
             )

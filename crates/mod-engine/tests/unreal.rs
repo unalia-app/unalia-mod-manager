@@ -186,11 +186,20 @@ impl World {
     }
 
     async fn install(&mut self, mod_id: u32) -> Result<NexusInstall, InstallError> {
-        let github = GitHub::with_url(self.client.clone(), &self.server.url());
-        self.install_with(mod_id, &github).await
+        self.install_variant(mod_id, None).await
     }
 
-    async fn install_with(&mut self, mod_id: u32, github: &GitHub) -> Result<NexusInstall, InstallError> {
+    async fn install_variant(&mut self, mod_id: u32, variant: Option<&str>) -> Result<NexusInstall, InstallError> {
+        let github = GitHub::with_url(self.client.clone(), &self.server.url());
+        self.install_with(mod_id, &github, variant).await
+    }
+
+    async fn install_with(
+        &mut self,
+        mod_id: u32,
+        github: &GitHub,
+        variant: Option<&str>,
+    ) -> Result<NexusInstall, InstallError> {
         let link = NxmLink::parse(&format!(
             "nxm://phantombladezero/mods/{mod_id}/files/{}?key=k&expires=1",
             mod_id * 10
@@ -217,6 +226,7 @@ impl World {
                 mod_id,
                 NexusFile::Link(&link),
                 None,
+                variant,
                 |_| {},
             )
             .await
@@ -288,7 +298,7 @@ async fn the_real_ue4ss_build_lands_in_the_right_place() {
         .await;
 
     let github = GitHub::new(mod_engine::http_client());
-    let done = w.install_with(8000, &github).await.unwrap();
+    let done = w.install_with(8000, &github, None).await.unwrap();
 
     let binaries = w.game.join(BINARIES);
     for file in [
@@ -332,6 +342,40 @@ async fn a_pak_mod_goes_to_tilde_mods_without_ue4ss() {
     assert!(!w.game.join(BINARIES).join("dwmapi.dll").exists());
     let ids: Vec<_> = done.mods.iter().map(|m| m.id.as_str()).collect();
     assert_eq!(ids, ["nexus-8001"]);
+}
+
+/// Skip Intro 1.1.0: one folder per variant, the same `.pak` in each.
+#[tokio::test]
+async fn an_archive_with_variants_asks_which_one_then_keeps_it() {
+    let mut w = World::new().await;
+    let pak = "ProjectPBZ/Content/Paks/~mods/zzz_PBZSkipIntro_P.pak";
+    w.publish(
+        8002,
+        "Skip Intro",
+        &[
+            ("README.txt", b"readme"),
+            (&format!("Skip Intro/{pak}"), b"plain"),
+            (&format!("Skip Intro + Instant Menu/{pak}"), b"instant"),
+        ],
+    )
+    .await;
+
+    let err = w.install(8002).await.unwrap_err();
+    let InstallError::ChooseVariant(names) = err else {
+        panic!("{err:?}");
+    };
+    assert_eq!(names, ["Skip Intro", "Skip Intro + Instant Menu"]);
+    // Nothing placed while the player chooses.
+    assert!(!w.game.join(pak).exists());
+
+    w.install_variant(8002, Some("Skip Intro + Instant Menu"))
+        .await
+        .unwrap();
+    assert_eq!(fs::read(w.game.join(pak)).unwrap(), b"instant");
+
+    // Installed again (an update): the same variant, without asking.
+    w.install(8002).await.unwrap();
+    assert_eq!(fs::read(w.game.join(pak)).unwrap(), b"instant");
 }
 
 #[tokio::test]

@@ -266,6 +266,7 @@ impl World {
                 mod_id,
                 file,
                 self.before.as_deref(),
+                None,
                 |_| {},
             )
             .await

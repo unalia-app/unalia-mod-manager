@@ -301,14 +301,23 @@ export type InstallOutcome =
 	| { status: "browser"; url: string }
 	| { status: "cancelled" }
 	/** Nexus mod with several files: to pick, the advised one first. */
-	| { status: "choose"; files: NexusModFile[] };
+	| { status: "choose"; files: NexusModFile[] }
+	/** The archive holds the mod once per variant (one folder each): to pick. */
+	| { status: "chooseVariant"; variants: string[] };
 
 /**
  * `files`: picked Nexus files, placed in this order. `source`: picked in
  * Discover (`hexium`); without it, an update keeps the mod's source.
+ * `variant`: picked folder of an archive with variants.
  */
-export function installMod(appId: number, modId: string, files?: number[], source?: string): Promise<InstallOutcome> {
-	return invoke("install_mod", { appId, modId, files: files ?? null, source: source ?? null });
+export function installMod(
+	appId: number,
+	modId: string,
+	files?: number[],
+	source?: string,
+	variant?: string,
+): Promise<InstallOutcome> {
+	return invoke("install_mod", { appId, modId, files: files ?? null, source: source ?? null, variant: variant ?? null });
 }
 
 /** Stops a running or queued install (the game is not touched). */
@@ -499,6 +508,8 @@ export type NexusInstalled = {
 	error: string | null;
 	/** Next file of a multiple choice: its page, already open in the browser. */
 	website: string | null;
+	/** The archive holds one folder per variant: to pick, then install again. */
+	variants: string[] | null;
 };
 
 export function nexusStatus(): Promise<NexusStatus> {

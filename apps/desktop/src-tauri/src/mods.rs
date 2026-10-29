@@ -291,6 +291,11 @@ pub enum Outcome<T> {
     Choose {
         files: Vec<nexus_source::ModFile>,
     },
+    /// The archive holds the mod once per variant (one folder each): the
+    /// UI shows their names, the install resumes with the picked one.
+    ChooseVariant {
+        variants: Vec<String>,
+    },
 }
 
 // ---------------------------------------------------------------- state
@@ -462,6 +467,7 @@ struct InstallEvent {
 /// game is running. Progress comes through the `install-progress`
 /// event.
 #[tauri::command]
+#[allow(clippy::too_many_arguments)]
 pub async fn install_mod(
     app: AppHandle,
     library: State<'_, Library>,
@@ -470,6 +476,7 @@ pub async fn install_mod(
     mod_id: String,
     files: Option<Vec<u32>>,
     source: Option<String>,
+    variant: Option<String>,
 ) -> Result<Outcome<Vec<InstalledMod>>, String> {
     let game = library.game(app_id).ok_or(UNKNOWN_GAME)?;
     if game.profile.nexus.is_some() {
@@ -481,7 +488,7 @@ pub async fn install_mod(
             None => NexusFile::Main,
         };
         let pending = (app_id, mod_id.clone());
-        return match run_nexus_install(&app, app_id, &game, &mod_id, file).await {
+        return match run_nexus_install(&app, app_id, &game, &mod_id, file, variant.as_deref()).await {
             Ok(done) => {
                 mods.chosen_files.lock().unwrap().remove(&pending);
                 Ok(Outcome::Done { value: done.mods })
@@ -494,6 +501,7 @@ pub async fn install_mod(
                 Ok(Outcome::Browser { url })
             }
             Err(NexusFailure::Choose(files)) => Ok(Outcome::Choose { files }),
+            Err(NexusFailure::ChooseVariant(variants)) => Ok(Outcome::ChooseVariant { variants }),
             Err(NexusFailure::Cancelled) => Ok(Outcome::Cancelled),
             Err(NexusFailure::Error(message)) => Err(message),
         };
@@ -815,6 +823,8 @@ enum NexusFailure {
     NextFile(String),
     /// Several files: the user picks.
     Choose(Vec<nexus_source::ModFile>),
+    /// One folder per variant in the archive: the user picks.
+    ChooseVariant(Vec<String>),
     Cancelled,
     Error(String),
 }
@@ -846,6 +856,7 @@ async fn run_nexus_install(
     game: &KnownGame,
     mod_id: &str,
     file: NexusFile<'_>,
+    variant: Option<&str>,
 ) -> Result<NexusInstall, NexusFailure> {
     let catalog = app.state::<Catalog>();
     let mods = app.state::<Mods>();
@@ -877,6 +888,7 @@ async fn run_nexus_install(
                 nexus_id,
                 file,
                 game.mods_before(),
+                variant,
                 progress_emitter(app, app_id, mod_id),
             )
             .await;
@@ -899,6 +911,7 @@ async fn run_nexus_install(
             })
         }
         Err(InstallError::ChooseFiles(files)) => Err(NexusFailure::Choose(files)),
+        Err(InstallError::ChooseVariant(variants)) => Err(NexusFailure::ChooseVariant(variants)),
         Err(error) => Err(NexusFailure::Error(error_message(&error))),
     }
 }
@@ -1472,13 +1485,16 @@ async fn apply_pending(app: &AppHandle, app_id: u32, game: &KnownGame) {
     for op in ops {
         let result = match &op {
             PendingOp::Install { mod_id, .. } if game.profile.nexus.is_some() => {
-                match run_nexus_install(app, app_id, game, mod_id, NexusFile::Main).await {
+                match run_nexus_install(app, app_id, game, mod_id, NexusFile::Main, None).await {
                     Ok(_) => Ok(()),
                     Err(NexusFailure::Website(_) | NexusFailure::NextFile(_)) => {
                         Err("Nexus Mods needs you to start this download from its website.".into())
                     }
                     Err(NexusFailure::Choose(_)) => {
                         Err("This mod has several files: install it again to pick yours.".into())
+                    }
+                    Err(NexusFailure::ChooseVariant(_)) => {
+                        Err("This mod comes in several variants: install it again to pick yours.".into())
                     }
                     Err(NexusFailure::Cancelled) => Err("The install was cancelled.".into()),
                     Err(NexusFailure::Error(message)) => Err(message),
@@ -1764,6 +1780,9 @@ struct NexusInstalled {
     /// Next file of a multiple choice: its download page, already open in
     /// the browser.
     website: Option<String>,
+    /// The archive holds one folder per variant: the UI asks which one,
+    /// then installs again (the archive is cached).
+    variants: Option<Vec<String>>,
 }
 
 /// `nxm://` link from the site: installs the picked file, in the matching
@@ -1808,6 +1827,7 @@ async fn handle_nxm(app: AppHandle, url: String) {
                     link.domain
                 )),
                 website: None,
+                variants: None,
             },
         );
         return;
@@ -1831,14 +1851,19 @@ async fn handle_nxm(app: AppHandle, url: String) {
         None => NexusFile::Link(&link),
     };
     let mut website = None;
+    let mut variants = None;
     let result = if mods.is_running(&game) {
         Err(Some(close_first(&game)))
     } else {
-        run_nexus_install(&app, app_id, &game, &mod_id, file)
+        run_nexus_install(&app, app_id, &game, &mod_id, file, None)
             .await
             .map_err(|failure| match failure {
                 NexusFailure::NextFile(url) => {
                     website = Some(url);
+                    None
+                }
+                NexusFailure::ChooseVariant(names) => {
+                    variants = Some(names);
                     None
                 }
                 NexusFailure::Website(_) => Some(
@@ -1869,15 +1894,17 @@ async fn handle_nxm(app: AppHandle, url: String) {
             missing: done.missing,
             error: None,
             website: None,
+            variants: None,
         },
         Err(error) => NexusInstalled {
             app_id,
             mod_id,
-            cancelled: error.is_none() && website.is_none(),
+            cancelled: error.is_none() && website.is_none() && variants.is_none(),
             name: None,
             missing: Vec::new(),
             error,
             website,
+            variants,
         },
     };
     let _ = app.emit("nexus-installed", event);

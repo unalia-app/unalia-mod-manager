@@ -9,6 +9,7 @@ All notable changes to Unalia Mod Manager. The format follows [Keep a Changelog]
 ### Added
 
 - Mod page: a row of screenshots, taken from the main picture and the images of the description, with arrows when they don't all fit. Click one, the mod's picture or an image in the description to see it full screen and browse with the arrows.
+- Nexus Mods: when a download holds the mod in several variants, one folder each (Skip Intro, Skip Intro + Instant Menu), Unalia asks which one to install. Updates keep it.
 
 ### Fixed
 
