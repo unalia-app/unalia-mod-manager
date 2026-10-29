@@ -4,9 +4,9 @@
 
 [![Latest release](https://img.shields.io/github/v/release/unalia-app/unalia-mod-manager?label=release)](https://github.com/unalia-app/unalia-mod-manager/releases/latest)
 [![License: GPL v3](https://img.shields.io/badge/license-GPL%20v3-blue)](LICENSE)
-[![Discord](https://img.shields.io/badge/chat-Discord-5865F2?logo=discord&logoColor=white)](https://discord.gg/AMtDVqygh5)
+[![Discord](https://img.shields.io/badge/chat-Discord-5865F2?logo=discord&logoColor=white)](https://mods.unalia.app/discord)
 
-**[Download for Windows](https://github.com/unalia-app/unalia-mod-manager/releases/latest/download/unalia-mod-manager-setup.exe)** · [Website](https://mods.unalia.app) · [Discord](https://discord.gg/AMtDVqygh5)
+**[Download for Windows](https://github.com/unalia-app/unalia-mod-manager/releases/latest/download/unalia-mod-manager-setup.exe)** · [Website](https://mods.unalia.app) · [Discord](https://mods.unalia.app/discord)
 
 > **Beta.** Windows 10 and 11 only for now. Expect rough edges, and please [report them](https://github.com/unalia-app/unalia-mod-manager/issues).
 
@@ -61,7 +61,7 @@ How it is built: [ARCHITECTURE.md](ARCHITECTURE.md). Design rules: [DESIGN.md](D
 
 ## Contributing
 
-Bug reports, game profiles and fixes are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) first, and open an issue before starting a new feature or screen. Using AI tools? See the [AI policy](AI_POLICY.md). Questions and ideas: [Discord](https://discord.gg/AMtDVqygh5).
+Bug reports, game profiles and fixes are welcome. Read [CONTRIBUTING.md](CONTRIBUTING.md) first, and open an issue before starting a new feature or screen. Using AI tools? See the [AI policy](AI_POLICY.md). Questions and ideas: [Discord](https://mods.unalia.app/discord).
 
 ## The Unalia family
 

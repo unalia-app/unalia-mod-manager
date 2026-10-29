@@ -6,7 +6,7 @@ Thanks for helping. Game profiles, bug reports and fixes are the most useful con
 
 - **Open an issue before any new feature or screen.** We agree on the idea first, so your work does not get turned down.
 - Bug fixes and game profiles can go straight to a pull request.
-- Questions and ideas are welcome on [Discord](https://discord.gg/AMtDVqygh5).
+- Questions and ideas are welcome on [Discord](https://mods.unalia.app/discord).
 - Security problems never go in a public issue: see [SECURITY.md](SECURITY.md).
 
 ## Run the project

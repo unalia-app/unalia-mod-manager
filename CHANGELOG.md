@@ -4,6 +4,10 @@ All notable changes to Unalia Mod Manager. The format follows [Keep a Changelog]
 
 ## [Unreleased]
 
+### Fixed
+
+- The Discord link opens the server again: the old invite had expired.
+
 ## [0.1.3] - 2026-10-29
 
 ### Fixed
