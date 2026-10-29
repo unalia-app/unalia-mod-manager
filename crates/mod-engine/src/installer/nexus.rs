@@ -33,7 +33,7 @@ use crate::games::GameProfile;
 use crate::loaders::bethesda::{self, Bethesda};
 use crate::loaders::framework::{Framework, needed_frameworks};
 use crate::loaders::redengine::RedEngine;
-use crate::loaders::unreal::{Unreal, find_project};
+use crate::loaders::unreal::{Unreal, find_binaries, find_project};
 use crate::loaders::{Loader, PackageKind, Placement};
 use crate::sources::SourceError;
 use crate::sources::github::{GitHub, repos_in};
@@ -89,11 +89,12 @@ impl Installer<'_, Nexus> {
             .domain;
         let existing = state.list(target.game)?;
         let adapter = Adapter::for_game(profile, target.game_dir)?;
-        // Framework paths for this game (`{project}` of Unreal games).
+        // Framework paths for this game (`{project}` and `{binaries}` of
+        // Unreal games).
         let frameworks: Vec<Framework> = profile
             .frameworks
             .iter()
-            .map(|f| f.resolve(adapter.project()))
+            .map(|f| f.resolve(adapter.project(), adapter.binaries()))
             .collect();
 
         // The requested mod. A framework without a precise file comes from
@@ -608,7 +609,10 @@ impl Adapter {
         match profile.loader.as_str() {
             "unreal" => {
                 let project = find_project(game_dir).ok_or(InstallError::NoGameFiles)?;
-                Ok(Self::Unreal(Unreal { project }))
+                Ok(Self::Unreal(Unreal {
+                    binaries: find_binaries(game_dir, &project),
+                    project,
+                }))
             }
             "bethesda" => Ok(Self::Bethesda(Bethesda)),
             _ => Ok(Self::RedEngine(RedEngine)),
@@ -626,6 +630,13 @@ impl Adapter {
     fn project(&self) -> Option<&str> {
         match self {
             Self::Unreal(loader) => Some(&loader.project),
+            Self::Bethesda(_) | Self::RedEngine(_) => None,
+        }
+    }
+
+    fn binaries(&self) -> Option<&str> {
+        match self {
+            Self::Unreal(loader) => Some(&loader.binaries),
             Self::Bethesda(_) | Self::RedEngine(_) => None,
         }
     }

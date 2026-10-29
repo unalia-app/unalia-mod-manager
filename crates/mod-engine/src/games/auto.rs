@@ -278,7 +278,9 @@ mod tests {
             ]
         );
         assert_eq!(
-            profile.frameworks[0].resolve(Some("Phoenix")).marker,
+            profile.frameworks[0]
+                .resolve(Some("Phoenix"), Some("Phoenix/Binaries/Win64"))
+                .marker,
             "Phoenix/Binaries/Win64/ue4ss/UE4SS.dll"
         );
         assert_eq!(

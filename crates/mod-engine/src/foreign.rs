@@ -18,7 +18,7 @@ use std::path::Path;
 
 use serde::Serialize;
 
-use crate::loaders::unreal::find_project;
+use crate::loaders::unreal::{find_binaries, find_project};
 
 /// Footprint location found in the game, with what doesn't come from
 /// Unalia.
@@ -54,7 +54,8 @@ fn spots(list: &[(&str, &[&str])], prefix: &str) -> Vec<Spot> {
 /// Placed by Doorstop (BepInEx) next to its `winhttp.dll`.
 const DOORSTOP: &[&str] = &["doorstop_config.ini", ".doorstop_version"];
 const CET: &[&str] = &["bin/x64/plugins/cyber_engine_tweaks"];
-const UE4SS: &[&str] = &["Binaries/Win64/ue4ss", "Binaries/Win64/UE4SS.dll"];
+/// Next to the game's executable (`unreal::find_binaries`).
+const UE4SS: &[&str] = &["ue4ss", "UE4SS.dll"];
 
 /// MelonLoader folders with names too common to remove without proof: only
 /// when empty, or next to `MelonLoader/`.
@@ -104,16 +105,20 @@ fn footprint(loader: &str, game_dir: &Path) -> Vec<Spot> {
         "unreal" => match find_project(game_dir) {
             Some(project) => spots(
                 &[
-                    ("Binaries/Win64/ue4ss", &[]),
-                    ("Binaries/Win64/Mods", &[]),
-                    ("Binaries/Win64/dwmapi.dll", UE4SS),
-                    ("Binaries/Win64/UE4SS.dll", &[]),
-                    ("Binaries/Win64/UE4SS-settings.ini", &[]),
-                    ("Content/Paks/~mods", &[]),
-                    ("Content/Paks/LogicMods", &[]),
+                    ("ue4ss", &[]),
+                    ("Mods", &[]),
+                    ("dwmapi.dll", UE4SS),
+                    ("UE4SS.dll", &[]),
+                    ("UE4SS-settings.ini", &[]),
                 ],
+                &format!("{}/", find_binaries(game_dir, &project)),
+            )
+            .into_iter()
+            .chain(spots(
+                &[("Content/Paks/~mods", &[]), ("Content/Paks/LogicMods", &[])],
                 &format!("{project}/"),
-            ),
+            ))
+            .collect(),
             None => Vec::new(),
         },
         _ => Vec::new(),

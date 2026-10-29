@@ -8,10 +8,13 @@
 //! - `.pak`, `.utoc`, `.ucas` (and `.sig`) go to `<Project>/Content/Paks/~mods/`;
 //! - `LogicMods/…` (Blueprint mods) go to `<Project>/Content/Paks/LogicMods/`;
 //! - a folder with `Scripts/main.lua` is a UE4SS mod, placed in
-//!   `<Project>/Binaries/Win64/ue4ss/Mods/<mod>/`;
-//! - `dwmapi.dll` and `ue4ss/` (UE4SS itself) go to `<Project>/Binaries/Win64/`;
-//! - an archive that mirrors the game (`<Project>/…`) or the project
-//!   (`Content/…`, `Binaries/…`) is placed as is.
+//!   `<binaries>/ue4ss/Mods/<mod>/`;
+//! - `dwmapi.dll` and `ue4ss/` (UE4SS itself) go to `<binaries>/`;
+//! - an archive that mirrors the game (`<Project>/…`, `<binaries>/…`) or the
+//!   project (`Content/…`, `Binaries/…`) is placed as is.
+//!
+//! `<binaries>` is the folder of the game's executable (`find_binaries`):
+//! `<Project>/Binaries/Win64`, except for games that keep it elsewhere.
 //!
 //! The rest (readme, screenshots) is not installed.
 
@@ -23,6 +26,10 @@ use super::{Loader, PackageKind, Placement};
 
 /// Extensions of Unreal content packages (IoStore included).
 const PAK_FILES: [&str; 4] = [".pak", ".utoc", ".ucas", ".sig"];
+
+/// An Unreal game executable holds the whole engine: far above this. Below,
+/// it is a launcher or a tool.
+const GAME_EXE_SIZE: u64 = 50 * 1024 * 1024;
 
 /// Unreal project folder: the one that holds both `Content/Paks` and
 /// `Binaries/Win64` (not `Engine`, present in every game). Several
@@ -40,9 +47,60 @@ pub fn find_project(game_dir: &Path) -> Option<String> {
     found.next().is_none().then_some(first)
 }
 
+/// Folder of the game's executable, relative to the game: UE4SS goes there
+/// (the game loads the `dwmapi.dll` next to its executable). Usually
+/// `<Project>/Binaries/Win64`. Some games start a small launcher and keep
+/// the real executable elsewhere (Phantom Blade Zero:
+/// `platform/steam/PBZ.exe`, about 500 MB): then the folder of the only
+/// executable big enough to be the game. Several, or none: the usual
+/// folder, we don't guess.
+pub fn find_binaries(game_dir: &Path, project: &str) -> String {
+    let usual = format!("{project}/Binaries/Win64");
+    let mut big = Vec::new();
+    big_exes(game_dir, "", 3, &mut big);
+    match big.as_slice() {
+        [only] if !only.eq_ignore_ascii_case(&usual) => only.clone(),
+        _ => usual,
+    }
+}
+
+/// Folders (relative, `/`) holding an executable of at least
+/// `GAME_EXE_SIZE`, down to `depth` levels. `Engine/` is skipped: its tools
+/// are not the game.
+fn big_exes(dir: &Path, rel: &str, depth: usize, out: &mut Vec<String>) {
+    let Ok(entries) = fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let name = entry.file_name().to_string_lossy().into_owned();
+        let Ok(kind) = entry.file_type() else {
+            continue;
+        };
+        if kind.is_dir() {
+            if depth > 0 && !(rel.is_empty() && name.eq_ignore_ascii_case("engine")) {
+                let sub = if rel.is_empty() {
+                    name
+                } else {
+                    format!("{rel}/{name}")
+                };
+                big_exes(&entry.path(), &sub, depth - 1, out);
+            }
+        } else if kind.is_file()
+            && name.to_ascii_lowercase().ends_with(".exe")
+            && entry.metadata().is_ok_and(|m| m.len() >= GAME_EXE_SIZE)
+            && !out.iter().any(|d| d == rel)
+        {
+            out.push(rel.to_owned());
+        }
+    }
+}
+
 pub struct Unreal {
     /// Name of the project folder, e.g. `PhantomBladeZero`.
     pub project: String,
+    /// Folder of the game's executable (`find_binaries`), e.g.
+    /// `PhantomBladeZero/Binaries/Win64`.
+    pub binaries: String,
 }
 
 impl Loader for Unreal {
@@ -82,12 +140,22 @@ impl Loader for Unreal {
 impl Unreal {
     fn target(&self, parts: &[&str], all: &HashSet<String>, folder: &str) -> Option<String> {
         let project = &self.project;
-        let win64 = format!("{project}/Binaries/Win64");
+        let win64 = &self.binaries;
         let (name, dirs) = parts.split_last()?;
         let lower = name.to_ascii_lowercase();
         let first = dirs.first().map(|d| d.to_ascii_lowercase());
 
-        // 1. Game tree, then project tree.
+        // 1. Game tree (the executable's folder, the project), then project
+        //    tree.
+        let bin: Vec<&str> = win64.split('/').collect();
+        if dirs.len() >= bin.len()
+            && dirs
+                .iter()
+                .zip(&bin)
+                .all(|(d, b)| d.eq_ignore_ascii_case(b))
+        {
+            return Some(format!("{win64}/{}", parts[bin.len()..].join("/")));
+        }
         if dirs
             .first()
             .is_some_and(|d| d.eq_ignore_ascii_case(project))
@@ -211,11 +279,14 @@ mod tests {
 
     fn place(files: &[&str]) -> Vec<(String, String)> {
         let files: Vec<String> = files.iter().map(|f| f.to_string()).collect();
-        let mut out: Vec<_> = Unreal { project: P.into() }
-            .place("Cool Mod", &PackageKind::Mod, &files)
-            .into_iter()
-            .map(|p| (p.source, p.target))
-            .collect();
+        let mut out: Vec<_> = Unreal {
+            project: P.into(),
+            binaries: format!("{P}/Binaries/Win64"),
+        }
+        .place("Cool Mod", &PackageKind::Mod, &files)
+        .into_iter()
+        .map(|p| (p.source, p.target))
+        .collect();
         out.sort();
         out
     }
@@ -322,6 +393,77 @@ mod tests {
                 "MyBP v2/LogicMods/MyBP.pak",
                 "PhantomBladeZero/Content/Paks/LogicMods/MyBP.pak"
             )])
+        );
+    }
+
+    #[test]
+    fn ue4ss_follows_an_executable_kept_outside_the_project() {
+        let files: Vec<String> = [
+            "dwmapi.dll",
+            "ue4ss/UE4SS.dll",
+            "NoStamina/Scripts/main.lua",
+            "platform/steam/ue4ss/Mods/mods.txt",
+            "Paks/A_P.pak",
+        ]
+        .iter()
+        .map(|f| f.to_string())
+        .collect();
+        let mut out: Vec<(String, String)> = Unreal {
+            project: "ProjectPBZ".into(),
+            binaries: "platform/steam".into(),
+        }
+        .place("Cool Mod", &PackageKind::Mod, &files)
+        .into_iter()
+        .map(|p| (p.source, p.target))
+        .collect();
+        out.sort();
+        assert_eq!(
+            out,
+            pairs(&[
+                (
+                    "NoStamina/Scripts/main.lua",
+                    "platform/steam/ue4ss/Mods/NoStamina/Scripts/main.lua"
+                ),
+                ("Paks/A_P.pak", "ProjectPBZ/Content/Paks/~mods/A_P.pak"),
+                ("dwmapi.dll", "platform/steam/dwmapi.dll"),
+                (
+                    "platform/steam/ue4ss/Mods/mods.txt",
+                    "platform/steam/ue4ss/Mods/mods.txt"
+                ),
+                ("ue4ss/UE4SS.dll", "platform/steam/ue4ss/UE4SS.dll"),
+            ])
+        );
+    }
+
+    #[test]
+    fn the_executable_folder_is_the_big_exe_one() {
+        let dir = tempfile::tempdir().unwrap();
+        let game = dir.path();
+        let exe = |path: &str, size: u64| {
+            let path = game.join(path);
+            std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+            // Sparse: the size is there, not the bytes.
+            std::fs::File::create(path).unwrap().set_len(size).unwrap();
+        };
+        std::fs::create_dir_all(game.join("ProjectPBZ/Binaries/Win64")).unwrap();
+        // No big executable: the usual folder.
+        assert_eq!(
+            find_binaries(game, "ProjectPBZ"),
+            "ProjectPBZ/Binaries/Win64"
+        );
+
+        // Phantom Blade Zero: a launcher in `steam/`, the game in
+        // `platform/steam/`.
+        exe("steam/PBZ.exe", 1024 * 1024);
+        exe("platform/steam/PBZ.exe", GAME_EXE_SIZE + 1);
+        exe("Engine/Binaries/Win64/UnrealEditor.exe", GAME_EXE_SIZE * 2);
+        assert_eq!(find_binaries(game, "ProjectPBZ"), "platform/steam");
+
+        // Two candidates: we don't guess.
+        exe("platform/epic/PBZ.exe", GAME_EXE_SIZE + 1);
+        assert_eq!(
+            find_binaries(game, "ProjectPBZ"),
+            "ProjectPBZ/Binaries/Win64"
         );
     }
 

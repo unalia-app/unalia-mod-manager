@@ -11,8 +11,8 @@ name = "UE4SS"
 github = "UE4SS-RE/RE-UE4SS"
 release = "experimental-latest"
 asset = "UE4SS_v*.zip"
-marker = "{project}/Binaries/Win64/ue4ss/UE4SS.dll"
+marker = "{binaries}/ue4ss/UE4SS.dll"
 needed_by_prefix = [
-    "{project}/Binaries/Win64/ue4ss/Mods/",
+    "{binaries}/ue4ss/Mods/",
     "{project}/Content/Paks/LogicMods/",
 ]

@@ -1,6 +1,7 @@
-//! Phantom Blade Zero (Unreal Engine 5) end to end, prepared before the
-//! release: `.pak` mods and UE4SS mods from a fake Nexus, UE4SS installed by
-//! itself from the experimental build of a fake GitHub.
+//! Phantom Blade Zero (Unreal Engine 5) end to end, on its real Steam
+//! layout: `.pak` mods and UE4SS mods from a fake Nexus, UE4SS (the build
+//! made for the game) installed by itself from a fake GitHub, next to the
+//! real executable `platform/steam/PBZ.exe`.
 
 use std::fs;
 use std::io::Write;
@@ -19,10 +20,13 @@ use zip::write::SimpleFileOptions;
 
 const GAME: &str = "steam:4115450";
 const COMMUNITY: &str = "nexus:phantombladezero";
-/// Name of the project folder, unknown before release: we take a different
-/// one from the game's to check that it is really found on disk.
-const PROJECT: &str = "PBZ";
-const UE4SS_PATH: &str = "/repos/UE4SS-RE/RE-UE4SS/releases/tags/experimental-latest";
+/// Project folder of the game, found on disk.
+const PROJECT: &str = "ProjectPBZ";
+/// Folder of the real executable, where UE4SS goes.
+const BINARIES: &str = "platform/steam";
+const UE4SS_PATH: &str = "/repos/KintaroModding/ue4ss/releases/latest";
+/// UE4SS's id: its Nexus page for the game.
+const UE4SS_ID: &str = "nexus-13";
 
 struct World {
     _tmp: tempfile::TempDir,
@@ -42,17 +46,24 @@ impl World {
         for dir in [
             "Engine/Binaries/Win64",
             "Engine/Content/Paks",
-            "PBZ/Binaries/Win64",
-            "PBZ/Content/Paks",
+            "ProjectPBZ/Binaries/Win64",
+            "ProjectPBZ/Content/Paks",
+            "steam",
+            "platform/steam",
         ] {
             fs::create_dir_all(game.join(dir)).unwrap();
         }
+        // The launcher, then the game (sparse: its size, not its bytes).
+        fs::write(game.join("steam/PBZ.exe"), b"launcher").unwrap();
+        fs::File::create(game.join("platform/steam/PBZ.exe"))
+            .unwrap()
+            .set_len(500 * 1024 * 1024)
+            .unwrap();
         fs::write(
-            game.join("PBZ/Binaries/Win64/PBZ-Win64-Shipping.exe"),
-            b"exe",
+            game.join("ProjectPBZ/Content/Paks/ProjectPBZ-Windows.pak"),
+            b"game",
         )
         .unwrap();
-        fs::write(game.join("PBZ/Content/Paks/pakchunk0-Windows.pak"), b"game").unwrap();
         let schema = fs::read_to_string(
             Path::new(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/thunderstore/schema.json"),
         )
@@ -79,22 +90,23 @@ impl World {
             game,
             _tmp: tmp,
         };
-        world.publish_ue4ss("3.0.1-1181-g83330635").await;
+        world.publish_ue4ss("3.0.1-1183-gcdbc0b66").await;
         world
     }
 
-    /// The experimental build of UE4SS, with the layout of its real
-    /// archive.
+    /// The UE4SS build made for the game, with the layout of its real
+    /// archive, next to the builds for other games.
     async fn publish_ue4ss(&mut self, build: &str) {
-        let asset = format!("UE4SS_v{build}.zip");
+        let asset = format!("phantombladezero_ue4ss_v{build}.zip");
         let download = format!("/assets/{asset}");
         self.server
             .mock("GET", UE4SS_PATH)
             .with_body(
                 json!({
-                    "tag_name": "experimental-latest",
+                    "tag_name": format!("v{build}"),
                     "assets": [
-                        { "name": format!("zDEV-{asset}"), "browser_download_url": "https://example.invalid/dev", "size": 1 },
+                        { "name": format!("UE4SS_v{build}.zip"), "browser_download_url": "https://example.invalid/stock", "size": 1 },
+                        { "name": format!("expedition33_ue4ss_v{build}.zip"), "browser_download_url": "https://example.invalid/e33", "size": 1 },
                         { "name": asset, "browser_download_url": format!("{}{download}", self.server.url()), "size": 1 }
                     ]
                 })
@@ -108,6 +120,8 @@ impl World {
                 ("dwmapi.dll", b"proxy"),
                 ("ue4ss/UE4SS.dll", b"ue4ss"),
                 ("ue4ss/UE4SS-settings.ini", b"[General]"),
+                ("ue4ss/MemberVariableLayout.ini", b"[UObjectBase]"),
+                ("ue4ss/UE4SS_Signatures/GUObjectArray.lua", b"-- signature"),
                 ("ue4ss/Mods/mods.txt", b"BPModLoaderMod : 1"),
             ]))
             .create_async()
@@ -219,7 +233,7 @@ fn zip_bytes(files: &[(&str, &[u8])]) -> Vec<u8> {
 }
 
 #[tokio::test]
-async fn a_lua_mod_brings_ue4ss_from_its_experimental_build() {
+async fn a_lua_mod_brings_ue4ss_next_to_the_real_executable() {
     let mut w = World::new().await;
     w.publish(
         8000,
@@ -234,14 +248,18 @@ async fn a_lua_mod_brings_ue4ss_from_its_experimental_build() {
 
     let done = w.install(8000).await.unwrap();
 
-    let win64 = w.game.join(PROJECT).join("Binaries/Win64");
-    assert!(win64.join("dwmapi.dll").is_file());
-    assert!(win64.join("ue4ss/UE4SS.dll").is_file());
+    let binaries = w.game.join(BINARIES);
+    assert!(binaries.join("dwmapi.dll").is_file());
+    assert!(binaries.join("ue4ss/UE4SS.dll").is_file());
+    assert!(binaries.join("ue4ss/MemberVariableLayout.ini").is_file());
     assert!(
-        win64
+        binaries
             .join("ue4ss/Mods/NoStamina/Scripts/main.lua")
             .is_file()
     );
+    // Not next to the launcher, not in the project.
+    assert!(!w.game.join("steam/dwmapi.dll").exists());
+    assert!(!w.game.join(PROJECT).join("Binaries/Win64/dwmapi.dll").exists());
     assert!(!w.game.join("README.md").exists());
 
     let mut ids: Vec<_> = done
@@ -253,14 +271,14 @@ async fn a_lua_mod_brings_ue4ss_from_its_experimental_build() {
     assert_eq!(
         ids,
         [
-            ("github-ue4ss-re-re-ue4ss", "3.0.1-1181-g83330635", false),
+            ("nexus-13", "3.0.1-1183-gcdbc0b66", false),
             ("nexus-8000", "1.0", true),
         ]
     );
 }
 
-/// The real experimental build of UE4SS, from GitHub: its layout is still
-/// the one the install expects. Outside the normal suite (network):
+/// The real UE4SS build for the game, from GitHub: its layout is still the
+/// one the install expects. Outside the normal suite (network):
 /// `cargo test -p mod-engine --test unreal -- --ignored`.
 #[tokio::test]
 #[ignore]
@@ -272,17 +290,18 @@ async fn the_real_ue4ss_build_lands_in_the_right_place() {
     let github = GitHub::new(mod_engine::http_client());
     let done = w.install_with(8000, &github).await.unwrap();
 
-    let win64 = w.game.join(PROJECT).join("Binaries/Win64");
+    let binaries = w.game.join(BINARIES);
     for file in [
         "dwmapi.dll",
         "ue4ss/UE4SS.dll",
         "ue4ss/UE4SS-settings.ini",
+        "ue4ss/MemberVariableLayout.ini",
         "ue4ss/Mods/mods.txt",
         "ue4ss/Mods/NoStamina/Scripts/main.lua",
     ] {
-        assert!(win64.join(file).is_file(), "{file}");
+        assert!(binaries.join(file).is_file(), "{file}");
     }
-    let ue4ss = done.mods.iter().find(|m| m.id == "github-ue4ss-re-re-ue4ss").unwrap();
+    let ue4ss = done.mods.iter().find(|m| m.id == UE4SS_ID).unwrap();
     assert!(ue4ss.version.starts_with("3."), "{}", ue4ss.version);
 }
 
@@ -310,12 +329,7 @@ async fn a_pak_mod_goes_to_tilde_mods_without_ue4ss() {
     ] {
         assert!(mods.join(file).is_file(), "{file}");
     }
-    assert!(
-        !w.game
-            .join(PROJECT)
-            .join("Binaries/Win64/dwmapi.dll")
-            .exists()
-    );
+    assert!(!w.game.join(BINARIES).join("dwmapi.dll").exists());
     let ids: Vec<_> = done.mods.iter().map(|m| m.id.as_str()).collect();
     assert_eq!(ids, ["nexus-8001"]);
 }
@@ -336,8 +350,8 @@ async fn a_new_ue4ss_build_is_an_update() {
     newer
         .mock("GET", UE4SS_PATH)
         .with_body(
-            json!({ "tag_name": "experimental-latest", "assets": [
-                { "name": "UE4SS_v3.0.1-1200-gabcdef12.zip",
+            json!({ "tag_name": "v3.0.1-1200-gabcdef12", "assets": [
+                { "name": "phantombladezero_ue4ss_v3.0.1-1200-gabcdef12.zip",
                   "browser_download_url": "http://example.test/u.zip", "size": 1 }
             ] })
             .to_string(),
@@ -349,7 +363,7 @@ async fn a_new_ue4ss_build_is_an_update() {
     let updates = available_updates_nexus(&w.nexus, &github, &w.profile, &installed, None).await;
     let ue4ss = updates
         .iter()
-        .find(|u| u.mod_id == "github-ue4ss-re-re-ue4ss")
+        .find(|u| u.mod_id == UE4SS_ID)
         .unwrap();
     assert_eq!(ue4ss.latest, "3.0.1-1200-gabcdef12");
 }

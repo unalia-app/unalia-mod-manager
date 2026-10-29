@@ -50,11 +50,18 @@ impl Framework {
         }
     }
 
-    /// Replaces `{project}` in the paths.
-    pub fn resolve(&self, project: Option<&str>) -> Self {
-        let fill = |path: &str| match project {
-            Some(project) => path.replace("{project}", project),
-            None => path.to_owned(),
+    /// Replaces `{project}` (Unreal project folder) and `{binaries}` (folder
+    /// of the game's executable, `unreal::find_binaries`) in the paths.
+    pub fn resolve(&self, project: Option<&str>, binaries: Option<&str>) -> Self {
+        let fill = |path: &str| {
+            let path = match binaries {
+                Some(binaries) => path.replace("{binaries}", binaries),
+                None => path.to_owned(),
+            };
+            match project {
+                Some(project) => path.replace("{project}", project),
+                None => path,
+            }
         };
         Self {
             marker: fill(&self.marker),

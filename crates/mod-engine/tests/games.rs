@@ -439,12 +439,14 @@ fn phantom_blade_zero_is_ready_for_launch() {
     assert_eq!(game.loader, "unreal");
     assert!(game.supported);
     assert_eq!(game.community, "nexus:phantombladezero");
+    assert_eq!(game.exe_names, ["PBZ.exe"]);
     let ue4ss = &game.frameworks[0];
-    assert_eq!(ue4ss.key(), "github-ue4ss-re-re-ue4ss");
-    assert_eq!(
-        ue4ss.resolve(Some("PBZ")).marker,
-        "PBZ/Binaries/Win64/ue4ss/UE4SS.dll"
-    );
+    assert_eq!(ue4ss.key(), "nexus-13");
+    let ue4ss = ue4ss.resolve(Some("ProjectPBZ"), Some("platform/steam"));
+    assert_eq!(ue4ss.marker, "platform/steam/ue4ss/UE4SS.dll");
+    assert!(ue4ss.needed_by("platform/steam/ue4ss/Mods/NoStamina/Scripts/main.lua"));
+    assert!(ue4ss.needed_by("ProjectPBZ/Content/Paks/LogicMods/MyBP.pak"));
+    assert!(!ue4ss.needed_by("ProjectPBZ/Content/Paks/~mods/A_P.pak"));
 }
 
 #[test]
