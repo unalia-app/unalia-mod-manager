@@ -667,18 +667,10 @@ pub async fn available_updates_nexus(
     installed: &[InstalledMod],
     before: Option<&str>,
 ) -> Vec<super::Update> {
-    use crate::resolver::compare_versions;
     use crate::sources::nexus::parse_mod_key;
 
-    // A build version (`3.0.1-1181-g83330635`) that changes while the
-    // number stays the same also counts as an update.
-    // For an old version of the game, a mod installed for a newer one is
-    // offered too: the "update" goes back.
     let newer = |m: &InstalledMod, latest: &str| {
-        let order = compare_versions(latest, &m.version);
-        let changed = order == std::cmp::Ordering::Greater
-            || ((order == std::cmp::Ordering::Equal || before.is_some()) && latest != m.version);
-        changed.then(|| super::Update {
+        is_update(&m.version, latest, before.is_some()).then(|| super::Update {
             mod_id: m.id.clone(),
             current: m.version.clone(),
             latest: latest.to_owned(),
@@ -725,9 +717,39 @@ pub async fn available_updates_nexus(
     updates
 }
 
+/// Whether `latest` replaces the installed `current`. A build version
+/// (`3.0.1-1181-g83330635`) that changes while the number stays the same
+/// also counts. For an old version of the game (`going_back`), a mod
+/// installed for a newer one is offered too: the "update" goes back.
+fn is_update(current: &str, latest: &str, going_back: bool) -> bool {
+    use crate::resolver::compare_versions;
+    use std::cmp::Ordering;
+
+    // `1.0` on the mod page and `1.0.0` on its file are the same version:
+    // only a text that isn't plain numbers (a build) is compared as is.
+    let numeric = |v: &str| v.split('.').all(|p| p.parse::<u64>().is_ok());
+    let same = current == latest
+        || (numeric(current)
+            && numeric(latest)
+            && compare_versions(current, latest) == Ordering::Equal);
+    let order = compare_versions(latest, current);
+    order == Ordering::Greater || ((order == Ordering::Equal || going_back) && !same)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_same_number_written_differently_is_no_update() {
+        assert!(!is_update("1.0.0", "1.0", false));
+        assert!(!is_update("1", "1.0.0", true));
+        assert!(is_update("1.0.0", "1.0.1", false));
+        assert!(!is_update("1.0.1", "1.0", false));
+        assert!(is_update("1.0.1", "1.0", true));
+        assert!(is_update("3.0.1-1181-g83330635", "3.0.1-1183-gcdbc0b66", false));
+        assert!(!is_update("3.0.1-1183-gcdbc0b66", "3.0.1-1183-gcdbc0b66", false));
+    }
 
     fn file(id: u32, category: &str, name: &str, description: &str) -> ModFile {
         ModFile {
