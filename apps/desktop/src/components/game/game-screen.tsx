@@ -109,7 +109,7 @@ export function GameScreen() {
 						<section key={game.appId} className="relative z-20 flex items-end gap-6 pt-10">
 							<GameCover
 								game={game}
-								className="h-36 w-24 animate-fade-up rounded-lg border-line-strong text-lg shadow-2xl shadow-black/50"
+								className="h-42 w-28 animate-fade-up rounded-lg border-line-strong text-lg shadow-2xl shadow-black/50"
 							/>
 							<div className="min-w-0 flex-1 animate-fade-up pb-1 [animation-delay:60ms]">
 								<Badge tone="accent">{gameSubtitle(game)}</Badge>
@@ -179,7 +179,7 @@ function useVisible(ref: RefObject<HTMLElement | null>, trigger: unknown): boole
 function HeroSkeleton() {
 	return (
 		<div className="flex items-end gap-6 pt-10">
-			<Skeleton className="h-36 w-24 rounded-lg" />
+			<Skeleton className="h-42 w-28 rounded-lg" />
 			<div className="flex-1 space-y-3 pb-1">
 				<Skeleton className="h-5 w-28 rounded-full" />
 				<Skeleton className="h-9 w-2/5" />
