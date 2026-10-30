@@ -26,7 +26,8 @@ use serde::Serialize;
 
 use super::{
     variants,
-    Done, Fetched, InstallError, Installer, Package, Progress, Target, deploy_package, files_of,
+    Done, Fetched, InstallError, Installer, NotAMod, Package, Progress, Target, deploy_package,
+    files_of,
     keep_replaced, replaced, rollback,
 };
 use crate::download;
@@ -665,6 +666,11 @@ impl Adapter {
             Ok(placements)
         } else if matches!(self, Self::Bethesda(_)) && bethesda::has_fomod(files) {
             Err(InstallError::Fomod(name.to_owned()))
+        } else if let Some(kind) = NotAMod::of(files) {
+            Err(InstallError::NotAMod {
+                name: name.to_owned(),
+                kind,
+            })
         } else {
             Err(InstallError::NothingToInstall(name.to_owned()))
         }

@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 use mockito::{Matcher, ServerGuard};
 use mod_engine::games::{GameCatalog, GameProfile};
 use mod_engine::installer::{
-    InstallError, Installer, NexusFile, NexusInstall, Paths, Target, available_updates_nexus,
+    InstallError, Installer, NexusFile, NexusInstall, NotAMod, Paths, Target, available_updates_nexus,
 };
 use mod_engine::sources::github::GitHub;
 use mod_engine::sources::nexus::{Nexus, NxmLink};
@@ -485,6 +485,34 @@ async fn archives_with_nothing_to_install_are_refused() {
         .await
         .unwrap_err();
     assert!(matches!(err, InstallError::NothingToInstall(_)), "{err:?}");
+}
+
+#[tokio::test]
+async fn cheat_tables_programs_and_scripts_are_named_not_installed() {
+    let mut w = World::new().await;
+    w.publish(6101, "Cheat Table", "1.0", &[], &[("Game.CT", b"ct"), ("readme.txt", b"txt")])
+        .await;
+    w.publish(6102, "Trainer", "1.0", &[], &[("Trainer/Trainer.exe", b"exe")])
+        .await;
+    w.publish(
+        6103,
+        "Tweaks",
+        "1.0",
+        &[],
+        &[("Tweaks/Install.bat", b"bat"), ("Tweaks/Tweaks.exe", b"exe")],
+    )
+    .await;
+    for (id, kind) in [
+        (6101, NotAMod::CheatTable),
+        (6102, NotAMod::Program),
+        (6103, NotAMod::Script),
+    ] {
+        let err = w.install(id, NexusFile::Link(&link(id))).await.unwrap_err();
+        assert!(
+            matches!(err, InstallError::NotAMod { kind: k, .. } if k == kind),
+            "{err:?}"
+        );
+    }
 }
 
 #[tokio::test]

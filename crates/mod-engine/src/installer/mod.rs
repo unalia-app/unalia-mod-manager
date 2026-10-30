@@ -85,6 +85,55 @@ pub enum Progress {
     },
 }
 
+/// What a file with nothing to place is, when it isn't a mod for the game.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NotAMod {
+    /// `.ct`: opened in Cheat Engine.
+    CheatTable,
+    /// `.bat`, `.cmd`, `.ps1`: the mod installs itself. Unalia never runs
+    /// a script from a download.
+    Script,
+    /// `.exe`: a trainer, a tool, another mod manager.
+    Program,
+    /// `.usmap`: read by modding tools, not by the game.
+    ToolFile,
+}
+
+impl NotAMod {
+    /// Called only when nothing can be placed: an archive that holds a mod
+    /// is a mod, even with a tool next to it.
+    pub fn of(files: &[String]) -> Option<Self> {
+        let has = |exts: &[&str]| {
+            files.iter().any(|f| {
+                let lower = f.to_ascii_lowercase();
+                exts.iter().any(|e| lower.ends_with(e))
+            })
+        };
+        if has(&[".ct"]) {
+            Some(Self::CheatTable)
+        } else if has(&[".bat", ".cmd", ".ps1"]) {
+            Some(Self::Script)
+        } else if has(&[".exe"]) {
+            Some(Self::Program)
+        } else if has(&[".usmap"]) {
+            Some(Self::ToolFile)
+        } else {
+            None
+        }
+    }
+}
+
+impl std::fmt::Display for NotAMod {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::CheatTable => "is a Cheat Engine table, not a mod",
+            Self::Script => "installs itself with its own script, which Unalia never runs",
+            Self::Program => "is a program you run yourself, not a mod",
+            Self::ToolFile => "is a file for modding tools, not a mod",
+        })
+    }
+}
+
 #[derive(Debug, thiserror::Error)]
 pub enum InstallError {
     #[error(transparent)]
@@ -111,6 +160,9 @@ pub enum InstallError {
     Conflict { path: String, other: String },
     #[error("Unalia can't tell where the files of {0} go")]
     NothingToInstall(String),
+    /// A Nexus file that is something else than a mod: nothing to place.
+    #[error("{name} {kind}")]
+    NotAMod { name: String, kind: NotAMod },
     /// FOMOD installer: options to pick, not offered yet.
     #[error("{0} comes with an installer that asks you to pick options, which Unalia doesn't support yet")]
     Fomod(String),

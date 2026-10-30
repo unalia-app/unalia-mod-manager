@@ -10,7 +10,7 @@ use std::error::Error;
 use crate::archive::ArchiveError;
 use crate::deploy::DeployError;
 use crate::download::DownloadError;
-use crate::installer::InstallError;
+use crate::installer::{InstallError, NotAMod};
 use crate::resolver::ResolveError;
 use crate::sources::SourceError;
 use crate::state::StateError;
@@ -101,6 +101,15 @@ fn install(e: &InstallError) -> Advice {
         InstallError::NothingToInstall(_) | InstallError::NoFile(_) => advice(
             true,
             "This mod's layout isn't supported yet: copy a report from Settings > Support so it can be.",
+        ),
+        InstallError::NotAMod { kind, .. } => advice(
+            true,
+            match kind {
+                NotAMod::CheatTable => "Download it from its Nexus page and open it with Cheat Engine.",
+                NotAMod::Script => "Download it from its Nexus page and follow the author's instructions.",
+                NotAMod::Program => "Download it from its Nexus page and run it yourself.",
+                NotAMod::ToolFile => "Only modding tools use it: there's nothing to install in the game.",
+            },
         ),
         InstallError::Fomod(_) => advice(true, "Pick another file of this mod if it has one, or check back soon."),
         InstallError::NoGameFiles => advice(
