@@ -7,9 +7,13 @@
 //! archive content, never by a random guess:
 //! - `.pak`, `.utoc`, `.ucas` (and `.sig`) go to `<Project>/Content/Paks/~mods/`;
 //! - `LogicMods/…` (Blueprint mods) go to `<Project>/Content/Paks/LogicMods/`;
-//! - a folder with `Scripts/main.lua` is a UE4SS mod, placed in
-//!   `<binaries>/ue4ss/Mods/<mod>/`;
+//! - a folder with `Scripts/main.lua` (Lua) or `dlls/*.dll` (C++) is a
+//!   UE4SS mod, placed in `<binaries>/ue4ss/Mods/<mod>/`; `Mods/shared/…`
+//!   (Lua libraries shared by mods) goes to `<binaries>/ue4ss/Mods/shared/`;
 //! - `dwmapi.dll` and `ue4ss/` (UE4SS itself) go to `<binaries>/`;
+//! - a proxy DLL the game loads by itself (`version.dll`, `dsound.dll`…),
+//!   its `.ini`, `.asi` plugins and their `scripts/` or `plugins/` folder
+//!   go to `<binaries>/` too;
 //! - an archive that mirrors the game (`<Project>/…`, `<binaries>/…`) or the
 //!   project (`Content/…`, `Binaries/…`) is placed as is.
 //!
@@ -26,6 +30,23 @@ use super::{Loader, PackageKind, Placement};
 
 /// Extensions of Unreal content packages (IoStore included).
 const PAK_FILES: [&str; 4] = [".pak", ".utoc", ".ucas", ".sig"];
+
+/// DLLs a Windows game loads from its own folder before the system's: mods
+/// use them as an entry point (ASI loader, ReShade, small injectors).
+/// `dwmapi.dll` is UE4SS's, handled with it.
+const PROXY_DLLS: [&str; 11] = [
+    "version.dll",
+    "winmm.dll",
+    "winhttp.dll",
+    "dsound.dll",
+    "dinput8.dll",
+    "dxgi.dll",
+    "d3d9.dll",
+    "d3d11.dll",
+    "d3d12.dll",
+    "xinput1_3.dll",
+    "xinput1_4.dll",
+];
 
 /// An Unreal game executable holds the whole engine: far above this. Below,
 /// it is a launcher or a tool.
@@ -174,16 +195,52 @@ impl Unreal {
             return Some(format!("{win64}/{}", parts.join("/")));
         }
 
-        // 3. UE4SS mod: the closest folder that holds `Scripts/main.lua`.
-        //    At the package root: a folder named after the mod.
+        // 3. Proxy DLL at the package root, with its settings
+        //    (`version.ini` next to `version.dll`) and loose `.asi` plugins.
+        //    A ReShade package (`ReShade.ini` with its DLL) goes there whole:
+        //    its settings point to its shader folders.
+        let has_proxy = PROXY_DLLS.iter().any(|dll| all.contains(*dll));
+        if has_proxy && all.contains("reshade.ini") {
+            return Some(format!("{win64}/{}", parts.join("/")));
+        }
+        if dirs.is_empty() {
+            let settings_of_proxy = lower.strip_suffix(".ini").is_some_and(|stem| {
+                let dll = format!("{stem}.dll");
+                (dll == "dwmapi.dll" || PROXY_DLLS.contains(&dll.as_str())) && all.contains(&dll)
+            });
+            if PROXY_DLLS.contains(&lower.as_str())
+                || lower.ends_with(".asi")
+                || settings_of_proxy
+            {
+                return Some(format!("{win64}/{name}"));
+            }
+        }
+
+        // 4. Lua libraries shared by UE4SS mods: `Mods/shared/…`.
+        if let Some(at) = dirs.iter().enumerate().position(|(i, d)| {
+            i > 0 && d.eq_ignore_ascii_case("shared") && dirs[i - 1].eq_ignore_ascii_case("mods")
+        }) {
+            return Some(format!(
+                "{win64}/ue4ss/Mods/shared/{}",
+                parts[at + 1..].join("/")
+            ));
+        }
+
+        // 5. UE4SS mod: the closest folder that holds `Scripts/main.lua`
+        //    (Lua) or `dlls/*.dll` (C++). At the package root: a folder named
+        //    after the mod.
         for depth in (0..=dirs.len()).rev() {
-            let base = dirs[..depth].join("/");
-            let main = if base.is_empty() {
-                "scripts/main.lua".to_owned()
-            } else {
-                format!("{}/scripts/main.lua", base.to_ascii_lowercase())
+            let base = dirs[..depth].join("/").to_ascii_lowercase();
+            let prefix = if base.is_empty() { String::new() } else { format!("{base}/") };
+            let main = format!("{prefix}scripts/main.lua");
+            let dlls = format!("{prefix}dlls/");
+            let cpp = || {
+                all.iter().any(|f| {
+                    f.ends_with(".dll")
+                        && f.strip_prefix(&dlls).is_some_and(|rest| !rest.contains('/'))
+                })
             };
-            if all.contains(&main) {
+            if all.contains(&main) || cpp() {
                 let mod_folder = if depth > 0 { dirs[depth - 1] } else { folder };
                 return Some(format!(
                     "{win64}/ue4ss/Mods/{mod_folder}/{}",
@@ -192,7 +249,16 @@ impl Unreal {
             }
         }
 
-        // 4. Blueprint mods, then content packages.
+        // 6. ASI plugins in their folder (`scripts/`, `plugins/`), read by
+        //    the ASI loader next to the executable.
+        if matches!(first.as_deref(), Some("scripts" | "plugins")) {
+            let folder = format!("{}/", first.as_deref().unwrap_or_default());
+            if all.iter().any(|f| f.starts_with(&folder) && f.ends_with(".asi")) {
+                return Some(format!("{win64}/{}", parts.join("/")));
+            }
+        }
+
+        // 7. Blueprint mods, then content packages.
         if let Some(at) = dirs
             .iter()
             .position(|d| d.eq_ignore_ascii_case("logicmods"))
@@ -221,6 +287,8 @@ fn wrapper_depth(files: &[String], project: &str) -> usize {
                 "ue4ss",
                 "logicmods",
                 "~mods",
+                // UE4SS's `Mods/`: keeps `Mods/shared/…` recognizable.
+                "mods",
                 "scripts",
             ]
             .iter()
@@ -239,8 +307,12 @@ fn wrapper_depth(files: &[String], project: &str) -> usize {
                 Some(f) if f != parts[0] => return depth,
                 Some(_) => {}
             }
-            // `Mod/Scripts/main.lua`: `Mod` is the UE4SS mod name, keep it.
-            if parts.len() >= 3 && parts[1].eq_ignore_ascii_case("scripts") {
+            // `Mod/Scripts/main.lua`, `Mod/dlls/main.dll`: `Mod` is the
+            // UE4SS mod name, keep it.
+            if parts.len() >= 3
+                && (parts[1].eq_ignore_ascii_case("scripts")
+                    || parts[1].eq_ignore_ascii_case("dlls"))
+            {
                 return depth;
             }
         }
@@ -381,6 +453,83 @@ mod tests {
             pairs(&[(
                 "Scripts/main.lua",
                 "PhantomBladeZero/Binaries/Win64/ue4ss/Mods/Cool Mod/Scripts/main.lua"
+            )])
+        );
+    }
+
+    #[test]
+    fn ue4ss_cpp_mods_and_shared_libraries_go_to_its_mods() {
+        let win64 = "PhantomBladeZero/Binaries/Win64";
+        assert_eq!(
+            place(&["PhotoModeCpp/config.ini", "PhotoModeCpp/dlls/PhotoModeCpp.dll"]),
+            pairs(&[
+                (
+                    "PhotoModeCpp/config.ini",
+                    &format!("{win64}/ue4ss/Mods/PhotoModeCpp/config.ini")
+                ),
+                (
+                    "PhotoModeCpp/dlls/PhotoModeCpp.dll",
+                    &format!("{win64}/ue4ss/Mods/PhotoModeCpp/dlls/PhotoModeCpp.dll")
+                ),
+            ])
+        );
+        assert_eq!(
+            place(&[
+                "Mods/ItemSpawner/Scripts/main.lua",
+                "Mods/shared/ModMenu/ModMenu.lua",
+            ]),
+            pairs(&[
+                (
+                    "Mods/ItemSpawner/Scripts/main.lua",
+                    &format!("{win64}/ue4ss/Mods/ItemSpawner/Scripts/main.lua")
+                ),
+                (
+                    "Mods/shared/ModMenu/ModMenu.lua",
+                    &format!("{win64}/ue4ss/Mods/shared/ModMenu/ModMenu.lua")
+                ),
+            ])
+        );
+    }
+
+    #[test]
+    fn proxy_dlls_and_asi_plugins_go_next_to_the_executable() {
+        let win64 = "PhantomBladeZero/Binaries/Win64";
+        assert_eq!(
+            place(&[
+                "scripts/GlossTrainer.asi",
+                "version.dll",
+                "version.ini",
+                "notes.ini",
+            ]),
+            pairs(&[
+                ("scripts/GlossTrainer.asi", &format!("{win64}/scripts/GlossTrainer.asi")),
+                ("version.dll", &format!("{win64}/version.dll")),
+                ("version.ini", &format!("{win64}/version.ini")),
+            ])
+        );
+        // A mod's own settings next to UE4SS's entry point.
+        assert_eq!(
+            place(&["dwmapi.dll", "dwmapi.ini"]),
+            pairs(&[
+                ("dwmapi.dll", &format!("{win64}/dwmapi.dll")),
+                ("dwmapi.ini", &format!("{win64}/dwmapi.ini")),
+            ])
+        );
+        // ReShade: its settings name its shader folders, all kept together.
+        assert_eq!(
+            place(&["d3d12.dll", "ReShade.ini", "Realistic/Shaders/PBZ.fx"]),
+            pairs(&[
+                ("d3d12.dll", &format!("{win64}/d3d12.dll")),
+                ("ReShade.ini", &format!("{win64}/ReShade.ini")),
+                ("Realistic/Shaders/PBZ.fx", &format!("{win64}/Realistic/Shaders/PBZ.fx")),
+            ])
+        );
+        // `Scripts/main.lua` stays a UE4SS mod, not an ASI folder.
+        assert_eq!(
+            place(&["Scripts/main.lua"]),
+            pairs(&[(
+                "Scripts/main.lua",
+                &format!("{win64}/ue4ss/Mods/Cool Mod/Scripts/main.lua")
             )])
         );
     }
