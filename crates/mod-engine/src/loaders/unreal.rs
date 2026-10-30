@@ -16,6 +16,8 @@
 //!   go to `<binaries>/` too;
 //! - an archive that mirrors the game (`<Project>/…`, `<binaries>/…`) or the
 //!   project (`Content/…`, `Binaries/…`) is placed as is;
+//! - a ReShade preset (`<Name> ReShade.ini`) goes to `<binaries>/`, where
+//!   ReShade's menu lists it; ReShade itself comes from its website;
 //! - the engine's settings files (`Engine.ini`…) are merged into the
 //!   player's (`user_settings`), never placed in the game.
 //!
@@ -49,6 +51,19 @@ const PROXY_DLLS: [&str; 11] = [
     "xinput1_3.dll",
     "xinput1_4.dll",
 ];
+
+/// A ReShade preset: a settings file named after ReShade, other than
+/// ReShade's own `ReShade.ini`.
+pub fn is_reshade_preset(name: &str) -> bool {
+    let lower = name.to_ascii_lowercase();
+    lower.ends_with(".ini") && lower.contains("reshade") && lower != "reshade.ini"
+}
+
+/// Is ReShade in the game? Its installer leaves `ReShade.ini` next to the
+/// executable, whatever DLL it uses.
+pub fn reshade_installed(game_dir: &Path, binaries: &str) -> bool {
+    game_dir.join(binaries).join("ReShade.ini").is_file()
+}
 
 /// Settings files the engine reads from the player's folder, where a mod's
 /// keys are merged in.
@@ -243,6 +258,7 @@ impl Unreal {
             if PROXY_DLLS.contains(&lower.as_str())
                 || lower.ends_with(".asi")
                 || settings_of_proxy
+                || is_reshade_preset(name)
             {
                 return Some(format!("{win64}/{name}"));
             }
@@ -530,6 +546,17 @@ mod tests {
                 ),
             ])
         );
+    }
+
+    #[test]
+    fn reshade_presets_go_next_to_the_executable() {
+        let win64 = format!("{P}/Binaries/Win64");
+        assert_eq!(
+            place(&["PBZ-Preem-ReShade.ini", "READ ME.txt"]),
+            pairs(&[("PBZ-Preem-ReShade.ini", &format!("{win64}/PBZ-Preem-ReShade.ini"))])
+        );
+        // ReShade's own settings, alone: not a preset, the player's to keep.
+        assert!(place(&["ReShade.ini"]).is_empty());
     }
 
     #[test]

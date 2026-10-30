@@ -154,10 +154,17 @@ function listenOnce() {
 			}),
 		);
 		const required = missing[0];
+		const them = missing.length > 1 ? "them" : "it";
+		// Outside Nexus (ReShade): its own website.
+		const from = missing.every((m) => m.modId !== null)
+			? "Nexus Mods"
+			: missing.length > 1
+				? "their websites"
+				: "its website";
 		toast({
 			title: `${name ?? "Mod"} installed`,
 			details: missing.length
-				? `It also needs ${missing.map((m) => m.name).join(", ")}. Install ${missing.length > 1 ? "them" : "it"} from Nexus Mods.`
+				? `It also needs ${missing.map((m) => m.name).join(", ")}. Install ${them} from ${from}.`
 				: undefined,
 			action: required?.url
 				? { label: "Open", onClick: () => void openExternal(required.url ?? "") }

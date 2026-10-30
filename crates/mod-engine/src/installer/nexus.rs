@@ -22,6 +22,9 @@ use std::path::Path;
 /// Maximum GitHub repos tried for a mod (each one costs a request).
 const MIRROR_CANDIDATES: usize = 4;
 
+/// Where ReShade comes from: its installer, for the game's executable.
+const RESHADE_URL: &str = "https://reshade.me";
+
 use serde::Serialize;
 
 use super::{
@@ -35,7 +38,9 @@ use crate::games::GameProfile;
 use crate::loaders::bethesda::{self, Bethesda};
 use crate::loaders::framework::{Framework, needed_frameworks};
 use crate::loaders::redengine::RedEngine;
-use crate::loaders::unreal::{Unreal, find_binaries, find_project, user_settings};
+use crate::loaders::unreal::{
+    Unreal, find_binaries, find_project, is_reshade_preset, reshade_installed, user_settings,
+};
 use crate::loaders::{Loader, PackageKind, Placement};
 use crate::sources::SourceError;
 use crate::sources::github::{GitHub, repos_in};
@@ -339,7 +344,7 @@ impl Installer<'_, Nexus> {
         keep_replaced(state, self.paths, &replaced)?;
 
         let mods = state.list(target.game)?;
-        let missing = requirements
+        let mut missing: Vec<Requirement> = requirements
             .into_iter()
             .filter(|r| match r.mod_id {
                 Some(id) => {
@@ -349,6 +354,24 @@ impl Installer<'_, Nexus> {
                 None => r.url.is_some(),
             })
             .collect();
+        // A ReShade preset: ReShade comes from its website, not from Unalia.
+        let preset = mods.iter().filter(|m| m.id == requested).any(|m| {
+            m.placements
+                .iter()
+                .any(|p| is_reshade_preset(p.target.rsplit('/').next().unwrap_or_default()))
+        });
+        if let Some(binaries) = adapter.binaries().filter(|_| preset) {
+            let declared = |r: &Requirement| r.name.to_ascii_lowercase().contains("reshade");
+            if reshade_installed(target.game_dir, binaries) {
+                missing.retain(|r| !declared(r));
+            } else if !missing.iter().any(declared) {
+                missing.push(Requirement {
+                    mod_id: None,
+                    name: "ReShade".into(),
+                    url: Some(RESHADE_URL.into()),
+                });
+            }
+        }
         Ok(NexusInstall { mods, missing })
     }
 
