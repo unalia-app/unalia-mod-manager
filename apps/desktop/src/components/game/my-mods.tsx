@@ -101,16 +101,17 @@ export function MyMods({ game, onDiscover }: { game: SteamGame; onDiscover: () =
 				</p>
 				{/* Outline: "Play" stays the only primary action of the screen. */}
 				<div className="flex shrink-0 items-center gap-2">
-					{updates.length > 0 && (
-						<Button
-							size="sm"
-							variant="outline"
-							leftIcon={<ArrowUp className="size-3.5" />}
-							onClick={() => updateAll(appId, updates)}
-						>
-							{`Update all (${updates.length})`}
-						</Button>
-					)}
+					{/* Always there: greyed out, it says everything is up to date. */}
+					<Button
+						size="sm"
+						variant="outline"
+						leftIcon={<ArrowUp className="size-3.5" />}
+						disabled={updates.length === 0}
+						title={updates.length === 0 ? "Every mod is up to date" : undefined}
+						onClick={() => updateAll(appId, updates)}
+					>
+						{updates.length > 0 ? `Update all (${updates.length})` : "Update all"}
+					</Button>
 					<ImportButton game={game} mods={mods} />
 					<ShareButton game={game} mods={mods} />
 				</div>
