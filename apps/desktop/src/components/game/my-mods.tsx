@@ -19,9 +19,17 @@ import { useCallback, useEffect, useState } from "react";
 
 import { progressDetail, progressLabel } from "@/components/mod/install-button";
 import { uninstallWithUndo } from "@/components/mod/uninstall";
+import { ImportButton, ShareButton } from "@/components/game/share-mods";
 import { Notice } from "@/components/notice";
 import { toast } from "@/components/toaster";
-import { type InstalledMod, type PausedDownload, discardDownload, pausedDownloads, splitError } from "@/lib/engine";
+import {
+	type InstalledMod,
+	type PausedDownload,
+	type SteamGame,
+	discardDownload,
+	pausedDownloads,
+	splitError,
+} from "@/lib/engine";
 import { bytes } from "@/lib/format";
 import { usePendingOp } from "@/lib/game-status";
 import { modHref } from "@/lib/games-store";
@@ -41,8 +49,9 @@ import {
 	useUpdates,
 } from "@/lib/installs";
 
-/** My mods tab: enable, disable, remove with "Undo". */
-export function MyMods({ appId, onDiscover }: { appId: number; onDiscover: () => void }) {
+/** My mods tab: enable, disable, remove with "Undo", share the list with friends. */
+export function MyMods({ game, onDiscover }: { game: SteamGame; onDiscover: () => void }) {
+	const appId = game.appId;
 	const mods = useInstalled(appId);
 	const updates = useUpdates(appId) ?? [];
 
@@ -65,9 +74,13 @@ export function MyMods({ appId, onDiscover }: { appId: number; onDiscover: () =>
 					icon={<Layers className="size-5 text-fg-muted" />}
 					title="No mods installed yet"
 					action={
-						<Button size="sm" onClick={onDiscover}>
-							Discover mods
-						</Button>
+						<div className="flex gap-2">
+							<Button size="sm" onClick={onDiscover}>
+								Discover mods
+							</Button>
+							{/* A friend's list: the quickest way to play together. */}
+							<ImportButton game={game} mods={mods} variant="secondary" />
+						</div>
 					}
 				>
 					Mods you install show up here. Turn them on, off or remove them in one click.
@@ -86,17 +99,21 @@ export function MyMods({ appId, onDiscover }: { appId: number; onDiscover: () =>
 				<p className="text-xs text-fg-subtle">
 					{active} active mod{active === 1 ? "" : "s"} · changes apply the next time you launch the game
 				</p>
-				{updates.length > 0 && (
-					// Outline: "Play" stays the only primary action of the screen.
-					<Button
-						size="sm"
-						variant="outline"
-						leftIcon={<ArrowUp className="size-3.5" />}
-						onClick={() => updateAll(appId, updates)}
-					>
-						{`Update all (${updates.length})`}
-					</Button>
-				)}
+				{/* Outline: "Play" stays the only primary action of the screen. */}
+				<div className="flex shrink-0 items-center gap-2">
+					{updates.length > 0 && (
+						<Button
+							size="sm"
+							variant="outline"
+							leftIcon={<ArrowUp className="size-3.5" />}
+							onClick={() => updateAll(appId, updates)}
+						>
+							{`Update all (${updates.length})`}
+						</Button>
+					)}
+					<ImportButton game={game} mods={mods} />
+					<ShareButton game={game} mods={mods} />
+				</div>
 			</div>
 			{/* No overflow-hidden: a row's version menu overflows onto the next ones. */}
 			<ul className="rounded-xl border border-line bg-surface">

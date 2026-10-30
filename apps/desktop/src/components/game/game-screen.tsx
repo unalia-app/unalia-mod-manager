@@ -148,7 +148,7 @@ export function GameScreen() {
 									<Discover community={game.profile.community} appId={game.appId} />
 								</>
 							) : (
-								<MyMods appId={game.appId} onDiscover={() => setTab("discover")} />
+								<MyMods game={game} onDiscover={() => setTab("discover")} />
 							)}
 						</div>
 					</>
