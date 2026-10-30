@@ -393,17 +393,18 @@ function VersionPicker({
 	};
 
 	return (
-		<span title="Go back to a version you had before, without downloading it again">
+		// Long versions (`v3.0.1-1183-gcdbc0b66-r2`) are cut: the tooltip has them whole.
+		<span title={`${versionLabel(m.version)}: go back to a version you had before, without downloading it again`}>
 			<Select value={m.package} onValueChange={choose} onOpenChange={onOpenChange} disabled={busy} className="w-28">
 				<SelectTrigger className="h-7 px-2.5 py-0 font-mono text-[11px]">
-					<SelectValue />
+					<SelectValue className="min-w-0 truncate" />
 				</SelectTrigger>
 				<SelectContent>
-					<SelectItem value={m.package} className="font-mono text-xs">
+					<SelectItem value={m.package} className="truncate font-mono text-xs">
 						{versionLabel(m.version)}
 					</SelectItem>
 					{m.previousVersions.map((v) => (
-						<SelectItem key={v.package} value={v.package} className="font-mono text-xs">
+						<SelectItem key={v.package} value={v.package} className="truncate font-mono text-xs">
 							{versionLabel(v.version)}
 						</SelectItem>
 					))}
