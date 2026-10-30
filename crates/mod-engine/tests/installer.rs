@@ -860,6 +860,7 @@ async fn the_old_storage_moves_to_packages_without_downloading() {
                 files: placements.iter().map(|p| p.target.clone()).collect(),
                 created_dirs: Vec::new(),
                 copied: 0,
+                settings: Vec::new(),
             },
             placements,
             edits: BTreeMap::new(),

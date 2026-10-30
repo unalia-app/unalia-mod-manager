@@ -10,6 +10,7 @@ pub mod detect;
 pub mod download;
 pub mod foreign;
 pub mod games;
+pub mod ini;
 pub mod installer;
 pub mod launch;
 pub mod loaders;

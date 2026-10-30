@@ -35,7 +35,7 @@ use crate::games::GameProfile;
 use crate::loaders::bethesda::{self, Bethesda};
 use crate::loaders::framework::{Framework, needed_frameworks};
 use crate::loaders::redengine::RedEngine;
-use crate::loaders::unreal::{Unreal, find_binaries, find_project};
+use crate::loaders::unreal::{Unreal, find_binaries, find_project, user_settings};
 use crate::loaders::{Loader, PackageKind, Placement};
 use crate::sources::SourceError;
 use crate::sources::github::{GitHub, repos_in};
@@ -628,6 +628,7 @@ impl Adapter {
                 let project = find_project(game_dir).ok_or(InstallError::NoGameFiles)?;
                 Ok(Self::Unreal(Unreal {
                     binaries: find_binaries(game_dir, &project),
+                    settings: user_settings(&project),
                     project,
                 }))
             }

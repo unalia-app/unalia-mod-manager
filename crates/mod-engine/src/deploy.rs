@@ -13,6 +13,11 @@
 //! - all or nothing: on failure, whatever was placed is removed;
 //! - every placed file and every created folder is recorded, so that
 //!   removal brings the folder back exactly to its original state.
+//!
+//! A placement whose destination is an absolute path is a settings file
+//! outside the game (an Unreal game's `Engine.ini` in the player's folder):
+//! its keys are merged in (`ini`), never the file replaced, and removal
+//! puts back the values they replaced.
 
 use std::collections::{BTreeMap, HashSet};
 use std::fs;
@@ -23,6 +28,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::archive::safe_relative_path;
 use crate::download::sha256_file;
+use crate::ini::{Entry, Ini};
 use crate::loaders::Placement;
 use crate::store::{Manifest, Store, is_editable};
 
@@ -53,6 +59,18 @@ pub struct Deployment {
     pub created_dirs: Vec<String>,
     /// Files copied because they couldn't be linked (different drives).
     pub copied: usize,
+    /// Settings merged into files outside the game.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub settings: Vec<Merge>,
+}
+
+/// Keys merged into a settings file (absolute path).
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct Merge {
+    pub path: String,
+    /// The file didn't exist: it goes once its last key is removed.
+    pub created: bool,
+    pub changes: Vec<Entry>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -80,7 +98,17 @@ pub fn deploy(
     // 1. Check everything before writing anything.
     let mut targets = HashSet::new();
     let mut plan = Vec::with_capacity(placements.len());
+    let mut merges = Vec::new();
     for p in placements {
+        if Path::new(&p.target).is_absolute() {
+            let (hash, _) = from
+                .hash(&p.source, &p.target)
+                .ok_or_else(|| DeployError::MissingSource(p.source.clone()))?;
+            let settings = fs::read_to_string(from.store.blob(hash))
+                .map_err(|_| DeployError::MissingSource(p.source.clone()))?;
+            merges.push((PathBuf::from(&p.target), settings));
+            continue;
+        }
         let target = safe_relative_path(&p.target)
             .ok_or_else(|| DeployError::UnsafeTarget(p.target.clone()))?;
         let (hash, size) = from
@@ -111,7 +139,66 @@ pub fn deploy(
         }
         done.files.push(name.clone());
     }
+    for (path, settings) in merges {
+        if let Err(error) = merge(&path, &settings, &mut done) {
+            undeploy(game_dir, &done, false);
+            return Err(DeployError::Io {
+                path: path.to_string_lossy().into_owned(),
+                source: error,
+            });
+        }
+    }
     Ok(done)
+}
+
+/// Merges `settings` into the file at `path`, created if needed. The
+/// first time Unalia changes an existing file, a copy is kept next to it
+/// (`Engine.ini.unalia-backup`), never overwritten after.
+fn merge(path: &Path, settings: &str, done: &mut Deployment) -> io::Result<()> {
+    let created = !path.exists();
+    let mut ini = if created {
+        if let Some(dir) = path.parent() {
+            fs::create_dir_all(dir)?;
+        }
+        Ini::parse("")
+    } else {
+        let mut backup = path.as_os_str().to_owned();
+        backup.push(".unalia-backup");
+        let backup = PathBuf::from(backup);
+        if !backup.exists() {
+            fs::copy(path, &backup)?;
+        }
+        Ini::parse(&fs::read_to_string(path)?)
+    };
+    let changes = ini.merge(settings);
+    if changes.is_empty() {
+        return Ok(());
+    }
+    fs::write(path, ini.to_string())?;
+    done.settings.push(Merge {
+        path: path.to_string_lossy().into_owned(),
+        created,
+        changes,
+    });
+    Ok(())
+}
+
+/// Puts back what `merge` changed. A file we created and left without any
+/// key is removed.
+fn unmerge(merge: &Merge) -> io::Result<()> {
+    let path = Path::new(&merge.path);
+    let text = match fs::read_to_string(path) {
+        Ok(text) => text,
+        Err(e) if e.kind() == io::ErrorKind::NotFound => return Ok(()),
+        Err(e) => return Err(e),
+    };
+    let mut ini = Ini::parse(&text);
+    ini.revert(&merge.changes);
+    if merge.created && ini.is_empty() {
+        fs::remove_file(path)
+    } else {
+        fs::write(path, ini.to_string())
+    }
 }
 
 fn place(
@@ -183,6 +270,11 @@ pub fn capture_edits(
 /// removal. Returns the paths that couldn't be removed.
 pub fn undeploy(game_dir: &Path, deployment: &Deployment, purge_dirs: bool) -> Vec<String> {
     let mut leftovers = Vec::new();
+    for merge in deployment.settings.iter().rev() {
+        if unmerge(merge).is_err() {
+            leftovers.push(merge.path.clone());
+        }
+    }
     for file in &deployment.files {
         match fs::remove_file(game_dir.join(file)) {
             Ok(()) => {}

@@ -15,7 +15,9 @@
 //!   its `.ini`, `.asi` plugins and their `scripts/` or `plugins/` folder
 //!   go to `<binaries>/` too;
 //! - an archive that mirrors the game (`<Project>/…`, `<binaries>/…`) or the
-//!   project (`Content/…`, `Binaries/…`) is placed as is.
+//!   project (`Content/…`, `Binaries/…`) is placed as is;
+//! - the engine's settings files (`Engine.ini`…) are merged into the
+//!   player's (`user_settings`), never placed in the game.
 //!
 //! `<binaries>` is the folder of the game's executable (`find_binaries`):
 //! `<Project>/Binaries/Win64`, except for games that keep it elsewhere.
@@ -24,7 +26,7 @@
 
 use std::collections::HashSet;
 use std::fs;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use super::{Loader, PackageKind, Placement};
 
@@ -46,6 +48,16 @@ const PROXY_DLLS: [&str; 11] = [
     "d3d12.dll",
     "xinput1_3.dll",
     "xinput1_4.dll",
+];
+
+/// Settings files the engine reads from the player's folder, where a mod's
+/// keys are merged in.
+const SETTINGS_FILES: [&str; 5] = [
+    "engine.ini",
+    "game.ini",
+    "input.ini",
+    "scalability.ini",
+    "gameusersettings.ini",
 ];
 
 /// An Unreal game executable holds the whole engine: far above this. Below,
@@ -116,12 +128,32 @@ fn big_exes(dir: &Path, rel: &str, depth: usize, out: &mut Vec<String>) {
     }
 }
 
+/// The player's settings folder of an Unreal game (absolute, `/`), where it
+/// reads `Engine.ini`: `%LOCALAPPDATA%/<Project>/Saved/Config/Windows`, or
+/// `WindowsNoEditor` for an Unreal 4 game that already has it. None if
+/// there is no `%LOCALAPPDATA%`.
+pub fn user_settings(project: &str) -> Option<String> {
+    let config = PathBuf::from(std::env::var_os("LOCALAPPDATA")?)
+        .join(project)
+        .join("Saved")
+        .join("Config");
+    let platform = if config.join("WindowsNoEditor").is_dir() {
+        "WindowsNoEditor"
+    } else {
+        "Windows"
+    };
+    Some(config.join(platform).to_string_lossy().replace('\\', "/"))
+}
+
 pub struct Unreal {
     /// Name of the project folder, e.g. `PhantomBladeZero`.
     pub project: String,
     /// Folder of the game's executable (`find_binaries`), e.g.
     /// `PhantomBladeZero/Binaries/Win64`.
     pub binaries: String,
+    /// The player's settings folder (`user_settings`). None: settings
+    /// files are not installed.
+    pub settings: Option<String>,
 }
 
 impl Loader for Unreal {
@@ -258,7 +290,14 @@ impl Unreal {
             }
         }
 
-        // 7. Blueprint mods, then content packages.
+        // 7. The engine's settings, merged into the player's.
+        if let Some(settings) = &self.settings
+            && SETTINGS_FILES.contains(&lower.as_str())
+        {
+            return Some(format!("{settings}/{name}"));
+        }
+
+        // 8. Blueprint mods, then content packages.
         if let Some(at) = dirs
             .iter()
             .position(|d| d.eq_ignore_ascii_case("logicmods"))
@@ -348,12 +387,14 @@ mod tests {
     use super::*;
 
     const P: &str = "PhantomBladeZero";
+    const SETTINGS: &str = "C:/Users/P/AppData/Local/PhantomBladeZero/Saved/Config/Windows";
 
     fn place(files: &[&str]) -> Vec<(String, String)> {
         let files: Vec<String> = files.iter().map(|f| f.to_string()).collect();
         let mut out: Vec<_> = Unreal {
             project: P.into(),
             binaries: format!("{P}/Binaries/Win64"),
+            settings: Some(SETTINGS.into()),
         }
         .place("Cool Mod", &PackageKind::Mod, &files)
         .into_iter()
@@ -492,6 +533,22 @@ mod tests {
     }
 
     #[test]
+    fn engine_settings_go_to_the_players_folder() {
+        assert_eq!(
+            place(&["Engine.ini", "README.txt"]),
+            pairs(&[("Engine.ini", &format!("{SETTINGS}/Engine.ini"))])
+        );
+        // Next to a package, in its variant folder.
+        assert_eq!(
+            place(&["zzz_Low_P/Engine.ini", "zzz_Low_P/zzz_Low_P.pak"]),
+            pairs(&[
+                ("zzz_Low_P/Engine.ini", &format!("{SETTINGS}/Engine.ini")),
+                ("zzz_Low_P/zzz_Low_P.pak", &format!("{P}/Content/Paks/~mods/zzz_Low_P.pak")),
+            ])
+        );
+    }
+
+    #[test]
     fn proxy_dlls_and_asi_plugins_go_next_to_the_executable() {
         let win64 = "PhantomBladeZero/Binaries/Win64";
         assert_eq!(
@@ -560,6 +617,7 @@ mod tests {
         let mut out: Vec<(String, String)> = Unreal {
             project: "ProjectPBZ".into(),
             binaries: "platform/steam".into(),
+            settings: None,
         }
         .place("Cool Mod", &PackageKind::Mod, &files)
         .into_iter()

@@ -771,3 +771,48 @@ async fn cycles_missing_and_impossible_versions_are_errors() {
         Err(ResolveError::TooOld { .. })
     ));
 }
+
+#[test]
+fn engine_settings_are_merged_into_the_players_file_and_put_back() {
+    let (tmp, game) = game();
+    let archive = zip(
+        tmp.path(),
+        "remove-fog.zip",
+        &[Entry::File("Engine.ini", b"[SystemSettings]\r\nr.Fog=0\r\nr.VolumetricFog=0\r\n")],
+    );
+    let (stored, _) = stage(&tmp.path().join("store"), &archive, "Remove Fog", &PackageKind::Mod);
+    let settings = tmp.path().join("Local/ProjectPBZ/Saved/Config/Windows");
+    let engine = settings.join("Engine.ini");
+    let files = vec![Placement {
+        source: "Engine.ini".into(),
+        target: engine.to_string_lossy().into_owned(),
+    }];
+
+    // Never run yet: the file is created, then removed with the mod.
+    let deployed = deploy::deploy(stored.source(), &game, &files).unwrap();
+    assert_eq!(
+        fs::read_to_string(&engine).unwrap(),
+        "[SystemSettings]\r\nr.Fog=0\r\nr.VolumetricFog=0\r\n"
+    );
+    assert!(deploy::undeploy(&game, &deployed, false).is_empty());
+    assert!(!engine.exists());
+
+    // The player's own file: kept aside once, then its values come back.
+    const ENGINE: &str = "\r\n[/Script/Engine.Engine]\r\nbSmoothFrameRate=True\r\n";
+    let before = format!("[SystemSettings]\r\nr.Fog=1\r\n{ENGINE}");
+    fs::write(&engine, &before).unwrap();
+    let deployed = deploy::deploy(stored.source(), &game, &files).unwrap();
+    assert_eq!(
+        fs::read_to_string(&engine).unwrap(),
+        format!("[SystemSettings]\r\nr.Fog=0\r\nr.VolumetricFog=0\r\n{ENGINE}")
+    );
+    assert_eq!(fs::read_to_string(settings.join("Engine.ini.unalia-backup")).unwrap(), before);
+    // The player turned the volumetric fog back on in the meantime: kept.
+    let edited = fs::read_to_string(&engine).unwrap();
+    fs::write(&engine, edited.replace("r.VolumetricFog=0", "r.VolumetricFog=1")).unwrap();
+    assert!(deploy::undeploy(&game, &deployed, false).is_empty());
+    assert_eq!(
+        fs::read_to_string(&engine).unwrap(),
+        format!("[SystemSettings]\r\nr.Fog=1\r\nr.VolumetricFog=1\r\n{ENGINE}")
+    );
+}
