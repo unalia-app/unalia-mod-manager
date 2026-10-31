@@ -880,7 +880,14 @@ pub fn bbcode_to_markdown(input: &str) -> String {
             "line" | "hr" => out.push_str("\n\n---\n\n"),
             "heading" => out.push_str("\n### "),
             "/heading" => out.push('\n'),
-            "code" => out.push_str("\n```\n"),
+            "code" => match rest.to_ascii_lowercase().find("[/code]") {
+                Some(end) => {
+                    let code = decode_entities(rest[..end].trim_matches('\n'));
+                    out.push_str(&format!("\n```\n{code}\n```\n"));
+                    rest = &rest[end + "[/code]".len()..];
+                }
+                None => out.push_str("\n```\n"),
+            },
             "/code" => out.push_str("\n```\n"),
             "url" => {
                 links.push(value.to_owned());
@@ -940,6 +947,51 @@ struct GameNodes {
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
+/// Decodes the HTML entities of a code block, which Markdown shows as they
+/// are: Nexus writes `\` as `&#92;`. The rest of a description keeps them,
+/// Markdown decodes them there. One pass: `&amp;lt;` gives `&lt;`.
+fn decode_entities(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(start) = rest.find('&') {
+        out.push_str(&rest[..start]);
+        rest = &rest[start..];
+        let decoded = rest
+            .find(';')
+            .and_then(|end| Some((entity(&rest[1..end])?, end)));
+        match decoded {
+            Some((c, end)) => {
+                out.push(c);
+                rest = &rest[end + 1..];
+            }
+            None => {
+                out.push('&');
+                rest = &rest[1..];
+            }
+        }
+    }
+    out.push_str(rest);
+    out
+}
+
+fn entity(name: &str) -> Option<char> {
+    match name {
+        "amp" => Some('&'),
+        "lt" => Some('<'),
+        "gt" => Some('>'),
+        "quot" => Some('"'),
+        "apos" => Some('\''),
+        _ => {
+            let code = name.strip_prefix('#')?;
+            let code = match code.strip_prefix(['x', 'X']) {
+                Some(hex) => u32::from_str_radix(hex, 16),
+                None => code.parse(),
+            };
+            char::from_u32(code.ok()?)
+        }
+    }
+}
+
 struct GameNode {
     id: u32,
     name: String,
@@ -1219,6 +1271,21 @@ mod tests {
     fn formats_dates() {
         assert_eq!(iso_date(0), "1970-01-01T00:00:00Z");
         assert_eq!(iso_date(1_792_493_526), "2026-10-20T10:52:06Z");
+    #[test]
+    fn code_blocks_show_entities_decoded() {
+        let md = bbcode_to_markdown(
+            "See &#92; [code]%LOCALAPPDATA%&#92;ProjectPBZ &lt;x&gt; [b]raw[/b] &amp;lt; &#x5C; a & b &nope;[/code]",
+        );
+        assert!(
+            md.contains("```\n%LOCALAPPDATA%\\ProjectPBZ <x> [b]raw[/b] &lt; \\ a & b &nope;\n```"),
+            "{md}"
+        );
+        // Outside a code block, Markdown decodes them by itself.
+        assert!(md.starts_with("See &#92; "), "{md}");
+        // Never closed: as before.
+        assert_eq!(bbcode_to_markdown("[code]a&#92;"), "\n```\na&#92;");
+    }
+
     }
 
     #[test]
