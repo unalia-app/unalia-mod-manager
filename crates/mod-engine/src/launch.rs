@@ -11,6 +11,9 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 use sysinfo::{ProcessRefreshKind, ProcessesToUpdate, System, UpdateKind};
 
+use crate::games::ModdedLaunch;
+use crate::state::InstalledMod;
+
 /// Change requested during a session.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", tag = "type")]
@@ -155,10 +158,43 @@ pub enum LaunchTarget {
     /// a mod archive: only executable names known to the
     /// catalog, in the game folder.
     Executable(PathBuf),
+    /// A program with arguments: the game's executable, or Steam
+    /// (`steam.exe -applaunch`) when the game needs arguments.
+    Command(PathBuf, Vec<String>),
 }
 
 pub fn steam_target(app_id: u32) -> LaunchTarget {
     LaunchTarget::Steam(format!("steam://rungameid/{app_id}"))
+}
+
+/// Arguments the game must start with: those of the profile's `[modded]`
+/// as soon as an enabled mod has a file that needs them.
+pub fn launch_args(modded: Option<&ModdedLaunch>, mods: &[InstalledMod]) -> Vec<String> {
+    let Some(modded) = modded else {
+        return Vec::new();
+    };
+    let needed = mods
+        .iter()
+        .filter(|m| m.enabled)
+        .flat_map(|m| &m.deployment.files)
+        .any(|f| modded.needed_by(f));
+    if needed {
+        modded.args.clone()
+    } else {
+        Vec::new()
+    }
+}
+
+/// Through Steam with arguments: a `steam://` link drops them, Steam's own
+/// executable keeps them (`-applaunch <id> <args>`). `None`: Steam's
+/// executable isn't in its folder.
+pub fn steam_command(steam_root: &Path, app_id: u32, args: &[String]) -> Option<LaunchTarget> {
+    let steam = steam_root.join(if cfg!(windows) { "steam.exe" } else { "steam.sh" });
+    steam.is_file().then(|| {
+        let mut all = vec!["-applaunch".to_owned(), app_id.to_string()];
+        all.extend(args.iter().cloned());
+        LaunchTarget::Command(steam, all)
+    })
 }
 
 /// First executable of the profile found in the game folder. On Windows we
@@ -294,6 +330,61 @@ mod tests {
         assert_eq!(
             executable_target(dir.path(), &["Nope.exe".to_string()]),
             None
+        );
+    }
+
+    #[test]
+    fn modded_arguments_follow_the_enabled_mods() {
+        let modded = ModdedLaunch {
+            args: vec!["-modded".into()],
+            when_prefix: vec!["mods/".into()],
+            tool: None,
+        };
+        let installed = |files: &[&str], enabled: bool| InstalledMod {
+            game: "steam:1091500".into(),
+            id: "nexus-1".into(),
+            name: "Mod".into(),
+            author: String::new(),
+            version: "1.0".into(),
+            icon_url: None,
+            loader_root: None,
+            enabled,
+            explicit: true,
+            sha256: String::new(),
+            installed_at: 0,
+            package: String::new(),
+            legacy_store_dir: String::new(),
+            files: Vec::new(),
+            source: String::new(),
+            priority: 0,
+            covered_by: Vec::new(),
+            needs: Vec::new(),
+            deployment: crate::deploy::Deployment {
+                files: files.iter().map(|f| f.to_string()).collect(),
+                ..Default::default()
+            },
+            placements: Vec::new(),
+            edits: Default::default(),
+            previous_versions: Vec::new(),
+        };
+        let redmod = installed(&["Mods/Better Cars/info.json"], true);
+        let archive = installed(&["archive/pc/mod/a.archive"], true);
+        assert_eq!(launch_args(Some(&modded), &[archive.clone(), redmod.clone()]), ["-modded"]);
+        assert!(launch_args(Some(&modded), std::slice::from_ref(&archive)).is_empty());
+        let off = InstalledMod { enabled: false, ..redmod.clone() };
+        assert!(launch_args(Some(&modded), &[off]).is_empty());
+        assert!(launch_args(None, &[redmod]).is_empty());
+
+        let steam = tempfile::tempdir().unwrap();
+        let exe = steam.path().join(if cfg!(windows) { "steam.exe" } else { "steam.sh" });
+        assert_eq!(steam_command(steam.path(), 1091500, &modded.args), None);
+        std::fs::write(&exe, "").unwrap();
+        assert_eq!(
+            steam_command(steam.path(), 1091500, &modded.args),
+            Some(LaunchTarget::Command(
+                exe,
+                vec!["-applaunch".into(), "1091500".into(), "-modded".into()]
+            ))
         );
     }
 

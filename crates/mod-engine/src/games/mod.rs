@@ -80,6 +80,43 @@ pub struct GameProfile {
     /// `plugins.txt`, e.g. `Skyrim Special Edition`.
     #[serde(skip)]
     pub plugins: Option<String>,
+    /// Mods that only load when the game starts with extra arguments.
+    #[serde(skip)]
+    pub modded: Option<ModdedLaunch>,
+}
+
+/// Mods that only load when the game starts with extra arguments (game
+/// profile, `[modded]`): REDmod mods and `-modded` for Cyberpunk 2077.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ModdedLaunch {
+    /// Added at launch, e.g. `-modded`.
+    pub args: Vec<String>,
+    /// An enabled mod with a file under one of these folders needs them.
+    pub when_prefix: Vec<String>,
+    /// What the game needs to load these mods, installed apart (a free
+    /// DLC): without it, the player is told where to get it.
+    pub tool: Option<ModdedTool>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct ModdedTool {
+    pub name: String,
+    /// Its file, relative to the game folder.
+    pub path: String,
+    pub url: String,
+}
+
+impl ModdedLaunch {
+    /// Does a file deployed at `target` (relative to the game folder)
+    /// need the arguments?
+    pub fn needed_by(&self, target: &str) -> bool {
+        let target = target.replace('\\', "/").to_ascii_lowercase();
+        self.when_prefix
+            .iter()
+            .any(|p| target.starts_with(&p.to_ascii_lowercase()))
+    }
 }
 
 /// Game version and its release date (ISO, `2026-10-22`).

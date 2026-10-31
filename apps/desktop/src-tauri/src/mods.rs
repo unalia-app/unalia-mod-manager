@@ -1342,8 +1342,27 @@ pub async fn play_game(
         return Ok(());
     }
     // A plugin removed by hand since: the list is brought back in line.
-    sync_plugins(&*mods.state.lock().await, app_id, &game);
-    let target = if let Some(url) = &game.steam_shortcut {
+    let args = {
+        let state = mods.state.lock().await;
+        sync_plugins(&state, app_id, &game);
+        let installed = state.list(&game_key(app_id)).map_err(crate::support::logged)?;
+        launch::launch_args(game.profile.modded.as_ref(), &installed)
+    };
+    let target = if !args.is_empty() {
+        // REDmod mods: the game must start with `-modded`. Through Steam's
+        // executable for a Steam game, else the game's own.
+        let steam = (!game.manual && game.steam_shortcut.is_none())
+            .then(|| library.steam_root())
+            .flatten()
+            .and_then(|root| launch::steam_command(&root, app_id, &args));
+        match steam {
+            Some(steam) => steam,
+            None => match launch::executable_target(&game.dir, &game.exe_names) {
+                Some(LaunchTarget::Executable(exe)) => LaunchTarget::Command(exe, args),
+                _ => return Err("Unalia couldn't find the game's executable in its folder.".into()),
+            },
+        }
+    } else if let Some(url) = &game.steam_shortcut {
         // Non-Steam game added to Steam: through Steam, for its overlay.
         LaunchTarget::Steam(url.clone())
     } else if game.manual {
@@ -1363,6 +1382,17 @@ pub async fn play_game(
             app.opener()
                 .open_path(exe.to_string_lossy(), None::<&str>)
                 .map_err(|e| format!("Couldn't start the game.\n{e}"))?
+        }
+        LaunchTarget::Command(program, args) => {
+            // Detached too: from its own folder, the game outlives Unalia.
+            let mut command = std::process::Command::new(&program);
+            command.args(&args);
+            if let Some(dir) = program.parent() {
+                command.current_dir(dir);
+            }
+            command
+                .spawn()
+                .map_err(|e| format!("Couldn't start the game.\n{e}"))?;
         }
     }
     mods.starting

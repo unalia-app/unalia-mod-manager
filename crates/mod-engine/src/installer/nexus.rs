@@ -377,6 +377,26 @@ impl Installer<'_, Nexus> {
                 });
             }
         }
+        // A REDmod mod: the game loads it with a free DLC, not from Unalia.
+        if let Some(modded) = &profile.modded
+            && let Some(tool) = &modded.tool
+            && mods.iter().filter(|m| m.id == requested).any(|m| {
+                m.deployment.files.iter().any(|f| modded.needed_by(f))
+            })
+        {
+            let word = tool.name.split(' ').next().unwrap_or_default().to_ascii_lowercase();
+            let declared = |r: &Requirement| r.name.to_ascii_lowercase().contains(&word);
+            if target.game_dir.join(&tool.path).is_file() {
+                missing.retain(|r| !declared(r));
+            } else if !missing.iter().any(declared) {
+                missing.push(Requirement {
+                    mod_id: None,
+                    name: tool.name.clone(),
+                    url: Some(tool.url.clone()),
+                    notes: String::new(),
+                });
+            }
+        }
         // Kept with the mod, installed or not: the UI shows what's missing
         // as long as it is, and what comes later goes under this mod.
         if let Some(mut record) = state.get(target.game, &requested)? {

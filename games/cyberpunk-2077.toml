@@ -21,6 +21,18 @@ loader = "redengine"
 # launch is abandoned.
 launchers = ["REDprelauncher.exe", "REDlauncher.exe"]
 
+# REDmod mods (`mods/<name>/`) only load when the game starts with
+# `-modded`: Play adds it, and the game deploys them by itself. They need
+# the free REDmod DLC.
+[modded]
+args = ["-modded"]
+when_prefix = ["mods/"]
+
+[modded.tool]
+name = "REDmod (free DLC)"
+path = "tools/redmod/bin/redMod.exe"
+url = "https://www.cyberpunk.net/en/modding-support"
+
 # Major versions of the game. Stayed on an old one (rolled back through
 # Steam or GOG)? You get the mod files and framework releases published
 # before the next one: 2.5 broke a lot of mods.
