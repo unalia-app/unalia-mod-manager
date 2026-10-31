@@ -97,17 +97,20 @@ pub enum FeedbackKind {
     General,
 }
 
-/// Sends a Help & Feedback message, with the app and Windows versions.
+/// Sends a Help & Feedback message, with the app and Windows versions, and
+/// the report the player left attached to a bug.
 #[tauri::command]
 pub async fn send_feedback(
     app: AppHandle,
     kind: FeedbackKind,
     message: String,
+    report: Option<String>,
 ) -> Result<(), String> {
     let client = app.state::<crate::catalog::Catalog>().client.clone();
     let body = serde_json::json!({
         "type": kind,
         "message": message,
+        "report": report,
         "version": app.package_info().version.to_string(),
         "os": os_name(),
     });
@@ -189,18 +192,46 @@ fn log_file(app: &AppHandle) -> Option<PathBuf> {
     Some(app.path().app_log_dir().ok()?.join(format!("{LOG_NAME}.log")))
 }
 
-/// Removes what identifies the user: their home folder (Windows account
-/// name) and the keys of `nxm://` links.
+/// Removes what identifies the user: their home folder and Windows account
+/// name, also on another drive, and the keys and account of `nxm://` links.
 fn anonymize(text: &str) -> String {
     let mut text = text.to_owned();
     for var in ["USERPROFILE", "HOME"] {
         if let Some(home) = std::env::var_os(var).map(|h| h.to_string_lossy().into_owned())
             && home.len() > 3
         {
-            text = text.replace(&home, "~").replace(&home.replace('\\', "/"), "~");
+            text = mask_home(&text, &home);
         }
     }
-    redact_params(&text, &["key=", "expires=", "apikey="])
+    redact_params(&text, &["key=", "expires=", "apikey=", "user_id="])
+}
+
+/// Masks `home`, and the same account in any `Users` folder.
+fn mask_home(text: &str, home: &str) -> String {
+    let slashes = home.replace('\\', "/");
+    let mut text = replace_ignoring_case(text, home, "~");
+    text = replace_ignoring_case(&text, &slashes, "~");
+    if let Some(account) = slashes.rsplit('/').next().filter(|a| !a.is_empty()) {
+        text = replace_ignoring_case(&text, &format!("/Users/{account}"), "/Users/~");
+        text = replace_ignoring_case(&text, &format!("\\Users\\{account}"), "\\Users\\~");
+    }
+    text
+}
+
+/// Windows paths don't care about case. ASCII only: the lowered text keeps
+/// the offsets of the original.
+fn replace_ignoring_case(text: &str, needle: &str, with: &str) -> String {
+    let lowered = text.to_ascii_lowercase();
+    let needle = needle.to_ascii_lowercase();
+    let mut out = String::with_capacity(text.len());
+    let mut at = 0;
+    while let Some(found) = lowered[at..].find(&needle) {
+        out.push_str(&text[at..at + found]);
+        out.push_str(with);
+        at += found + needle.len();
+    }
+    out.push_str(&text[at..]);
+    out
 }
 
 /// Replaces the value of each listed parameter (up to the next `&`, space
@@ -229,17 +260,28 @@ fn redact_params(text: &str, params: &[&str]) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::redact_params;
+    use super::{mask_home, redact_params};
 
     #[test]
     fn redacts_link_keys() {
         assert_eq!(
             redact_params(
                 "nxm://cyberpunk2077/mods/1/files/2?key=abc123&expires=999&user_id=5 done",
-                &["key=", "expires="]
+                &["key=", "expires=", "user_id="]
             ),
-            "nxm://cyberpunk2077/mods/1/files/2?key=…&expires=…&user_id=5 done"
+            "nxm://cyberpunk2077/mods/1/files/2?key=…&expires=…&user_id=… done"
         );
         assert_eq!(redact_params("no secrets here", &["key="]), "no secrets here");
+    }
+
+    #[test]
+    fn masks_the_account_in_any_case_and_on_any_drive() {
+        assert_eq!(
+            mask_home(
+                r"C:\Users\Jean\a c:\users\jean\b C:/Users/Jean/c D:\Users\jean\d é E:\Jean\e",
+                r"C:\Users\Jean"
+            ),
+            r"~\a ~\b ~/c D:\Users\~\d é E:\Jean\e"
+        );
     }
 }

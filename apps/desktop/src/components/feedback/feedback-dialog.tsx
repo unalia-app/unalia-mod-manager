@@ -1,6 +1,6 @@
 "use client";
 
-import { Button, cn } from "@modalia/ui";
+import { Button, Switch, cn } from "@modalia/ui";
 import { Bug, CircleCheckBig, ChevronRight, Lightbulb, MessageCircle } from "lucide-react";
 import { type FormEvent, type ReactNode, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
@@ -30,6 +30,7 @@ export function FeedbackDialog() {
 	const open = useFeedbackOpen();
 	const [type, setType] = useState<FeedbackType>("general");
 	const [message, setMessage] = useState("");
+	const [attach, setAttach] = useState(true);
 	const [error, setError] = useState<string | null>(null);
 	const [sending, setSending] = useState(false);
 	const [sent, setSent] = useState(false);
@@ -54,6 +55,7 @@ export function FeedbackDialog() {
 			setSent(false);
 			setType("general");
 			setMessage("");
+			setAttach(true);
 			setError(null);
 		}, 300);
 		return () => window.clearTimeout(timer);
@@ -71,7 +73,7 @@ export function FeedbackDialog() {
 		}
 		setSending(true);
 		try {
-			await submitFeedback({ type, message: message.trim() });
+			await submitFeedback({ type, message: message.trim(), attach: type === "bug" && attach });
 			setSent(true);
 		} catch {
 			toast({ title: "An error occurred. Please try again.", tone: "error" });
@@ -155,6 +157,12 @@ export function FeedbackDialog() {
 								/>
 								{error && <p className="text-xs text-danger">{error}</p>}
 								<p className="text-xs text-fg-faint">Sent with your app and Windows versions.</p>
+								{type === "bug" && (
+									<div className="flex items-center justify-between gap-3 pt-2">
+										<p className="text-xs text-fg-subtle">Attach a report: your games, mods and recent log, without your names or keys.</p>
+										<Switch checked={attach} onChange={setAttach} label="Attach a report" />
+									</div>
+								)}
 							</div>
 						</div>
 
