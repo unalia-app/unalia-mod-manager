@@ -4,6 +4,18 @@ All notable changes to Unalia Mod Manager. The format follows [Keep a Changelog]
 
 ## [Unreleased]
 
+### Added
+
+- Nexus Mods: a Copy link next to the page to open, for when Windows can't open it (no default browser).
+- My Mods: search your mods by name or author, and sort them by name or by last installed or updated.
+- Discover: filter a game's mods by category (Weapons, Gameplay, Utilities...).
+- Mod page: the mod's changelog, when its author wrote one.
+- An invitation to the Unalia Discord after a mod installs, shown once, and a link to it in What's new.
+
+### Fixed
+
+- Coming back from a mod's page returns to the tab you left, My Mods included, instead of Discover.
+
 ## [0.1.5] - 2026-10-31
 
 ### Added
