@@ -5,6 +5,7 @@ import { Check, Files } from "lucide-react";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 
+import { Marquee } from "@/components/marquee";
 import type { NexusModFile } from "@/lib/engine";
 import { bytes } from "@/lib/format";
 import { settleFileChoice, useFileChoice } from "@/lib/installs";
@@ -72,11 +73,11 @@ export function FilePicker() {
 				role="dialog"
 				aria-modal="true"
 				aria-label="Choose files"
-				className="relative flex max-h-[85vh] w-full max-w-[560px] animate-fade-up flex-col overflow-hidden rounded-xl border border-white/8 bg-bg shadow-2xl shadow-black/60"
+				className="relative flex max-h-[85vh] w-full max-w-[720px] animate-fade-up flex-col overflow-hidden rounded-xl border border-white/8 bg-bg shadow-2xl shadow-black/60"
 			>
 				<div className="flex items-center gap-1.5 border-b border-white/5 px-5 py-3">
 					<Files className="size-3.5 text-fg-faint" />
-					<span className="truncate text-xs font-medium text-fg-subtle">{choice.name ?? "This mod"}</span>
+					<Marquee text={choice.name ?? "This mod"} className="text-xs font-medium text-fg-subtle" />
 				</div>
 
 				<div className="px-5 pt-5">
@@ -172,13 +173,15 @@ function FileRow({
 				)}
 				<span className="min-w-0 flex-1">
 					<span className="flex items-center gap-2">
-						<span className="truncate text-sm font-medium text-fg">{file.name}</span>
+						<Marquee text={file.name} className="text-sm font-medium text-fg" />
 						<Badge>{single ? "Version" : (CATEGORY[file.category] ?? file.category)}</Badge>
 						{recommended && <Badge tone="success">Recommended</Badge>}
 					</span>
 					{meta && <span className="mt-0.5 block font-mono text-[11px] text-fg-muted">{meta}</span>}
 					{file.description && (
-						<span className="mt-1 line-clamp-2 block text-xs text-fg-subtle">{file.description}</span>
+						<span title={file.description} className="mt-1 line-clamp-2 block text-xs text-fg-subtle">
+							{file.description}
+						</span>
 					)}
 				</span>
 			</button>

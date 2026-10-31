@@ -5,6 +5,7 @@ import { ArrowUp, Download, ExternalLink, Package, RotateCw, Trash2, X } from "l
 import Link from "next/link";
 import { useState } from "react";
 
+import { Marquee } from "@/components/marquee";
 import { InstallStateBadge } from "@/components/mod/install-button";
 import { uninstallWithUndo } from "@/components/mod/uninstall";
 import { type ModSummary, SOURCE_LABEL } from "@/lib/engine";
@@ -112,10 +113,10 @@ export function ModCard({
 			</div>
 
 			<div className="flex flex-1 flex-col px-1 pt-2.5 pb-1">
-				<h3 className="truncate text-sm font-semibold text-fg" title={mod.name}>
-					{mod.name}
+				<h3 className="text-sm font-semibold text-fg">
+					<Marquee text={mod.name} hoverOn="article" />
 				</h3>
-				<p className="truncate text-xs text-fg-subtle">by {mod.author}</p>
+				<Marquee text={`by ${mod.author}`} hoverOn="article" className="text-xs text-fg-subtle" />
 				<p className="mt-1.5 line-clamp-3 text-xs leading-relaxed text-fg-muted">{mod.summary}</p>
 
 				<div className="mt-auto flex items-center gap-2 pt-3 font-tight text-[11px] text-fg-subtle">
@@ -124,12 +125,12 @@ export function ModCard({
 						{compactNumber(mod.downloads)}
 					</span>
 					<span aria-hidden>·</span>
-					<span className="truncate">{relativeDate(mod.updatedAt)}</span>
+					<Marquee text={relativeDate(mod.updatedAt)} hoverOn="article" />
 					{/* The text is truncated inside the badge, not the badge itself:
 					    same margin on the left and right. */}
 					{category && (
-						<Badge className="ml-auto max-w-[45%] min-w-0 shrink" title={category}>
-							<span className="min-w-0 truncate">{category}</span>
+						<Badge className="ml-auto max-w-[45%] min-w-0 shrink">
+							<Marquee text={category} hoverOn="article" />
 						</Badge>
 					)}
 				</div>

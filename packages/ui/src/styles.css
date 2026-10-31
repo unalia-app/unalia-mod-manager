@@ -124,6 +124,20 @@
 }
 
 /* Time left on a toast: duration and pause set by `ToastStack`. */
+/* Out of the theme: its variables resolve on `:root`, where `--marquee-shift`
+   doesn't exist. The element gives the shift and the duration. */
+@keyframes marquee {
+	0%,
+	90%,
+	100% {
+		transform: translateX(0);
+	}
+	40%,
+	50% {
+		transform: translateX(var(--marquee-shift));
+	}
+}
+
 @keyframes toast-timer {
 	from {
 		transform: scaleX(1);

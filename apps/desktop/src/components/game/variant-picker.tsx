@@ -5,6 +5,7 @@ import { Layers } from "lucide-react";
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 
+import { Marquee } from "@/components/marquee";
 import { settleVariantChoice, useVariantChoice } from "@/lib/installs";
 
 /**
@@ -48,11 +49,11 @@ export function VariantPicker() {
 				role="dialog"
 				aria-modal="true"
 				aria-label="Choose a variant"
-				className="relative flex max-h-[85vh] w-full max-w-[480px] animate-fade-up flex-col overflow-hidden rounded-xl border border-white/8 bg-bg shadow-2xl shadow-black/60"
+				className="relative flex max-h-[85vh] w-full max-w-[640px] animate-fade-up flex-col overflow-hidden rounded-xl border border-white/8 bg-bg shadow-2xl shadow-black/60"
 			>
 				<div className="flex items-center gap-1.5 border-b border-white/5 px-5 py-3">
 					<Layers className="size-3.5 text-fg-faint" />
-					<span className="truncate text-xs font-medium text-fg-subtle">{choice.name ?? "This mod"}</span>
+					<Marquee text={choice.name ?? "This mod"} className="text-xs font-medium text-fg-subtle" />
 				</div>
 
 				<div className="px-5 pt-5">
@@ -86,7 +87,7 @@ export function VariantPicker() {
 									>
 										{checked && <span className="size-2 rounded-full bg-accent" />}
 									</span>
-									<span className="min-w-0 flex-1 truncate text-sm font-medium text-fg">{variant}</span>
+									<Marquee text={variant} className="flex-1 text-sm font-medium text-fg" />
 								</button>
 							</li>
 						);
