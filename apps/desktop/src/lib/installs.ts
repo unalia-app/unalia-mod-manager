@@ -155,8 +155,12 @@ function listenOnce() {
 		);
 		// What it needs stays in view next to the mod (ModNeeds).
 		toast({ title: `${name ?? "Mod"} installed`, tone: "success" });
+		window.dispatchEvent(new Event(MOD_INSTALLED));
 	});
 }
+
+/** Fired on `window` each time a mod finishes installing. */
+export const MOD_INSTALLED = "unalia:mod-installed";
 
 /** Speed samples per install (download in progress). */
 const samples = new Map<string, { index: number; bytes: number; at: number; speed?: number }>();

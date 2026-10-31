@@ -1,6 +1,6 @@
 "use client";
 
-import { Button, Dialog, DialogFooter, DialogHeader, DialogTitle } from "@modalia/ui";
+import { Button, Dialog, DialogFooter, DialogHeader, DialogTitle, DiscordIcon } from "@modalia/ui";
 import { getVersion } from "@tauri-apps/api/app";
 import { isTauri } from "@tauri-apps/api/core";
 import { Sparkles } from "lucide-react";
@@ -9,6 +9,8 @@ import { useEffect, useState } from "react";
 import { ReleaseNotesList } from "@/components/app-update/release-notes";
 import { Glow } from "@/components/app-update-check";
 import { SAMPLE_NOTES } from "@/lib/app-update";
+import { DISCORD_URL } from "@/lib/links";
+import { openExternal } from "@/lib/open";
 import { takeWhatsNew } from "@/lib/whats-new";
 
 /** Lets the window settle before opening. */
@@ -63,6 +65,13 @@ export function WhatsNew() {
 			<ReleaseNotesList notes={shown.notes} className="-mx-6 max-h-[55vh] border-y border-line px-6 py-4" />
 
 			<DialogFooter>
+				<Button
+					variant="outline"
+					leftIcon={<DiscordIcon className="size-3.5" />}
+					onClick={() => void openExternal(DISCORD_URL)}
+				>
+					Join the Discord
+				</Button>
 				<Button onClick={() => setOpen(false)}>Got it</Button>
 			</DialogFooter>
 		</Dialog>

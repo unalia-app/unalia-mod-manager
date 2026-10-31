@@ -5,8 +5,8 @@ import { useEffect } from "react";
 /**
  * Development shortcuts: ⌘R / Ctrl+R reloads the window (and replays the
  * intro), Ctrl+Shift+U and Ctrl+Shift+N show the update and "What's new"
- * dialogs. Missing from production builds, where an accidental reload
- * would lose the app state.
+ * dialogs, Ctrl+Shift+D the Discord bubble. Missing from production builds,
+ * where an accidental reload would lose the app state.
  */
 export function DevShortcuts() {
 	useEffect(() => {
@@ -20,6 +20,9 @@ export function DevShortcuts() {
 			} else if (event.shiftKey && (key === "u" || key === "n")) {
 				event.preventDefault();
 				window.dispatchEvent(new Event(key === "u" ? "unalia:preview-update" : "unalia:preview-whats-new"));
+			} else if (event.shiftKey && key === "d") {
+				event.preventDefault();
+				window.dispatchEvent(new Event("unalia:preview-discord"));
 			}
 		};
 		window.addEventListener("keydown", onKeyDown);

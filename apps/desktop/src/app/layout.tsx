@@ -7,6 +7,7 @@ import { DevShortcuts } from "@/components/dev-shortcuts";
 import { DisplayScale } from "@/components/display-scale";
 import { Credits } from "@/components/credits";
 import { BetaBubble } from "@/components/feedback/beta-bubble";
+import { DiscordBubble } from "@/components/feedback/discord-bubble";
 import { FeedbackDialog } from "@/components/feedback/feedback-dialog";
 import { FilePicker } from "@/components/game/file-picker";
 import { VariantPicker } from "@/components/game/variant-picker";
@@ -32,6 +33,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
 				<DisplayScale />
 				<Credits />
 				<BetaBubble />
+				<DiscordBubble />
 				<FeedbackDialog />
 				<FilePicker />
 				<VariantPicker />
