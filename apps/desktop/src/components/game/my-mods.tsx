@@ -3,6 +3,8 @@
 import {
 	Badge,
 	Button,
+	SearchField,
+	Segmented,
 	Select,
 	SelectContent,
 	SelectItem,
@@ -13,7 +15,7 @@ import {
 	Switch,
 	cn,
 } from "@modalia/ui";
-import { ArrowUp, ExternalLink, Layers, Package, Pause, Play, Trash2, X } from "lucide-react";
+import { ArrowUp, Copy, ExternalLink, Layers, Package, PackageSearch, Pause, Play, Trash2, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
@@ -36,7 +38,7 @@ import {
 import { bytes } from "@/lib/format";
 import { usePendingOp } from "@/lib/game-status";
 import { modHref } from "@/lib/games-store";
-import { openExternal } from "@/lib/open";
+import { copyLink, openExternal } from "@/lib/open";
 import {
 	type ActiveInstall,
 	cancel,
@@ -52,11 +54,20 @@ import {
 	useUpdates,
 } from "@/lib/installs";
 
-/** My mods tab: enable, disable, remove with "Undo", share the list with friends. */
+type MyModsSort = "name" | "recent";
+
+const SORTS: { value: MyModsSort; label: string }[] = [
+	{ value: "name", label: "Name" },
+	{ value: "recent", label: "Recent" },
+];
+
+/** My mods tab: search, enable, disable, remove with "Undo", share the list with friends. */
 export function MyMods({ game, onDiscover }: { game: SteamGame; onDiscover: () => void }) {
 	const appId = game.appId;
 	const mods = useInstalled(appId);
 	const updates = useUpdates(appId) ?? [];
+	const [text, setText] = useState("");
+	const [sort, setSort] = useState<MyModsSort>("name");
 
 	if (mods === undefined) {
 		return (
@@ -94,6 +105,10 @@ export function MyMods({ game, onDiscover }: { game: SteamGame; onDiscover: () =
 	}
 
 	const active = mods.filter((m) => m.enabled && !m.loaderRoot).length;
+	const words = text.toLowerCase().split(/\s+/).filter(Boolean);
+	// `mods` comes by name, loader first: only "Recent" has to sort.
+	const shown = mods.filter((m) => words.every((w) => `${m.name} ${m.author}`.toLowerCase().includes(w)));
+	if (sort === "recent") shown.sort((a, b) => b.installedAt - a.installedAt);
 
 	return (
 		<div className="max-w-5xl">
@@ -119,15 +134,33 @@ export function MyMods({ game, onDiscover }: { game: SteamGame; onDiscover: () =
 					<ShareButton game={game} mods={mods} />
 				</div>
 			</div>
-			{/* No overflow-hidden: a row's version menu overflows onto the next ones. */}
-			<ul className="rounded-xl border border-line bg-surface">
-				{mods.map((m, i) => (
-					<li key={m.id} className={cn(i > 0 && "border-t border-line")}>
-						<ModRow mod={m} appId={appId} nexusDomain={game.profile?.nexus?.domain ?? null} />
-						<ModNeeds mod={m} appId={appId} className="pr-4 pb-3 pl-[68px]" />
-					</li>
-				))}
-			</ul>
+			<div className="mb-3 flex items-center gap-3">
+				<SearchField
+					value={text}
+					onChange={(e) => setText(e.target.value)}
+					placeholder="Search my mods"
+					aria-label="Search my mods"
+					className="h-10 max-w-sm flex-1"
+				/>
+				<Segmented label="Sort my mods" items={SORTS} value={sort} onChange={setSort} />
+			</div>
+			{shown.length === 0 ? (
+				<div className="glass max-w-xl">
+					<Notice icon={<PackageSearch className="size-5 text-fg-muted" />} title="No mods found">
+						{`No installed mod matches “${text.trim()}”.`}
+					</Notice>
+				</div>
+			) : (
+				// No overflow-hidden: a row's version menu overflows onto the next ones.
+				<ul className="rounded-xl border border-line bg-surface">
+					{shown.map((m, i) => (
+						<li key={m.id} className={cn(i > 0 && "border-t border-line")}>
+							<ModRow mod={m} appId={appId} nexusDomain={game.profile?.nexus?.domain ?? null} />
+							<ModNeeds mod={m} appId={appId} className="pr-4 pb-3 pl-[68px]" />
+						</li>
+					))}
+				</ul>
+			)}
 		</div>
 	);
 }
@@ -252,9 +285,20 @@ function ProgressRow({ appId, modId, active: a }: { appId: number; modId: string
 				)}
 			</button>
 			{a.status === "website" && (
-				<Button size="sm" variant="outline" leftIcon={<ExternalLink className="size-3.5" />} onClick={() => void openExternal(a.url)}>
-					Open page
-				</Button>
+				<>
+					<Button size="sm" variant="outline" leftIcon={<ExternalLink className="size-3.5" />} onClick={() => void openExternal(a.url)}>
+						Open page
+					</Button>
+					<button
+						type="button"
+						aria-label={`Copy the link of ${name}`}
+						title="Copy link"
+						onClick={() => void copyLink(a.url)}
+						className="cursor-pointer rounded-md p-2 text-fg-subtle transition-colors hover:bg-white/10 hover:text-fg"
+					>
+						<Copy className="size-4" />
+					</button>
+				</>
 			)}
 			<button
 				type="button"

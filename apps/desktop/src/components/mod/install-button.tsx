@@ -10,7 +10,7 @@ import { type InstallProgress, cancelPending } from "@/lib/engine";
 import { bytes, timeLeft } from "@/lib/format";
 import { usePendingOp } from "@/lib/game-status";
 import { cancel, clearError, install, overallProgress, useActiveInstall, useInstalled, useModUpdate } from "@/lib/installs";
-import { openExternal } from "@/lib/open";
+import { copyLink, openExternal } from "@/lib/open";
 
 /**
  * One click: the button itself becomes the progress bar (download, then
@@ -92,6 +92,14 @@ export function InstallButton({
 				</Button>
 				<span className="text-[11px] leading-snug text-fg-subtle">
 					Click <span className="text-fg-muted">Slow download</span> on the page that opened. Unalia installs it right after ·{" "}
+					<button
+						type="button"
+						className="cursor-pointer text-fg-muted underline-offset-2 hover:underline"
+						onClick={() => void copyLink(active.url)}
+					>
+						Copy link
+					</button>{" "}
+					·{" "}
 					<button
 						type="button"
 						className="cursor-pointer text-fg-muted underline-offset-2 hover:underline"
