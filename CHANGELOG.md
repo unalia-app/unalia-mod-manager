@@ -4,9 +4,33 @@ All notable changes to Unalia Mod Manager. The format follows [Keep a Changelog]
 
 ## [Unreleased]
 
+## [0.1.5] - 2026-10-31
+
+### Added
+
+- Share your mod list with a code, and import a friend's to play with the same mods.
+- Cyberpunk 2077: REDmod mods load. Play starts the game with `-modded` when one is on, and Unalia says when the free REDmod DLC is missing.
+- Unreal Engine games: proxy DLLs, ASI plugins, ReShade and UE4SS C++ mods go where they must.
+- Unreal Engine games: `Engine.ini` mods are merged into the player's settings.
+- Unreal Engine games: ReShade presets install, and Unalia says when ReShade is missing.
+- Help & Feedback: a bug report attaches a report, on by default, so the team can understand the bug. Turn it off for a message if you prefer.
+- My Mods: a button opens a mod's Nexus Mods page.
+
+### Changed
+
+- My Mods: Update all is always there, greyed out when everything is up to date.
+- My Mods uses more of the window, and the file and variant pickers are wider.
+- A name cut short slides on hover to show the rest, in My Mods, on mod cards and in the pickers.
+
 ### Fixed
 
 - Nexus Mods: every request names the app and its version, as the Nexus API policy asks (only some did).
+- Nexus Mods: a file that is a tool or a cheat table says so instead of being treated as a mod.
+- Nexus Mods: code blocks in descriptions show `\` and other escaped characters instead of `&#92;`.
+- Long versions in the version picker stay on one line.
+- Two mods that place the same file can now be installed together, like a patch and the mod it fixes, or mods that ship the same library. The last one installed has its file in the game, except that a mod required by another goes under it whatever the install order, an update keeps its place, and the other mod's file comes back when the winner is turned off or removed. My Mods shows which mod replaces what.
+- Mods a mod really needs and Unalia can't install by itself stay in view under it, in My Mods and on its page, one click from each page, until they are installed. Requirements their author marks as optional or as an add-on are left out.
+- Nexus Mods: installing an optional file from the site adds it to the mod instead of replacing the mod, and installing the main file keeps it. A mod is only offered an update it would really install.
 
 ## [0.1.4] - 2026-10-29
 
