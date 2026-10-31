@@ -146,6 +146,66 @@ async fn search_sends_text_sort_and_page() {
 }
 
 #[tokio::test]
+async fn a_mod_without_a_changelog_gets_an_empty_one() {
+    let (mut server, ts) = source().await;
+    let path = "/api/experimental/package/Team/Cool_Mod";
+    server
+        .mock("GET", format!("{path}/1.0.0/changelog/").as_str())
+        .with_body(r#"{"markdown":null}"#)
+        .create_async()
+        .await;
+    server
+        .mock("GET", format!("{path}/1.1.0/changelog/").as_str())
+        .with_body(r#"{"markdown":"Fix a crash"}"#)
+        .create_async()
+        .await;
+
+    let none = ts.changelog("game", "Team-Cool_Mod", "1.0.0").await.unwrap();
+    assert_eq!(none, "");
+    let some = ts.changelog("game", "Team-Cool_Mod", "1.1.0").await.unwrap();
+    assert_eq!(some, "Fix a crash");
+}
+
+#[tokio::test]
+async fn search_filters_on_a_category() {
+    let (mut server, ts) = source().await;
+    let mock = server
+        .mock("GET", "/api/cyberstorm/listing/hollow-knight-silksong/")
+        .match_query(Matcher::UrlEncoded(
+            "included_categories".into(),
+            "1612".into(),
+        ))
+        .with_body(r#"{"count":0,"next":null,"previous":null,"results":[]}"#)
+        .create_async()
+        .await;
+
+    let query = SearchQuery {
+        category: Some("1612".into()),
+        ..Default::default()
+    };
+    ts.search("hollow-knight-silksong", &query).await.unwrap();
+    mock.assert_async().await;
+}
+
+#[tokio::test]
+async fn categories_leave_libraries_out() {
+    let (mut server, ts) = source().await;
+    server
+        .mock(
+            "GET",
+            "/api/cyberstorm/community/hollow-knight-silksong/filters/",
+        )
+        .with_body(fixture("filters-silksong.json"))
+        .create_async()
+        .await;
+
+    let categories = ts.categories("hollow-knight-silksong").await.unwrap();
+    assert!(!categories.is_empty());
+    assert!(categories.iter().all(|c| c.id != "1615"));
+    assert!(categories.iter().all(|c| !c.name.is_empty()));
+}
+
+#[tokio::test]
 async fn get_returns_the_latest_version_and_its_dependencies() {
     let (mut server, ts) = source().await;
     server

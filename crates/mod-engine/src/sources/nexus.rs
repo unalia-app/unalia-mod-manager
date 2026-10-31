@@ -8,7 +8,7 @@
 //! `nxm://` link: that link carries a temporary key that allows the
 //! download. Modalia never works around this rule.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, RwLock};
 
 use reqwest::{Client, StatusCode};
@@ -17,7 +17,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 
 use super::{
-    Dependency, Mod, ModSource, ModSummary, ModVersion, Page, SearchQuery, Sort, SourceError,
+    Dependency, Mod, ModCategory, ModSource, ModSummary, ModVersion, Page, SearchQuery, Sort,
+    SourceError,
 };
 
 pub const GRAPHQL_URL: &str = "https://api.nexusmods.com/v2/graphql";
@@ -694,7 +695,10 @@ impl ModSource for Nexus {
         let text = query.text.trim();
         if !text.is_empty() {
             filters.push(json!({ "nameStemmed": [{ "value": text, "op": "MATCHES" }] }));
-        } else if !query.include_libraries {
+        }
+        if let Some(category) = &query.category {
+            filters.push(json!({ "categoryName": [{ "value": category, "op": "EQUALS" }] }));
+        } else if text.is_empty() && !query.include_libraries {
             filters.push(json!({ "categoryName": [{ "value": LIBRARIES, "op": "NOT_EQUALS" }] }));
         }
         let sort = match (query.sort, text.is_empty()) {
@@ -728,6 +732,37 @@ impl ModSource for Nexus {
             total,
             items: data.mods.nodes.into_iter().map(ModNode::summary).collect(),
         })
+    }
+
+    /// Asked of the game's mods, not of the `categories` query: that one
+    /// lists the categories of collections. The biggest come first.
+    async fn categories(&self, game: &str) -> Result<Vec<ModCategory>, SourceError> {
+        let domain = domain_of(game).ok_or(SourceError::NotFound { source_name: NAME })?;
+        let data: FacetsData = self
+            .graphql(
+                "query($filter: ModsFilter) {
+                    mods(filter: $filter, count: 0, facets: { categoryName: [] }) {
+                        facets { value }
+                    }
+                }",
+                json!({
+                    "filter": { "op": "AND", "filter": [
+                        { "gameDomainName": [{ "value": domain, "op": "EQUALS" }] },
+                        { "adultContent": [{ "value": false, "op": "EQUALS" }] },
+                    ] },
+                }),
+            )
+            .await?;
+        Ok(data
+            .mods
+            .facets
+            .into_iter()
+            .filter(|f| f.value != LIBRARIES)
+            .map(|f| ModCategory {
+                id: f.value.clone(),
+                name: f.value,
+            })
+            .collect())
     }
 
     async fn get(&self, game: &str, id: &str) -> Result<Mod, SourceError> {
@@ -810,6 +845,51 @@ impl ModSource for Nexus {
             .unwrap_or_default();
         Ok(bbcode_to_markdown(&text))
     }
+
+    async fn changelog(
+        &self,
+        game: &str,
+        id: &str,
+        _version: &str,
+    ) -> Result<String, SourceError> {
+        let domain = domain_of(game).ok_or(SourceError::NotFound { source_name: NAME })?;
+        let mod_id = parse_mod_key(id).ok_or(SourceError::NotFound { source_name: NAME })?;
+        let Some(game_id) = self.node(domain, mod_id).await?.game_id else {
+            return Ok(String::new());
+        };
+        let data: ChangelogData = self
+            .graphql(
+                "query($mod: ID!, $game: ID!) {
+                    modFiles(modId: $mod, gameId: $game) { version date changelogText }
+                }",
+                json!({ "mod": mod_id.to_string(), "game": game_id.to_string() }),
+            )
+            .await?;
+        Ok(changelog_markdown(data.mod_files))
+    }
+}
+
+/// Nexus keeps the lines of a changelog on each file: one section per
+/// version, the newest first. A version with several files counts once.
+fn changelog_markdown(mut files: Vec<ChangelogFile>) -> String {
+    files.sort_by_key(|f| std::cmp::Reverse(f.date));
+    let mut seen = HashSet::new();
+    let mut sections = Vec::new();
+    for file in files {
+        let (Some(version), Some(lines)) = (file.version, file.changelog_text) else {
+            continue;
+        };
+        if lines.is_empty() || !seen.insert(version.clone()) {
+            continue;
+        }
+        let lines: Vec<String> = lines
+            .iter()
+            .map(|line| bbcode_to_markdown(line))
+            .map(|line| format!("- {}", line.trim_start_matches(['-', '*', ' ']).trim_end()))
+            .collect();
+        sections.push(format!("### {version}\n\n{}", lines.join("\n")));
+    }
+    sections.join("\n\n")
 }
 
 /// Donation sites recognized in a description.
@@ -1033,6 +1113,36 @@ struct ModsPage {
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
+struct ChangelogData {
+    mod_files: Vec<ChangelogFile>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ChangelogFile {
+    version: Option<String>,
+    #[serde(default)]
+    date: i64,
+    changelog_text: Option<Vec<String>>,
+}
+
+#[derive(Deserialize)]
+struct FacetsData {
+    mods: FacetsPage,
+}
+
+#[derive(Deserialize)]
+struct FacetsPage {
+    facets: Vec<Facet>,
+}
+
+#[derive(Deserialize)]
+struct Facet {
+    value: String,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct LegacyData {
     legacy_mods_by_domain: LegacyPage,
 }
@@ -1228,6 +1338,25 @@ struct CdnLink {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn a_changelog_has_one_section_per_version_the_newest_first() {
+        let file = |version: &str, date, lines: &[&str]| ChangelogFile {
+            version: Some(version.to_owned()),
+            date,
+            changelog_text: Some(lines.iter().map(|l| (*l).to_owned()).collect()),
+        };
+        let markdown = changelog_markdown(vec![
+            file("1.0", 10, &["First release"]),
+            file("1.1", 20, &["- Fix a crash", "Add a menu"]),
+            file("1.1", 19, &["- Fix a crash", "Add a menu"]),
+            file("1.2", 30, &[]),
+        ]);
+        assert_eq!(
+            markdown,
+            "### 1.1\n\n- Fix a crash\n- Add a menu\n\n### 1.0\n\n- First release"
+        );
+    }
 
     #[test]
     fn parses_nxm_links() {

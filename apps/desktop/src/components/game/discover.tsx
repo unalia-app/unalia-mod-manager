@@ -1,12 +1,29 @@
 "use client";
 
-import { Button, SearchField, Segmented } from "@modalia/ui";
+import {
+	Button,
+	SearchField,
+	Segmented,
+	Select,
+	SelectContent,
+	SelectItem,
+	SelectTrigger,
+	SelectValue,
+} from "@modalia/ui";
 import { PackageSearch, RotateCw, TriangleAlert } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 
 import { ModCard, ModCardSkeleton } from "@/components/game/mod-card";
 import { Notice } from "@/components/notice";
-import { type ModSort, type ModSummary, SOURCE_LABEL, hexiumCommunities, searchMods } from "@/lib/engine";
+import {
+	type ModCategory,
+	type ModSort,
+	type ModSummary,
+	SOURCE_LABEL,
+	hexiumCommunities,
+	modCategories,
+	searchMods,
+} from "@/lib/engine";
 import { compactNumber } from "@/lib/format";
 
 const SORTS: { value: ModSort; label: string }[] = [
@@ -15,6 +32,8 @@ const SORTS: { value: ModSort; label: string }[] = [
 	{ value: "newest", label: "Newest" },
 	{ value: "updated", label: "Updated" },
 ];
+
+const ALL_CATEGORIES = "all";
 
 type Source = "thunderstore" | "hexium";
 
@@ -54,7 +73,7 @@ type Results = {
 };
 
 /**
- * Discover tab: search, sort and a grid that loads on scroll. A game also
+ * Discover tab: search, category, sort and a grid that loads on scroll. A game also
  * on Hexium gets a source switch: each source keeps its own list.
  */
 export function Discover({ community: gameCommunity, appId }: { community: string; appId: number }) {
@@ -66,6 +85,9 @@ export function Discover({ community: gameCommunity, appId }: { community: strin
 	const [text, setText] = useState("");
 	const query = useDebounced(text.trim(), 250);
 	const [sort, setSort] = useState<ModSort>("popular");
+	const [categories, setCategories] = useState<ModCategory[]>([]);
+	const [pickedCategory, setPickedCategory] = useState(ALL_CATEGORIES);
+	const category = pickedCategory === ALL_CATEGORIES ? null : pickedCategory;
 	const [results, setResults] = useState<Results | null>(null);
 	const [loadingMore, setLoadingMore] = useState(false);
 	const [error, setError] = useState<string | null>(null);
@@ -73,23 +95,35 @@ export function Discover({ community: gameCommunity, appId }: { community: strin
 	// Each new search invalidates the answers still in flight.
 	const generation = useRef(0);
 
+	// Each source has its own. Without them, the search works all the same.
+	useEffect(() => {
+		let current = true;
+		setCategories([]);
+		modCategories(community).then(
+			(list) => current && setCategories(list),
+			() => {},
+		);
+		return () => {
+			current = false;
+		};
+	}, [community]);
 
 	useEffect(() => {
 		const current = ++generation.current;
 		setResults(null);
 		setError(null);
-		searchMods(community, query, sort, 1).then(
+		searchMods(community, query, sort, 1, category).then(
 			(page) => current === generation.current && setResults({ ...page, page: 1 }),
 			(e: unknown) => current === generation.current && setError(String(e)),
 		);
-	}, [community, query, sort, attempt]);
+	}, [community, query, sort, category, attempt]);
 
 	const loadMore = () => {
 		if (!results?.hasMore || loadingMore) return;
 		const current = generation.current;
 		const next = results.page + 1;
 		setLoadingMore(true);
-		searchMods(community, query, sort, next)
+		searchMods(community, query, sort, next, category)
 			.then(
 				(page) => {
 					if (current !== generation.current) return;
@@ -119,7 +153,17 @@ export function Discover({ community: gameCommunity, appId }: { community: strin
 	return (
 		<div>
 			<div className="flex flex-wrap items-center gap-3">
-				{onHexium && <Segmented label="Mod source" items={SOURCES} value={source} onChange={setPicked} />}
+				{onHexium && (
+					<Segmented
+						label="Mod source"
+						items={SOURCES}
+						value={source}
+						onChange={(next) => {
+							setPicked(next);
+							setPickedCategory(ALL_CATEGORIES);
+						}}
+					/>
+				)}
 				<SearchField
 					value={text}
 					onChange={(e) => setText(e.target.value)}
@@ -127,6 +171,21 @@ export function Discover({ community: gameCommunity, appId }: { community: strin
 					aria-label="Search mods"
 					className="h-10 max-w-sm flex-1"
 				/>
+				{categories.length > 0 && (
+					<Select value={pickedCategory} onValueChange={setPickedCategory} className="w-52">
+						<SelectTrigger aria-label="Filter by category" className="h-10">
+							<SelectValue />
+						</SelectTrigger>
+						<SelectContent className="max-h-72 overflow-y-auto">
+							<SelectItem value={ALL_CATEGORIES}>All categories</SelectItem>
+							{categories.map((c) => (
+								<SelectItem key={c.id} value={c.id}>
+									{c.name}
+								</SelectItem>
+							))}
+						</SelectContent>
+					</Select>
+				)}
 				<Segmented label="Sort mods" items={SORTS} value={sort} onChange={setSort} />
 				{results && (
 					<span className="ml-auto font-tight text-xs text-fg-subtle">
@@ -171,7 +230,9 @@ export function Discover({ community: gameCommunity, appId }: { community: strin
 						<Notice icon={<PackageSearch className="size-5 text-fg-muted" />} title="No mods found">
 							{query
 								? `No mod matches “${query}”. Try fewer words.`
-								: `This game has no mods on ${sourceLabel} yet.`}
+								: category
+									? "No mod in this category."
+									: `This game has no mods on ${sourceLabel} yet.`}
 						</Notice>
 					</div>
 				)}

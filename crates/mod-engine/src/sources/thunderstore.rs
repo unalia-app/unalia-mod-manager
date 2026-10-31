@@ -13,7 +13,8 @@ use serde::Deserialize;
 use serde::de::DeserializeOwned;
 
 use super::{
-    Dependency, Mod, ModSource, ModSummary, ModVersion, Page, SearchQuery, Sort, SourceError,
+    Dependency, Mod, ModCategory, ModSource, ModSummary, ModVersion, Page, SearchQuery, Sort,
+    SourceError,
 };
 
 pub const BASE_URL: &str = "https://thunderstore.io";
@@ -155,6 +156,9 @@ impl ModSource for Thunderstore {
         {
             params.push(("excluded_categories", id.to_string()));
         }
+        if let Some(category) = &query.category {
+            params.push(("included_categories", category.clone()));
+        }
 
         let listing: Listing = self.fetch(&url, &params).await?;
         Ok(Page {
@@ -166,6 +170,24 @@ impl ModSource for Thunderstore {
                 .map(ListingItem::into_summary)
                 .collect(),
         })
+    }
+
+    async fn categories(&self, community: &str) -> Result<Vec<ModCategory>, SourceError> {
+        let url = format!(
+            "{}/api/cyberstorm/community/{}/filters/",
+            self.base_url,
+            segment(community)?
+        );
+        let filters: Filters = self.fetch(&url, &[]).await?;
+        Ok(filters
+            .package_categories
+            .into_iter()
+            .filter(|c| c.slug != "libraries" && !c.name.starts_with("(Deprecated"))
+            .map(|c| ModCategory {
+                id: c.id,
+                name: c.name,
+            })
+            .collect())
     }
 
     async fn get(&self, community: &str, id: &str) -> Result<Mod, SourceError> {
@@ -195,6 +217,22 @@ impl ModSource for Thunderstore {
         );
         let readme: Readme = self.fetch(&url, &[]).await?;
         Ok(readme.markdown)
+    }
+
+    async fn changelog(
+        &self,
+        _game: &str,
+        id: &str,
+        version: &str,
+    ) -> Result<String, SourceError> {
+        let (namespace, name) = split_id(id)?;
+        let url = format!(
+            "{}/api/experimental/package/{namespace}/{name}/{}/changelog/",
+            self.base_url,
+            segment(version)?
+        );
+        let changelog: Changelog = self.fetch(&url, &[]).await?;
+        Ok(changelog.markdown.unwrap_or_default())
     }
 }
 
@@ -246,6 +284,7 @@ struct Filters {
 #[derive(Deserialize)]
 struct FilterCategory {
     id: String,
+    name: String,
     slug: String,
 }
 
@@ -332,6 +371,11 @@ struct CommunityListing {
 #[derive(Deserialize)]
 struct Readme {
     markdown: String,
+}
+
+#[derive(Deserialize)]
+struct Changelog {
+    markdown: Option<String>,
 }
 
 impl Package {

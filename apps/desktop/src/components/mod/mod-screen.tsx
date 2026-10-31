@@ -21,6 +21,7 @@ import {
 	SOURCE_LABEL,
 	type SteamGame,
 	getMod,
+	modChangelog,
 	modDescription,
 	sourceName,
 } from "@/lib/engine";
@@ -42,6 +43,7 @@ export function ModScreen() {
 	const [game, setGame] = useState<SteamGame | null>(null);
 	const [details, setDetails] = useState<Load<ModDetails>>({ status: "loading" });
 	const [description, setDescription] = useState<Load<string>>({ status: "loading" });
+	const [changelog, setChangelog] = useState("");
 	const [attempt, setAttempt] = useState(0);
 	const accent = useAccent(game?.appId ?? null);
 
@@ -49,6 +51,7 @@ export function ModScreen() {
 		let current = true;
 		setDetails({ status: "loading" });
 		setDescription({ status: "loading" });
+		setChangelog("");
 		findGame(appId)
 			.then((found) => {
 				if (!current) return;
@@ -63,6 +66,11 @@ export function ModScreen() {
 				setDetails({ status: "ready", value: mod });
 				const version = mod.versions[0]?.number;
 				if (!version) return setDescription({ status: "ready", value: "" });
+				// A bonus: without it, the page has all it needs.
+				modChangelog(community, mod.id, version).then(
+					(markdown) => current && setChangelog(markdown),
+					() => {},
+				);
 				return modDescription(community, mod.id, version).then(
 					(markdown) => current && setDescription({ status: "ready", value: markdown }),
 					(e: unknown) => current && setDescription({ status: "error", message: String(e) }),
@@ -115,7 +123,13 @@ export function ModScreen() {
 				)}
 
 				{details.status === "ready" && game && (
-					<ModDetailsView key={details.value.id} mod={details.value} game={game} description={description} />
+					<ModDetailsView
+						key={details.value.id}
+						mod={details.value}
+						game={game}
+						description={description}
+						changelog={changelog}
+					/>
 				)}
 			</div>
 		</main>
@@ -126,10 +140,12 @@ function ModDetailsView({
 	mod,
 	game,
 	description,
+	changelog,
 }: {
 	mod: ModDetails;
 	game: SteamGame;
 	description: Load<string>;
+	changelog: string;
 }) {
 	const latest = mod.versions[0];
 	const community = game.profile?.community ?? "";
@@ -271,6 +287,18 @@ function ModDetailsView({
 						) : (
 							<p className="text-sm text-fg-subtle">The author didn't write a description.</p>
 						))}
+					{changelog.trim() && (
+						<details className="mt-6 border-t border-line pt-4">
+							<summary className="cursor-pointer text-sm font-medium text-fg-muted select-none hover:text-fg">
+								Changelog
+							</summary>
+							<div className="mt-4">
+								<Markdown internalLink={(href) => modLink(href, game)} zoom={zoom}>
+									{changelog}
+								</Markdown>
+							</div>
+						</details>
+					)}
 				</article>
 
 				<aside className="flex flex-col gap-4 self-start lg:sticky lg:top-20">

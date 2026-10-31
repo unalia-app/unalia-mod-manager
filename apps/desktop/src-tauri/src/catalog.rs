@@ -14,7 +14,9 @@ use mod_engine::sources::github::GitHub;
 use mod_engine::sources::hexium::Hexium;
 use mod_engine::sources::nexus::{self, FoundGame, Nexus, mod_key};
 use mod_engine::sources::thunderstore::{MOD_MANAGERS, Thunderstore};
-use mod_engine::sources::{Mod, ModSource, ModSummary, Page, SearchQuery, Sort, SourceError};
+use mod_engine::sources::{
+    Mod, ModCategory, ModSource, ModSummary, Page, SearchQuery, Sort, SourceError,
+};
 use serde::Serialize;
 use tauri::async_runtime::Mutex;
 use tauri::{AppHandle, Manager, State};
@@ -160,6 +162,13 @@ impl ModSource for Repository<'_> {
         }
     }
 
+    async fn categories(&self, game: &str) -> Result<Vec<ModCategory>, SourceError> {
+        match self {
+            Self::Thunderstore(s) => s.categories(game).await,
+            Self::Hexium(s) => s.categories(game).await,
+        }
+    }
+
     async fn get(&self, game: &str, id: &str) -> Result<Mod, SourceError> {
         match self {
             Self::Thunderstore(s) => s.get(game, id).await,
@@ -176,6 +185,18 @@ impl ModSource for Repository<'_> {
         match self {
             Self::Thunderstore(s) => s.description(game, id, version).await,
             Self::Hexium(s) => s.description(game, id, version).await,
+        }
+    }
+
+    async fn changelog(
+        &self,
+        game: &str,
+        id: &str,
+        version: &str,
+    ) -> Result<String, SourceError> {
+        match self {
+            Self::Thunderstore(s) => s.changelog(game, id, version).await,
+            Self::Hexium(s) => s.changelog(game, id, version).await,
         }
     }
 }
@@ -201,11 +222,13 @@ pub async fn search_mods(
     text: String,
     sort: Sort,
     page: u32,
+    category: Option<String>,
 ) -> Result<Page<ModSummary>, String> {
     let query = SearchQuery {
         text,
         sort,
         page,
+        category,
         ..Default::default()
     };
     if nexus::domain_of(&community).is_some() {
@@ -228,6 +251,29 @@ pub async fn search_mods(
                 .is_none_or(|g| g.loader_package(&m.id).is_none())
     });
     Ok(page)
+}
+
+/// The categories Discover can filter a game's mods on.
+#[tauri::command]
+pub async fn mod_categories(
+    catalog: State<'_, Catalog>,
+    community: String,
+) -> Result<Vec<ModCategory>, String> {
+    if nexus::domain_of(&community).is_some() {
+        return catalog
+            .nexus
+            .categories(&community)
+            .await
+            .map_err(crate::support::logged);
+    }
+    let (repository, community) = match hexium_community(&community) {
+        Some(c) => (catalog.repository(Some(HEXIUM)), c),
+        None => (catalog.repository(None), community.as_str()),
+    };
+    repository
+        .categories(community)
+        .await
+        .map_err(crate::support::logged)
 }
 
 /// A mod's page for the detail view.
@@ -361,6 +407,27 @@ pub async fn mod_description(
         catalog
             .thunderstore
             .description(&community, &id, &version)
+            .await
+    };
+    result.map_err(crate::support::logged)
+}
+
+/// Changelog in raw Markdown: the UI sanitizes it before display.
+#[tauri::command]
+pub async fn mod_changelog(
+    catalog: State<'_, Catalog>,
+    community: String,
+    id: String,
+    version: String,
+) -> Result<String, String> {
+    let result = if nexus::domain_of(&community).is_some() {
+        catalog.nexus.changelog(&community, &id, &version).await
+    } else if let Some(community) = hexium_community(&community) {
+        catalog.hexium.changelog(community, &id, &version).await
+    } else {
+        catalog
+            .thunderstore
+            .changelog(&community, &id, &version)
             .await
     };
     result.map_err(crate::support::logged)

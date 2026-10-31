@@ -15,6 +15,7 @@ use mod_engine::installer::{
 };
 use mod_engine::sources::github::GitHub;
 use mod_engine::sources::nexus::{Nexus, NxmLink};
+use mod_engine::sources::{ModSource, SearchQuery};
 use mod_engine::state::State;
 use serde_json::json;
 use zip::write::SimpleFileOptions;
@@ -1203,4 +1204,61 @@ async fn games_are_found_by_their_exact_name() {
     assert_eq!((hogwarts.domain.as_str(), hogwarts.game_id), ("hogwartslegacy", 5113));
     assert!(found[1].is_none());
     assert!(found[2].is_none());
+}
+
+#[tokio::test]
+async fn categories_come_from_the_mods_and_leave_libraries_out() {
+    let mut server = mockito::Server::new_async().await;
+    let nexus = Nexus::with_urls(
+        reqwest::Client::new(),
+        &format!("{}/graphql", server.url()),
+        &format!("{}/v1", server.url()),
+    );
+    let mock = server
+        .mock("POST", "/graphql")
+        .match_body(Matcher::Regex("facets".into()))
+        .with_body(
+            json!({ "data": { "mods": { "facets": [
+                { "value": "Gameplay" },
+                { "value": "Modders Resources" },
+                { "value": "Weapons" },
+            ] } } })
+            .to_string(),
+        )
+        .create_async()
+        .await;
+
+    let categories = nexus.categories(COMMUNITY).await.unwrap();
+    mock.assert_async().await;
+    let names: Vec<_> = categories.iter().map(|c| c.name.as_str()).collect();
+    assert_eq!(names, ["Gameplay", "Weapons"]);
+}
+
+#[tokio::test]
+async fn a_category_replaces_the_libraries_filter_and_adds_to_the_text() {
+    let mut server = mockito::Server::new_async().await;
+    let nexus = Nexus::with_urls(
+        reqwest::Client::new(),
+        &format!("{}/graphql", server.url()),
+        &format!("{}/v1", server.url()),
+    );
+    let mock = server
+        .mock("POST", "/graphql")
+        .match_body(Matcher::AllOf(vec![
+            Matcher::Regex("Weapons".into()),
+            Matcher::Regex("EQUALS".into()),
+            Matcher::Regex("nameStemmed".into()),
+        ]))
+        .with_body(json!({ "data": { "mods": { "totalCount": 0, "nodes": [] } } }).to_string())
+        .create_async()
+        .await;
+
+    let query = SearchQuery {
+        text: "katana".into(),
+        category: Some("Weapons".into()),
+        ..Default::default()
+    };
+    let page = nexus.search(COMMUNITY, &query).await.unwrap();
+    mock.assert_async().await;
+    assert_eq!(page.total, 0);
 }

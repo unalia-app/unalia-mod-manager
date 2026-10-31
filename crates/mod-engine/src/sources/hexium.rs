@@ -11,7 +11,7 @@
 //!   both sites.
 
 use std::cmp::Reverse;
-use std::collections::HashMap;
+use std::collections::{BTreeSet, HashMap};
 use std::io::Read;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
@@ -21,7 +21,8 @@ use serde::Deserialize;
 
 use super::thunderstore::Thunderstore;
 use super::{
-    Dependency, Mod, ModSource, ModSummary, ModVersion, Page, SearchQuery, Sort, SourceError,
+    Dependency, Mod, ModCategory, ModSource, ModSummary, ModVersion, Page, SearchQuery, Sort,
+    SourceError,
 };
 
 pub const BASE_URL: &str = "https://hexium.gg";
@@ -148,6 +149,12 @@ impl ModSource for Hexium {
             .iter()
             .filter(|p| !p.has_nsfw_content && p.latest().is_some())
             .filter(|p| words.iter().all(|w| p.matches(w)))
+            .filter(|p| {
+                query
+                    .category
+                    .as_ref()
+                    .is_none_or(|c| p.categories.contains(c))
+            })
             .collect();
         match query.sort {
             Sort::Popular => found.sort_by_key(|p| Reverse((p.rating_score, p.downloads()))),
@@ -168,6 +175,23 @@ impl ModSource for Hexium {
             total: found.len() as u64,
             has_more: start + PAGE_SIZE < found.len(),
         })
+    }
+
+    async fn categories(&self, community: &str) -> Result<Vec<ModCategory>, SourceError> {
+        let catalog = self.catalog(community).await?;
+        let names: BTreeSet<&String> = catalog
+            .packages
+            .iter()
+            .filter(|p| !p.has_nsfw_content && p.latest().is_some())
+            .flat_map(|p| &p.categories)
+            .collect();
+        Ok(names
+            .into_iter()
+            .map(|name| ModCategory {
+                id: name.clone(),
+                name: name.clone(),
+            })
+            .collect())
     }
 
     async fn get(&self, community: &str, id: &str) -> Result<Mod, SourceError> {
@@ -198,6 +222,32 @@ impl ModSource for Hexium {
         let readme: Readme = parse(&self.fetch(&url).await?)?;
         Ok(readme.markdown)
     }
+
+    async fn changelog(
+        &self,
+        community: &str,
+        id: &str,
+        version: &str,
+    ) -> Result<String, SourceError> {
+        let catalog = self.catalog(community).await?;
+        let Some(package) = catalog.get(id) else {
+            return self.thunderstore.changelog(community, id, version).await;
+        };
+        let url = format!(
+            "{}/api/experimental/package/{}/{}/{}/changelog/",
+            self.base_url,
+            segment(&package.owner)?,
+            segment(&package.name)?,
+            segment(version)?
+        );
+        let changelog: Changelog = parse(&self.fetch(&url).await?)?;
+        Ok(changelog.markdown.unwrap_or_default())
+    }
+}
+
+#[derive(Deserialize)]
+struct Changelog {
+    markdown: Option<String>,
 }
 
 /// A catalog and when it was downloaded.

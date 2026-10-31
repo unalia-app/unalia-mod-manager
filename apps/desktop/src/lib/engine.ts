@@ -200,8 +200,21 @@ export function hexiumCommunities(): Promise<string[]> {
 	return invoke("hexium_communities");
 }
 
-export function searchMods(community: string, text: string, sort: ModSort, page: number): Promise<Page<ModSummary>> {
-	return invoke("search_mods", { community, text, sort, page });
+/** `id`: what `searchMods` expects to filter on the category. */
+export type ModCategory = { id: string; name: string };
+
+export function modCategories(community: string): Promise<ModCategory[]> {
+	return invoke("mod_categories", { community });
+}
+
+export function searchMods(
+	community: string,
+	text: string,
+	sort: ModSort,
+	page: number,
+	category: string | null,
+): Promise<Page<ModSummary>> {
+	return invoke("search_mods", { community, text, sort, page, category });
 }
 
 /** Dependency of the latest version, ready to display (engine: get_mod). */
@@ -226,6 +239,11 @@ export function getMod(community: string, id: string): Promise<ModDetails> {
 /** Raw Markdown from the source: sanitize it before any display. */
 export function modDescription(community: string, id: string, version: string): Promise<string> {
 	return invoke("mod_description", { community, id, version });
+}
+
+/** Empty: the author wrote none. */
+export function modChangelog(community: string, id: string, version: string): Promise<string> {
+	return invoke("mod_changelog", { community, id, version });
 }
 
 // Installation (moteur : installer, state).

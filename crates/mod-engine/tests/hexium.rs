@@ -110,6 +110,46 @@ async fn search_runs_on_the_downloaded_catalog() {
 }
 
 #[tokio::test]
+async fn categories_come_from_the_catalog_and_filter_the_search() {
+    let (mut server, _ts, hexium) = source().await;
+    let _catalog = serve_catalog(&mut server).await;
+
+    let categories = hexium.categories("valheim").await.unwrap();
+    let first = categories.first().unwrap();
+    assert_eq!(first.id, first.name);
+
+    let filtered = hexium
+        .search(
+            "valheim",
+            &SearchQuery {
+                category: Some(first.id.clone()),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+    assert!(filtered.total > 0);
+    assert!(
+        filtered
+            .items
+            .iter()
+            .all(|m| m.categories.contains(&first.id))
+    );
+
+    let none = hexium
+        .search(
+            "valheim",
+            &SearchQuery {
+                category: Some("Nothing like this".into()),
+                ..Default::default()
+            },
+        )
+        .await
+        .unwrap();
+    assert_eq!(none.total, 0);
+}
+
+#[tokio::test]
 async fn get_gives_every_version_with_its_dependencies() {
     let (mut server, _ts, hexium) = source().await;
     serve_catalog(&mut server).await;

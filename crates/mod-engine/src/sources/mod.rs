@@ -111,6 +111,16 @@ pub struct SearchQuery {
     /// "popular" list (everyone depends on them) while Modalia installs
     /// them by itself as dependencies.
     pub include_libraries: bool,
+    /// Only the mods of this category (`ModCategory::id`).
+    pub category: Option<String>,
+}
+
+/// A category of a game's mods, as its source defines them.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct ModCategory {
+    /// What `SearchQuery::category` expects.
+    pub id: String,
+    pub name: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -160,11 +170,26 @@ pub trait ModSource {
         query: &SearchQuery,
     ) -> impl Future<Output = Result<Page<ModSummary>, SourceError>> + Send;
 
+    /// The categories a search can filter on.
+    fn categories(
+        &self,
+        game: &str,
+    ) -> impl Future<Output = Result<Vec<ModCategory>, SourceError>> + Send;
+
     fn get(&self, game: &str, id: &str) -> impl Future<Output = Result<Mod, SourceError>> + Send;
 
     /// Long description, in the source's raw Markdown: sanitize it before
     /// any display (never raw HTML).
     fn description(
+        &self,
+        game: &str,
+        id: &str,
+        version: &str,
+    ) -> impl Future<Output = Result<String, SourceError>> + Send;
+
+    /// What changed in each version, in raw Markdown like the description.
+    /// Empty: the author wrote none.
+    fn changelog(
         &self,
         game: &str,
         id: &str,
