@@ -30,8 +30,8 @@ use serde::Serialize;
 use super::{
     variants,
     Done, Fetched, InstallError, Installer, NotAMod, Package, Progress, Target, deploy_package,
-    files_of,
-    keep_replaced, replaced, rollback,
+    files_of, holders,
+    keep_replaced, rank_new, replaced, rollback, settle,
 };
 use crate::download;
 use crate::games::GameProfile;
@@ -123,7 +123,7 @@ impl Installer<'_, Nexus> {
                 let id = mod_key(mod_id);
                 let previous = existing.iter().find(|m| m.id == id);
                 let (ids, link) = match file {
-                    NexusFile::Link(link) => (vec![link.file_id], Some(link)),
+                    NexusFile::Link(link) => (linked_files(&info, previous, link.file_id), Some(link)),
                     NexusFile::Files { ids, link } => (ids.to_vec(), link),
                     NexusFile::Main => {
                         // Reinstall, update: the files picked last time, in
@@ -309,6 +309,7 @@ impl Installer<'_, Nexus> {
         let requested = mod_key(mod_id);
         let total = fetched.len();
         let store = self.paths.store();
+        let mut held = holders(&existing);
         let mut done: Vec<Done> = Vec::new();
         for (index, item) in fetched.into_iter().rev().enumerate() {
             on_progress(Progress::Installing {
@@ -317,7 +318,7 @@ impl Installer<'_, Nexus> {
                 name: item.package.name.clone(),
             });
             let mut previous = existing.iter().find(|m| m.id == item.package.id).cloned();
-            match deploy_package(&store, target, item, previous.as_mut(), &existing) {
+            match deploy_package(&store, target, item, previous.as_mut(), &mut held) {
                 Ok(record) => done.push(Done { record, previous }),
                 Err(error) => {
                     rollback(&store, target.game_dir, &done);
@@ -326,7 +327,7 @@ impl Installer<'_, Nexus> {
             }
         }
         let replaced = replaced(&done);
-        let records: Vec<InstalledMod> = done
+        let mut records: Vec<InstalledMod> = done
             .into_iter()
             .map(|d| {
                 let mut record = d.record;
@@ -340,20 +341,23 @@ impl Installer<'_, Nexus> {
                 record
             })
             .collect();
+        rank_new(state, &mut records, &existing)?;
         state.save_all(&records)?;
         keep_replaced(state, self.paths, &replaced)?;
+        settle(state, self.paths, target.game, target.game_dir)?;
 
         let mods = state.list(target.game)?;
-        let mut missing: Vec<Requirement> = requirements
+        let required: Vec<Requirement> = requirements
             .into_iter()
+            .filter(|r| !r.optional())
             .filter(|r| match r.mod_id {
-                Some(id) => {
-                    !frameworks.iter().any(|f| f.nexus_id == Some(id))
-                        && !mods.iter().any(|m| m.id == mod_key(id))
-                }
+                Some(id) => !frameworks.iter().any(|f| f.nexus_id == Some(id)),
                 None => r.url.is_some(),
             })
             .collect();
+        let installed = |r: &Requirement| r.mod_id.is_some_and(|id| mods.iter().any(|m| m.id == mod_key(id)));
+        let mut missing: Vec<Requirement> = required.iter().filter(|r| !installed(r)).cloned().collect();
+        let present: Vec<Requirement> = required.iter().filter(|r| installed(r)).cloned().collect();
         // A ReShade preset: ReShade comes from its website, not from Unalia.
         let preset = mods.iter().filter(|m| m.id == requested).any(|m| {
             m.placements
@@ -369,9 +373,17 @@ impl Installer<'_, Nexus> {
                     mod_id: None,
                     name: "ReShade".into(),
                     url: Some(RESHADE_URL.into()),
+                    notes: String::new(),
                 });
             }
         }
+        // Kept with the mod, installed or not: the UI shows what's missing
+        // as long as it is, and what comes later goes under this mod.
+        if let Some(mut record) = state.get(target.game, &requested)? {
+            record.needs = missing.iter().chain(&present).cloned().collect();
+            state.save(&record)?;
+        }
+        let mods = state.list(target.game)?;
         Ok(NexusInstall { mods, missing })
     }
 
@@ -755,12 +767,51 @@ pub async fn available_updates_nexus(
         }
     } else if let Ok(latest) = nexus.latest_versions(domain, &from_nexus).await {
         for m in installed {
-            if let Some(version) = parse_mod_key(&m.id).and_then(|id| latest.get(&id)) {
-                updates.extend(newer(m, version));
+            let Some(id) = parse_mod_key(&m.id) else {
+                continue;
+            };
+            let Some(update) = latest.get(&id).and_then(|version| newer(m, version)) else {
+                continue;
+            };
+            // The page's version is the main file's. Installed without it,
+            // a mod follows its own file: that is what an update installs.
+            let own = match m.files.first() {
+                Some(first) => nexus.mod_info(domain, id).await.ok().and_then(|info| {
+                    let file = info.successor(*first, None)?;
+                    (file.category != "MAIN").then(|| file_version(&info, file, None))
+                }),
+                None => None,
+            };
+            match own {
+                Some(version) => updates.extend(newer(m, &version)),
+                None => updates.push(update),
             }
         }
     }
     updates
+}
+
+/// What a site link installs. An optional file is an add-on (a patch for
+/// another mod): it joins the files already installed, and a main file
+/// keeps them, instead of replacing the mod. Another version of the same
+/// file still replaces it. The main file comes first, its version is the
+/// mod's.
+fn linked_files(info: &ModInfo, previous: Option<&InstalledMod>, linked: u32) -> Vec<u32> {
+    let category = |id: u32| info.files.iter().find(|f| f.file_id == id).map(|f| f.category.as_str());
+    let add_on = |id: u32| matches!(category(id), Some("OPTIONAL" | "MISCELLANEOUS"));
+    let joins = add_on(linked);
+    let kept = previous
+        .map(|p| p.files.as_slice())
+        .unwrap_or_default()
+        .iter()
+        .copied()
+        .filter(|old| category(*old).is_some() && !info.same_file(*old, linked))
+        .filter(|old| joins || add_on(*old));
+    if joins {
+        kept.chain([linked]).collect()
+    } else {
+        [linked].into_iter().chain(kept).collect()
+    }
 }
 
 /// Whether `latest` replaces the installed `current`. A build version

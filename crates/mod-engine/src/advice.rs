@@ -94,10 +94,6 @@ fn install(e: &InstallError) -> Advice {
         InstallError::Resolve(e) => resolve(e),
         InstallError::Source(e) => source(e),
         InstallError::State(_) => advice(true, REPORT),
-        InstallError::Conflict { other, .. } => Advice {
-            show_cause: true,
-            action: Some(format!("Turn off or remove {other} first.")),
-        },
         InstallError::NothingToInstall(_) | InstallError::NoFile(_) => advice(
             true,
             "This mod's layout isn't supported yet: copy a report from Settings > Support so it can be.",

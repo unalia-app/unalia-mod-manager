@@ -108,7 +108,7 @@ function listenOnce() {
 	);
 	// `nxm://` link from the site ("Mod Manager Download" button): the
 	// engine installs by itself, the UI learns about the end here.
-	void onNexusInstalled(({ appId, modId, name, missing, error, cancelled, website, variants }) => {
+	void onNexusInstalled(({ appId, modId, name, error, cancelled, website, variants }) => {
 		const k = key(appId, modId);
 		// Downloaded, but the archive holds several variants: the picker
 		// takes over, the install resumes from the cached archive.
@@ -153,24 +153,8 @@ function listenOnce() {
 				if (updates) s.updates.set(appId, updates.filter((u) => u.modId !== modId));
 			}),
 		);
-		const required = missing[0];
-		const them = missing.length > 1 ? "them" : "it";
-		// Outside Nexus (ReShade): its own website.
-		const from = missing.every((m) => m.modId !== null)
-			? "Nexus Mods"
-			: missing.length > 1
-				? "their websites"
-				: "its website";
-		toast({
-			title: `${name ?? "Mod"} installed`,
-			details: missing.length
-				? `It also needs ${missing.map((m) => m.name).join(", ")}. Install ${them} from ${from}.`
-				: undefined,
-			action: required?.url
-				? { label: "Open", onClick: () => void openExternal(required.url ?? "") }
-				: undefined,
-			duration: missing.length ? 10000 : undefined,
-		});
+		// What it needs stays in view next to the mod (ModNeeds).
+		toast({ title: `${name ?? "Mod"} installed`, tone: "success" });
 	});
 }
 

@@ -14,6 +14,10 @@
 //! - every placed file and every created folder is recorded, so that
 //!   removal brings the folder back exactly to its original state.
 //!
+//! Two mods on the same file are not a conflict: only one has it in the game
+//! at a time, `installer::settle` picks which, with `place_one` and
+//! `release`.
+//!
 //! A placement whose destination is an absolute path is a settings file
 //! outside the game (an Unreal game's `Engine.ini` in the player's folder):
 //! its keys are merged in (`ini`), never the file replaced, and removal
@@ -109,16 +113,7 @@ pub fn deploy(
             merges.push((PathBuf::from(&p.target), settings));
             continue;
         }
-        let target = safe_relative_path(&p.target)
-            .ok_or_else(|| DeployError::UnsafeTarget(p.target.clone()))?;
-        let (hash, size) = from
-            .hash(&p.source, &p.target)
-            .ok_or_else(|| DeployError::MissingSource(p.source.clone()))?;
-        let source = from.store.blob(hash);
-        if !source.is_file() {
-            return Err(DeployError::MissingSource(p.source.clone()));
-        }
-        let copy = is_editable(&p.target, size);
+        let (source, target, copy) = locate(from, p)?;
         // Two package files to the same destination: refuse rather than
         // lose one.
         if !targets.insert(target.clone()) || exists(&game_dir.join(&target)) {
@@ -149,6 +144,50 @@ pub fn deploy(
         }
     }
     Ok(done)
+}
+
+/// A placement's stored content, its destination in the game, and whether
+/// it must be a copy.
+fn locate(from: Source<'_>, p: &Placement) -> Result<(PathBuf, PathBuf, bool), DeployError> {
+    let target =
+        safe_relative_path(&p.target).ok_or_else(|| DeployError::UnsafeTarget(p.target.clone()))?;
+    let (hash, size) = from
+        .hash(&p.source, &p.target)
+        .ok_or_else(|| DeployError::MissingSource(p.source.clone()))?;
+    let source = from.store.blob(hash);
+    if !source.is_file() {
+        return Err(DeployError::MissingSource(p.source.clone()));
+    }
+    Ok((source, target, is_editable(&p.target, size)))
+}
+
+/// Places one file of `from`, at a destination another mod left free, and
+/// records it in `done`.
+pub fn place_one(
+    from: Source<'_>,
+    game_dir: &Path,
+    p: &Placement,
+    done: &mut Deployment,
+) -> Result<(), DeployError> {
+    let (source, target, copy) = locate(from, p)?;
+    place(game_dir, &source, &target, copy, done).map_err(|source| DeployError::Io {
+        path: p.target.clone(),
+        source,
+    })?;
+    done.files.push(p.target.clone());
+    Ok(())
+}
+
+/// Takes one file out of the game and of `done`, for another mod's to take
+/// its place.
+pub fn release(game_dir: &Path, done: &mut Deployment, file: &str) -> io::Result<()> {
+    match fs::remove_file(game_dir.join(file)) {
+        Ok(()) => {}
+        Err(e) if e.kind() == io::ErrorKind::NotFound => {}
+        Err(e) => return Err(e),
+    }
+    done.files.retain(|f| f != file);
+    Ok(())
 }
 
 /// Merges `settings` into the file at `path`, created if needed. The

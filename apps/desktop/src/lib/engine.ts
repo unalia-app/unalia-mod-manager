@@ -250,6 +250,12 @@ export type InstalledMod = {
 	files: number[];
 	/** Source it was installed from (`thunderstore`, `hexium`), empty: the game's source. */
 	source: string;
+	/** Place in the game's order: on a file several mods place, the highest wins. */
+	priority: number;
+	/** Mods whose files are in the game in place of some of this one's. */
+	coveredBy: string[];
+	/** What it still needs and Unalia can't install by itself. */
+	needs: NexusRequirement[];
 	/** Previous versions, kept to go back without downloading again, the most recent first. */
 	previousVersions: PreviousVersion[];
 };
@@ -495,7 +501,7 @@ export type NexusAccount = { name: string; premium: boolean; avatarUrl: string |
 export type NexusStatus = { account: NexusAccount | null; sso: boolean; offline: boolean };
 
 /** Nexus requirement that Modalia doesn't install by itself. */
-export type NexusRequirement = { modId: number | null; name: string; url: string | null };
+export type NexusRequirement = { modId: number | null; name: string; url: string | null; notes: string };
 
 /** End of an install started by an `nxm://` link from the site. */
 export type NexusInstalled = {

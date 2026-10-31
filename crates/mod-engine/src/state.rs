@@ -15,6 +15,7 @@ use serde::Serialize;
 use crate::deploy::Deployment;
 use crate::launch::PendingOp;
 use crate::loaders::Placement;
+use crate::sources::nexus::Requirement;
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -47,8 +48,19 @@ pub struct InstalledMod {
     /// updates come from there. Empty: the game's source (mods installed
     /// before it was recorded, Nexus games).
     pub source: String,
+    /// Place in the game's order: on a file several mods place, the highest
+    /// wins. Set by the first install and kept by updates, so an updated
+    /// mod doesn't go back over the patch made for it.
+    pub priority: i64,
+    /// Files actually in the game: not the ones another mod covers.
     #[serde(skip)]
     pub deployment: Deployment,
+    /// Mods whose files are in the game in place of some of this one's
+    /// (`installer::mark_covered`).
+    pub covered_by: Vec<String>,
+    /// What it needs and Unalia couldn't install by itself, as of its last
+    /// install (`installer::drop_installed_needs` for the UI).
+    pub needs: Vec<Requirement>,
     /// Where each storage file goes: reused as is to enable again, undo a
     /// removal or roll back. Empty for mods installed before it was added
     /// (it is computed again then).
@@ -122,6 +134,8 @@ CREATE TABLE IF NOT EXISTS installed_mods (
     package      TEXT NOT NULL DEFAULT '',
     edits        TEXT NOT NULL DEFAULT '{}',
     source       TEXT NOT NULL DEFAULT '',
+    priority     INTEGER NOT NULL DEFAULT 0,
+    needs        TEXT NOT NULL DEFAULT '[]',
     PRIMARY KEY (game, id)
 );
 
@@ -248,9 +262,9 @@ impl State {
                 "INSERT OR REPLACE INTO installed_mods
                  (game, id, name, author, version, icon_url, loader_root, enabled, explicit,
                   sha256, installed_at, store_dir, deployment, placements, files, package, edits,
-                  source)
+                  source, priority, needs)
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15,
-                         ?16, ?17, ?18)",
+                         ?16, ?17, ?18, ?19, ?20)",
                 params![
                     m.game,
                     m.id,
@@ -270,6 +284,8 @@ impl State {
                     m.package,
                     serde_json::to_string(&m.edits)?,
                     m.source,
+                    m.priority,
+                    serde_json::to_string(&m.needs)?,
                 ],
             )?;
         }
@@ -279,6 +295,15 @@ impl State {
 
     pub fn save(&mut self, m: &InstalledMod) -> Result<(), StateError> {
         self.save_all(std::slice::from_ref(m))
+    }
+
+    /// Frees place `from` in the game's order, for a mod to go there.
+    pub fn make_room(&mut self, game: &str, from: i64) -> Result<(), StateError> {
+        self.conn.execute(
+            "UPDATE installed_mods SET priority = priority + 1 WHERE game = ?1 AND priority >= ?2",
+            params![game, from],
+        )?;
+        Ok(())
     }
 
     /// The mod storage moved: rewrites the recorded paths.
@@ -506,6 +531,7 @@ struct Row {
     placements: String,
     files: String,
     edits: String,
+    needs: String,
 }
 
 impl Row {
@@ -515,25 +541,28 @@ impl Row {
         m.placements = serde_json::from_str(&self.placements)?;
         m.files = serde_json::from_str(&self.files)?;
         m.edits = serde_json::from_str(&self.edits)?;
+        m.needs = serde_json::from_str(&self.needs)?;
         Ok(m)
     }
 }
 
 /// Databases created by a previous version: columns added since.
 fn migrate(conn: &Connection) -> rusqlite::Result<()> {
-    for (column, default) in [
-        ("placements", "'[]'"),
-        ("files", "'[]'"),
-        ("package", "''"),
-        ("edits", "'{}'"),
-        ("source", "''"),
+    for (column, kind, default) in [
+        ("placements", "TEXT", "'[]'"),
+        ("files", "TEXT", "'[]'"),
+        ("package", "TEXT", "''"),
+        ("edits", "TEXT", "'{}'"),
+        ("source", "TEXT", "''"),
+        ("priority", "INTEGER", "0"),
+        ("needs", "TEXT", "'[]'"),
     ] {
         let present = conn
             .prepare("SELECT 1 FROM pragma_table_info('installed_mods') WHERE name = ?1")?
             .exists([column])?;
         if !present {
             conn.execute_batch(&format!(
-                "ALTER TABLE installed_mods ADD COLUMN {column} TEXT NOT NULL DEFAULT {default}"
+                "ALTER TABLE installed_mods ADD COLUMN {column} {kind} NOT NULL DEFAULT {default}"
             ))?;
         }
     }
@@ -557,6 +586,9 @@ fn row(r: &rusqlite::Row<'_>) -> rusqlite::Result<Row> {
             package: r.get("package")?,
             legacy_store_dir: r.get("store_dir")?,
             source: r.get("source")?,
+            priority: r.get("priority")?,
+            covered_by: Vec::new(),
+            needs: Vec::new(),
             files: Vec::new(),
             deployment: Deployment::default(),
             placements: Vec::new(),
@@ -567,5 +599,6 @@ fn row(r: &rusqlite::Row<'_>) -> rusqlite::Result<Row> {
         placements: r.get("placements")?,
         files: r.get("files")?,
         edits: r.get("edits")?,
+        needs: r.get("needs")?,
     })
 }

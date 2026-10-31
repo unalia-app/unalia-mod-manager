@@ -192,6 +192,12 @@ impl ModInfo {
         list
     }
 
+    /// Are these two versions of the same file?
+    pub fn same_file(&self, a: u32, b: u32) -> bool {
+        let name = |id: u32| self.files.iter().find(|f| f.file_id == id).map(|f| &f.name);
+        a == b || name(a).zip(name(b)).is_some_and(|(a, b)| same_name(a, b))
+    }
+
     /// The same file today (update, reinstall), or as it was before
     /// `before`: the most recent one with the same name, version aside. No
     /// file with that name anymore: this one as is, unless the author moved
@@ -288,13 +294,28 @@ fn without_version(name: &str) -> String {
 }
 
 /// Requirement declared on Nexus.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct Requirement {
     /// Nexus mod of the same game, else `None` (external link).
     pub mod_id: Option<u32>,
     pub name: String,
     pub url: Option<String>,
+    /// The author's note (`MANDATORY`, `Optional - to view logs`).
+    #[serde(default)]
+    pub notes: String,
+}
+
+impl Requirement {
+    /// Authors also list on Nexus what merely goes well with their mod, and
+    /// say so in the note. Without a note, it is required. `Optional -
+    /// MANDATORY for the X addon` is optional: only that add-on needs it, and
+    /// it requires it in turn.
+    pub fn optional(&self) -> bool {
+        const WORDS: [&str; 6] = ["optional", "addon", "add-on", "recommended", "not required", "not needed"];
+        let notes = self.notes.to_ascii_lowercase();
+        WORDS.iter().any(|word| notes.contains(word))
+    }
 }
 
 /// Sent with every request, as the API acceptable use policy asks: the same
@@ -527,7 +548,7 @@ impl Nexus {
                     "query($ids: [CompositeDomainWithIdInput!]!) {{
                         legacyModsByDomain(ids: $ids) {{ nodes {{ {MOD_FIELDS} gameId description
                             modRequirements {{ nexusRequirements {{ nodes {{
-                                modId modName gameId externalRequirement url
+                                modId modName gameId externalRequirement url notes
                             }} }} }}
                         }} }}
                     }}"
@@ -926,27 +947,6 @@ pub fn bbcode_to_markdown(input: &str) -> String {
     out
 }
 
-// ---------------------------------------------------------------- responses
-
-#[derive(Deserialize)]
-struct GraphqlResponse<T> {
-    data: Option<T>,
-    #[serde(default)]
-    errors: Vec<GraphqlError>,
-}
-
-#[derive(Deserialize)]
-struct GraphqlError {
-    message: String,
-}
-
-#[derive(Deserialize)]
-struct GameNodes {
-    nodes: Vec<GameNode>,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
 /// Decodes the HTML entities of a code block, which Markdown shows as they
 /// are: Nexus writes `\` as `&#92;`. The rest of a description keeps them,
 /// Markdown decodes them there. One pass: `&amp;lt;` gives `&lt;`.
@@ -992,6 +992,27 @@ fn entity(name: &str) -> Option<char> {
     }
 }
 
+// ---------------------------------------------------------------- responses
+
+#[derive(Deserialize)]
+struct GraphqlResponse<T> {
+    data: Option<T>,
+    #[serde(default)]
+    errors: Vec<GraphqlError>,
+}
+
+#[derive(Deserialize)]
+struct GraphqlError {
+    message: String,
+}
+
+#[derive(Deserialize)]
+struct GameNodes {
+    nodes: Vec<GameNode>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 struct GameNode {
     id: u32,
     name: String,
@@ -1093,6 +1114,7 @@ impl ModNode {
                         .flatten(),
                     name: r.mod_name.clone().unwrap_or_default(),
                     url: r.url.clone().filter(|u| u.starts_with("https://")),
+                    notes: r.notes.clone().unwrap_or_default(),
                 }
             })
             .collect()
@@ -1124,6 +1146,7 @@ struct RawRequirement {
     #[serde(default)]
     external_requirement: bool,
     url: Option<String>,
+    notes: Option<String>,
 }
 
 #[derive(Deserialize)]
@@ -1249,6 +1272,21 @@ mod tests {
     }
 
     #[test]
+    fn code_blocks_show_entities_decoded() {
+        let md = bbcode_to_markdown(
+            "See &#92; [code]%LOCALAPPDATA%&#92;ProjectPBZ &lt;x&gt; [b]raw[/b] &amp;lt; &#x5C; a & b &nope;[/code]",
+        );
+        assert!(
+            md.contains("```\n%LOCALAPPDATA%\\ProjectPBZ <x> [b]raw[/b] &lt; \\ a & b &nope;\n```"),
+            "{md}"
+        );
+        // Outside a code block, Markdown decodes them by itself.
+        assert!(md.starts_with("See &#92; "), "{md}");
+        // Never closed: as before.
+        assert_eq!(bbcode_to_markdown("[code]a&#92;"), "\n```\na&#92;");
+    }
+
+    #[test]
     fn finds_donation_links() {
         assert_eq!(
             donation_link_in(
@@ -1271,21 +1309,6 @@ mod tests {
     fn formats_dates() {
         assert_eq!(iso_date(0), "1970-01-01T00:00:00Z");
         assert_eq!(iso_date(1_792_493_526), "2026-10-20T10:52:06Z");
-    #[test]
-    fn code_blocks_show_entities_decoded() {
-        let md = bbcode_to_markdown(
-            "See &#92; [code]%LOCALAPPDATA%&#92;ProjectPBZ &lt;x&gt; [b]raw[/b] &amp;lt; &#x5C; a & b &nope;[/code]",
-        );
-        assert!(
-            md.contains("```\n%LOCALAPPDATA%\\ProjectPBZ <x> [b]raw[/b] &lt; \\ a & b &nope;\n```"),
-            "{md}"
-        );
-        // Outside a code block, Markdown decodes them by itself.
-        assert!(md.starts_with("See &#92; "), "{md}");
-        // Never closed: as before.
-        assert_eq!(bbcode_to_markdown("[code]a&#92;"), "\n```\na&#92;");
-    }
-
     }
 
     #[test]

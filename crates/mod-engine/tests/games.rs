@@ -341,6 +341,9 @@ fn store_paths_can_be_rebased_after_a_move() {
         legacy_store_dir: dir.into(),
         files: Vec::new(),
         source: String::new(),
+        priority: 0,
+        covered_by: Vec::new(),
+        needs: Vec::new(),
         deployment: Deployment::default(),
         placements: Vec::new(),
         edits: Default::default(),
@@ -385,6 +388,30 @@ fn locating_a_game_tolerates_its_parent_folder() {
     fs::create_dir_all(games.path().join("LC")).unwrap();
     fs::write(games.path().join("LC/Lethal Company.exe"), "").unwrap();
     assert!(catalog.locate_game(games.path()).is_none());
+}
+
+#[test]
+fn a_database_from_before_the_game_order_still_opens() {
+    use mod_engine::state::State;
+    let dir = tempfile::tempdir().unwrap();
+    let db = dir.path().join("modalia.db");
+    drop(State::open(&db).unwrap());
+    let old = rusqlite::Connection::open(&db).unwrap();
+    old.execute_batch(
+        r#"ALTER TABLE installed_mods DROP COLUMN priority;
+           ALTER TABLE installed_mods DROP COLUMN needs;
+           INSERT INTO installed_mods
+           (game, id, name, author, version, enabled, explicit, sha256, installed_at, store_dir, deployment)
+           VALUES ('steam:1', 'a-A', 'A', 'a', '1.0', 1, 1, '', 0, '',
+                   '{"files":[],"created_dirs":[],"copied":0}');"#,
+    )
+    .unwrap();
+    drop(old);
+
+    let mods = State::open(&db).unwrap().list("steam:1").unwrap();
+    assert_eq!(mods.len(), 1);
+    assert_eq!(mods[0].priority, 0);
+    assert!(mods[0].needs.is_empty());
 }
 
 #[test]

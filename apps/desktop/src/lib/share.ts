@@ -14,10 +14,14 @@ export type SharedList = { game: string; gameName: string; mods: SharedMod[] };
 
 const PREFIX = "unalia-mods:";
 
-/** Turned on, asked for by the player: what a friend has to install. */
+/**
+ * Turned on, asked for by the player: what a friend has to install. In the
+ * game's order: installed in the same order, a patch stays over its mod.
+ */
 export function modsToShare(installed: InstalledMod[]): SharedMod[] {
 	return installed
 		.filter((m) => m.enabled && m.explicit && m.loaderRoot === null)
+		.toSorted((a, b) => a.priority - b.priority)
 		.map((m) => ({ id: m.id, name: m.name, version: m.version, source: m.source, files: m.files }));
 }
 

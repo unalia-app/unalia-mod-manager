@@ -410,11 +410,15 @@ pub async fn installed_mods(
     mods: State<'_, Mods>,
     app_id: u32,
 ) -> Result<Vec<InstalledMod>, String> {
-    mods.state
+    let mut list = mods
+        .state
         .lock()
         .await
         .list(&game_key(app_id))
-        .map_err(crate::support::logged)
+        .map_err(crate::support::logged)?;
+    installer::mark_covered(&mut list);
+    installer::drop_installed_needs(&mut list);
+    Ok(list)
 }
 
 /// Updates available for the game's mods. Nothing is installed: the user

@@ -9,6 +9,7 @@ use std::path::{Path, PathBuf};
 
 use mockito::{Matcher, ServerGuard};
 use mod_engine::games::{GameCatalog, GameProfile};
+use mod_engine::installer;
 use mod_engine::installer::{
     InstallError, Installer, NexusFile, NexusInstall, NotAMod, Paths, Target, available_updates_nexus,
 };
@@ -156,13 +157,29 @@ impl World {
         requirements: &[(u32, &str)],
         files: &[(&str, &[u8])],
     ) {
+        self.publish_with(mod_id, name, version, requirements, files, None).await;
+    }
+
+    /// With an optional file next to the main one: its id, name, version
+    /// and content.
+    async fn publish_with(
+        &mut self,
+        mod_id: u32,
+        name: &str,
+        version: &str,
+        requirements: &[(u32, &str)],
+        files: &[(&str, &[u8])],
+        optional: Option<(u32, &str, &str, Files<'_>)>,
+    ) {
         let file_id = mod_id * 10;
         let archive = zip_bytes(files);
         let requirements: Vec<_> = requirements
             .iter()
             .map(|(id, name)| {
+                // `Name|note`: what the author says about it.
+                let (name, notes) = name.split_once('|').unwrap_or((name, ""));
                 json!({ "modId": id.to_string(), "modName": name, "gameId": "3333",
-                        "externalRequirement": false, "url": "" })
+                        "externalRequirement": false, "url": "", "notes": notes })
             })
             .collect();
         self.graphql(
@@ -181,20 +198,33 @@ impl World {
             }] } }),
         )
         .await;
+        let mut listed = vec![
+            json!({ "fileId": file_id - 1, "name": name, "version": "0.9", "category": "OLD_VERSION",
+                    "primary": 0, "sizeInBytes": "10", "date": 1_700_000_000 }),
+            json!({ "fileId": file_id, "name": name, "version": version, "category": "MAIN",
+                    "primary": 1, "sizeInBytes": archive.len().to_string(), "date": 1_790_000_000 }),
+        ];
+        if let Some((optional_id, optional_name, optional_version, content)) = optional {
+            let bytes = zip_bytes(&content);
+            listed.push(json!({ "fileId": optional_id, "name": optional_name, "version": optional_version,
+                                "category": "OPTIONAL", "primary": 0,
+                                "sizeInBytes": bytes.len().to_string(), "date": 1_790_000_100 }));
+            self.serve(mod_id, optional_id, bytes).await;
+        }
         self.graphql(
             vec![
                 Matcher::Regex("modFiles".into()),
                 Matcher::Regex(format!(r#""mod":"{mod_id}""#)),
             ],
-            json!({ "modFiles": [
-                { "fileId": file_id - 1, "name": name, "version": "0.9", "category": "OLD_VERSION",
-                  "primary": 0, "sizeInBytes": "10", "date": 1_700_000_000 },
-                { "fileId": file_id, "name": name, "version": version, "category": "MAIN",
-                  "primary": 1, "sizeInBytes": archive.len().to_string(), "date": 1_790_000_000 }
-            ] }),
+            json!({ "modFiles": listed }),
         )
         .await;
-        let download = format!("/cdn/{mod_id}.zip");
+        self.serve(mod_id, file_id, archive).await;
+    }
+
+    /// A Nexus file's download: only with the key of an nxm:// link.
+    async fn serve(&mut self, mod_id: u32, file_id: u32, archive: Vec<u8>) {
+        let download = format!("/cdn/{file_id}.zip");
         // Free account: the link is only given with the key of the nxm:// link.
         self.server
             .mock(
@@ -438,35 +468,261 @@ async fn frameworks_install_from_github_without_the_website() {
     assert_eq!(ids, [("nexus-2380", false), ("nexus-4198", true)]);
 }
 
+const HUD: &str = "r6/scripts/CoolHud/hud.reds";
+const REMIX: &str = "nexus-6000";
+
+/// Cool HUD, then a patch that replaces one of its files.
+async fn hud_and_its_patch() -> World {
+    let mut w = World::new().await;
+    publish_cool_hud(&mut w).await;
+    w.install(COOL_HUD, NexusFile::Link(&link(COOL_HUD)))
+        .await
+        .unwrap();
+    w.publish(6000, "HUD Remix", "2.0", &[], &[(HUD, b"remix")]).await;
+    w.install(6000, NexusFile::Link(&link(6000))).await.unwrap();
+    w
+}
+
+fn hud_file(w: &World) -> Vec<u8> {
+    fs::read(w.game.join(HUD)).unwrap()
+}
+
+fn turn(w: &mut World, id: &str, enabled: bool) {
+    installer::set_enabled(&mut w.state, &w.paths, GAME, &w.game, id, enabled).unwrap();
+}
+
 #[tokio::test]
-async fn a_conflicting_mod_names_the_mod_it_collides_with() {
+async fn a_patch_replaces_the_file_of_its_mod_and_gives_it_back() {
     let mut w = World::new().await;
     publish_cool_hud(&mut w).await;
     w.install(COOL_HUD, NexusFile::Link(&link(COOL_HUD)))
         .await
         .unwrap();
     let before = snapshot(&w.game);
+    w.publish(6000, "HUD Remix", "2.0", &[], &[(HUD, b"remix")]).await;
 
+    w.install(6000, NexusFile::Link(&link(6000))).await.unwrap();
+    assert_eq!(hud_file(&w), b"remix");
+    let mut mods = w.state.list(GAME).unwrap();
+    installer::mark_covered(&mut mods);
+    let hud = mods.iter().find(|m| m.id == "nexus-5000").unwrap();
+    assert_eq!(hud.covered_by, ["HUD Remix"]);
+    assert!(!hud.deployment.files.iter().any(|f| f == HUD));
+    assert!(installer::missing(&w.state, GAME, &w.game).unwrap().is_empty());
+
+    // Off, its mod's file is back. On again, it wins again.
+    turn(&mut w, REMIX, false);
+    assert_eq!(snapshot(&w.game), before);
+    turn(&mut w, REMIX, true);
+    assert_eq!(hud_file(&w), b"remix");
+
+    // Removed then undone: the same. Removed for good: nothing left of it.
+    let removed = installer::uninstall(&mut w.state, &w.paths, GAME, &w.game, REMIX).unwrap();
+    assert_eq!(snapshot(&w.game), before);
+    installer::restore(&mut w.state, &w.paths, &w.game, removed).unwrap();
+    assert_eq!(hud_file(&w), b"remix");
+    installer::uninstall(&mut w.state, &w.paths, GAME, &w.game, REMIX).unwrap();
+    assert_eq!(snapshot(&w.game), before);
+}
+
+#[tokio::test]
+async fn the_mod_under_a_patch_stays_under_it() {
+    let mut w = hud_and_its_patch().await;
+
+    // Updated, turned off and on: it doesn't go back over the patch.
+    w.install(COOL_HUD, NexusFile::Link(&link(COOL_HUD)))
+        .await
+        .unwrap();
+    assert_eq!(hud_file(&w), b"remix");
+    turn(&mut w, "nexus-5000", false);
+    assert_eq!(hud_file(&w), b"remix");
+    assert!(!w.game.join("archive/pc/mod/coolhud.archive").is_file());
+    turn(&mut w, "nexus-5000", true);
+    assert_eq!(hud_file(&w), b"remix");
+    assert!(w.game.join("archive/pc/mod/coolhud.archive").is_file());
+
+    // Files gone from the game: each mod gets its own back.
+    fs::remove_file(w.game.join(HUD)).unwrap();
+    let missing = installer::missing(&w.state, GAME, &w.game).unwrap();
+    assert_eq!(missing.iter().map(|m| m.id.as_str()).collect::<Vec<_>>(), [REMIX]);
+    installer::put_back(&mut w.state, &w.paths, GAME, &w.game, REMIX).unwrap();
+    assert_eq!(hud_file(&w), b"remix");
+
+    // Removing the mod leaves the patch's file.
+    installer::uninstall(&mut w.state, &w.paths, GAME, &w.game, "nexus-5000").unwrap();
+    assert_eq!(hud_file(&w), b"remix");
+    installer::uninstall(&mut w.state, &w.paths, GAME, &w.game, REMIX).unwrap();
+    assert!(!w.game.join(HUD).exists());
+}
+
+#[tokio::test]
+async fn a_file_shared_by_three_mods_goes_down_the_order() {
+    let mut w = hud_and_its_patch().await;
+    w.publish(6001, "HUD Fix", "1.0", &[], &[(HUD, b"fix")]).await;
+    w.install(6001, NexusFile::Link(&link(6001))).await.unwrap();
+    assert_eq!(hud_file(&w), b"fix");
+
+    installer::uninstall(&mut w.state, &w.paths, GAME, &w.game, "nexus-6001").unwrap();
+    assert_eq!(hud_file(&w), b"remix");
+    installer::uninstall(&mut w.state, &w.paths, GAME, &w.game, REMIX).unwrap();
+    assert_eq!(hud_file(&w), b"hud");
+}
+
+#[tokio::test]
+async fn a_mod_can_ship_a_file_of_the_framework_installed_with_it() {
+    let mut w = World::new().await;
+    w.publish_frameworks().await;
     w.publish(
-        6000,
-        "HUD Remix",
-        "2.0",
-        &[],
-        &[("r6/scripts/CoolHud/hud.reds", b"remix")],
+        6002,
+        "Bundled",
+        "1.0",
+        &[(2380, "RED4ext")],
+        &[("red4ext/RED4ext.dll", b"bundled"), ("r6/scripts/Bundled/a.reds", b"a")],
     )
     .await;
-    let err = w
-        .install(6000, NexusFile::Link(&link(6000)))
-        .await
-        .unwrap_err();
-    match err {
-        InstallError::Conflict { path, other } => {
-            assert_eq!(path, "r6/scripts/CoolHud/hud.reds");
-            assert_eq!(other, "Cool HUD");
-        }
-        other => panic!("{other:?}"),
-    }
-    assert_eq!(snapshot(&w.game), before);
+
+    w.install(6002, NexusFile::Link(&link(6002))).await.unwrap();
+    assert_eq!(fs::read(w.game.join("red4ext/RED4ext.dll")).unwrap(), b"bundled");
+
+    installer::uninstall(&mut w.state, &w.paths, GAME, &w.game, "nexus-6002").unwrap();
+    assert_eq!(fs::read(w.game.join("red4ext/RED4ext.dll")).unwrap(), b"r4e");
+}
+
+const PATCHED: u32 = 7000;
+const PATCH_FILE: u32 = 70001;
+
+/// A mod and an optional patch of its own, like Factions Evolved's.
+async fn publish_patched(w: &mut World) {
+    w.publish_with(
+        PATCHED,
+        "Base",
+        "3.01",
+        &[],
+        &[("r6/scripts/Base/base.reds", b"base"), ("r6/scripts/Base/shared.reds", b"base")],
+        Some((PATCH_FILE, "Base Patch", "1.5l", vec![("r6/scripts/Base/shared.reds", b"patch")])),
+    )
+    .await;
+}
+
+fn patch_link() -> NxmLink {
+    NxmLink::parse(&format!(
+        "nxm://cyberpunk2077/mods/{PATCHED}/files/{PATCH_FILE}?key=site-key&expires=1792500000&user_id=1"
+    ))
+    .unwrap()
+}
+
+fn assert_patched(w: &World) {
+    assert_eq!(fs::read(w.game.join("r6/scripts/Base/base.reds")).unwrap(), b"base");
+    assert_eq!(fs::read(w.game.join("r6/scripts/Base/shared.reds")).unwrap(), b"patch");
+    let m = w.state.get(GAME, "nexus-7000").unwrap().unwrap();
+    assert_eq!(m.files, [PATCHED * 10, PATCH_FILE]);
+    assert_eq!(m.version, "3.01");
+}
+
+#[tokio::test]
+async fn an_optional_file_joins_the_mod_instead_of_replacing_it() {
+    let mut w = World::new().await;
+    publish_patched(&mut w).await;
+    w.install(PATCHED, NexusFile::Link(&link(PATCHED))).await.unwrap();
+    w.install(PATCHED, NexusFile::Link(&patch_link())).await.unwrap();
+    assert_patched(&w);
+
+    // The same link again: still both.
+    w.install(PATCHED, NexusFile::Link(&patch_link())).await.unwrap();
+    assert_patched(&w);
+}
+
+#[tokio::test]
+async fn the_main_file_keeps_an_optional_file_installed_first() {
+    let mut w = World::new().await;
+    publish_patched(&mut w).await;
+    w.install(PATCHED, NexusFile::Link(&patch_link())).await.unwrap();
+    w.install(PATCHED, NexusFile::Link(&link(PATCHED))).await.unwrap();
+    assert_patched(&w);
+}
+
+#[tokio::test]
+async fn a_mod_without_its_main_file_is_offered_no_update_it_would_not_install() {
+    let mut w = World::new().await;
+    publish_patched(&mut w).await;
+    w.install(PATCHED, NexusFile::Link(&patch_link())).await.unwrap();
+    w.graphql(
+        vec![
+            Matcher::Regex(r"nodes \{ modId version \}".into()),
+            mod_id_matcher(PATCHED),
+        ],
+        json!({ "legacyModsByDomain": { "nodes": [{ "modId": PATCHED, "version": "3.01" }] } }),
+    )
+    .await;
+
+    let installed = w.state.list(GAME).unwrap();
+    assert_eq!(installed[0].version, "1.5l");
+    let updates = available_updates_nexus(&w.nexus, &w.github, &w.profile, &installed, None).await;
+    assert!(updates.is_empty(), "{updates:?}");
+}
+
+#[tokio::test]
+async fn a_mod_remembers_what_it_needs_until_it_is_installed() {
+    let mut w = World::new().await;
+    w.publish(
+        6005,
+        "Needy",
+        "1.0",
+        &[
+            (6006, "Helper|MANDATORY"),
+            (6007, "Logs|OPTIONAL: (to view logs)"),
+            (6008, "Addon|ADDON: modded vehicle list"),
+            (6009, "Other|Optional - MANDATORY for the Other addon"),
+            (6010, "Nice|Not required to function"),
+        ],
+        &[("r6/scripts/Needy/a.reds", b"a"), ("r6/scripts/Helper/shared.reds", b"needy")],
+    )
+    .await;
+    let installed = w.install(6005, NexusFile::Link(&link(6005))).await.unwrap();
+    assert_eq!(installed.missing.iter().map(|r| r.name.as_str()).collect::<Vec<_>>(), ["Helper"]);
+
+    let needs = |w: &World| {
+        let mut mods = w.state.list(GAME).unwrap();
+        installer::drop_installed_needs(&mut mods);
+        let needy = mods.into_iter().find(|m| m.id == "nexus-6005").unwrap();
+        needy.needs.into_iter().map(|r| r.name).collect::<Vec<_>>()
+    };
+    assert_eq!(needs(&w), ["Helper"]);
+
+    w.publish(6006, "Helper", "1.0", &[], &[("r6/scripts/Helper/shared.reds", b"helper")])
+        .await;
+    w.install(6006, NexusFile::Link(&link(6006))).await.unwrap();
+    assert!(needs(&w).is_empty());
+
+    // Installed after the mod that requires it, it still goes under it: the
+    // mod's replacement of its file stays.
+    assert_eq!(fs::read(w.game.join("r6/scripts/Helper/shared.reds")).unwrap(), b"needy");
+    let needy = w.state.get(GAME, "nexus-6005").unwrap().unwrap();
+    let helper = w.state.get(GAME, "nexus-6006").unwrap().unwrap();
+    assert!(helper.priority < needy.priority);
+
+    // Reinstalled, the mod remembers it, so a later reinstall of what it
+    // requires goes under it again.
+    w.install(6005, NexusFile::Link(&link(6005))).await.unwrap();
+    installer::uninstall(&mut w.state, &w.paths, GAME, &w.game, "nexus-6006").unwrap();
+    w.install(6006, NexusFile::Link(&link(6006))).await.unwrap();
+    assert_eq!(fs::read(w.game.join("r6/scripts/Helper/shared.reds")).unwrap(), b"needy");
+}
+
+#[tokio::test]
+async fn a_covered_config_keeps_the_players_edits() {
+    let config = "r6/config/settings/remix.json";
+    let mut w = World::new().await;
+    w.publish(6003, "Base", "1.0", &[], &[(config, b"{\"a\":1}")]).await;
+    w.install(6003, NexusFile::Link(&link(6003))).await.unwrap();
+    fs::write(w.game.join(config), "{\"a\":2}").unwrap();
+
+    w.publish(6004, "Patch", "1.0", &[], &[(config, b"{\"a\":3}")]).await;
+    w.install(6004, NexusFile::Link(&link(6004))).await.unwrap();
+    assert_eq!(fs::read(w.game.join(config)).unwrap(), b"{\"a\":3}");
+
+    installer::uninstall(&mut w.state, &w.paths, GAME, &w.game, "nexus-6004").unwrap();
+    assert_eq!(fs::read(w.game.join(config)).unwrap(), b"{\"a\":2}");
 }
 
 #[tokio::test]

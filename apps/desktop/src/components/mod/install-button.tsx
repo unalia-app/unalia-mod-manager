@@ -4,6 +4,7 @@ import { Button, cn } from "@modalia/ui";
 import { ArrowUp, Check, Clock, Download, ExternalLink, RotateCw, Trash2, X } from "lucide-react";
 import { useState } from "react";
 
+import { ModNeeds } from "@/components/mod/mod-needs";
 import { uninstallWithUndo } from "@/components/mod/uninstall";
 import { type InstallProgress, cancelPending } from "@/lib/engine";
 import { bytes, timeLeft } from "@/lib/format";
@@ -158,7 +159,12 @@ export function InstallButton({
 	}
 
 	if (installed) {
-		return <InstalledButton appId={appId} modId={modId} modName={modName} version={installed.version} enabled={installed.enabled} />;
+		return (
+			<div className="flex max-w-80 flex-col items-end gap-2">
+				<InstalledButton appId={appId} modId={modId} modName={modName} version={installed.version} enabled={installed.enabled} />
+				<ModNeeds mod={installed} appId={appId} className="justify-end" />
+			</div>
+		);
 	}
 
 	if (active?.status === "error") {

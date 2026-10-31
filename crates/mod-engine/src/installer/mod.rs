@@ -10,7 +10,8 @@ mod variants;
 
 pub use nexus::{NexusFile, NexusInstall, available_updates_nexus};
 
-use std::collections::HashSet;
+use std::collections::hash_map::Entry;
+use std::collections::{BTreeSet, HashMap, HashSet};
 use std::fs;
 use std::io;
 use std::path::{Component, Path, PathBuf};
@@ -28,6 +29,7 @@ use crate::loaders::bepinex::BepInEx;
 use crate::loaders::rules::RulesLoader;
 use crate::loaders::{Loader, PackageKind, Placement};
 use crate::resolver::{self, Installed, PlanStep, ResolveError};
+use crate::sources::nexus::mod_key;
 use crate::sources::{ModSource, SourceError};
 use crate::state::{InstalledMod, State, StateError};
 use crate::store::{Freed, Manifest, Store};
@@ -156,8 +158,6 @@ pub enum InstallError {
         #[source]
         source: DeployError,
     },
-    #[error("{path} is already provided by {other}")]
-    Conflict { path: String, other: String },
     #[error("Unalia can't tell where the files of {0} go")]
     NothingToInstall(String),
     /// A Nexus file that is something else than a mod: nothing to place.
@@ -282,6 +282,7 @@ impl<S: ModSource> Installer<'_, S> {
         let plan = self.plan(&installed_of(&existing), target, mod_id).await?;
 
         let total = plan.steps.len();
+        let mut held = holders(&existing);
         let mut done: Vec<Done> = Vec::new();
         for (index, step) in plan.steps.iter().enumerate() {
             if let Err(error) = self.check_cancel() {
@@ -296,7 +297,7 @@ impl<S: ModSource> Installer<'_, S> {
                     index,
                     total,
                     previous.as_mut(),
-                    &existing,
+                    &mut held,
                     &mut on_progress,
                 )
                 .await
@@ -313,7 +314,7 @@ impl<S: ModSource> Installer<'_, S> {
         }
 
         let replaced = replaced(&done);
-        let records: Vec<InstalledMod> = done
+        let mut records: Vec<InstalledMod> = done
             .into_iter()
             .map(|d| {
                 let mut record = d.record;
@@ -327,8 +328,10 @@ impl<S: ModSource> Installer<'_, S> {
                 record
             })
             .collect();
+        rank_new(state, &mut records, &existing)?;
         state.save_all(&records)?;
         keep_replaced(state, self.paths, &replaced)?;
+        settle(state, self.paths, target.game, target.game_dir)?;
         Ok(state.list(target.game)?)
     }
 
@@ -383,7 +386,7 @@ impl<S: ModSource> Installer<'_, S> {
         index: usize,
         total: usize,
         previous: Option<&mut InstalledMod>,
-        existing: &[InstalledMod],
+        held: &mut Holders,
         on_progress: &mut impl FnMut(Progress),
     ) -> Result<InstalledMod, InstallError> {
         let package = Package::of_step(step);
@@ -405,7 +408,7 @@ impl<S: ModSource> Installer<'_, S> {
         };
         // Last chance to cancel: after this, the game is modified.
         self.check_cancel()?;
-        deploy_package(&self.paths.store(), target, fetched, previous, existing)
+        deploy_package(&self.paths.store(), target, fetched, previous, held)
     }
 
     /// For a package already cached, no network access.
@@ -608,13 +611,14 @@ impl<S: ModSource> Installer<'_, S> {
 
 /// Places a stored package into the game and returns its record. An update
 /// first removes the old version, whose edited configs are kept in
-/// `previous`; on failure, it is put back.
+/// `previous`; on failure, it is put back. The files `held` by another mod
+/// are left to `settle`.
 fn deploy_package(
     store: &Store,
     target: &Target<'_>,
     fetched: Fetched,
     mut previous: Option<&mut InstalledMod>,
-    existing: &[InstalledMod],
+    held: &mut Holders,
 ) -> Result<InstalledMod, InstallError> {
     let Fetched {
         package,
@@ -623,9 +627,7 @@ fn deploy_package(
         placements,
         loader_root,
     } = fetched;
-    if let Some((path, other)) = owned_elsewhere(&placements, existing, &package.id) {
-        return Err(InstallError::Conflict { path, other });
-    }
+    let mine = free(&placements, held, &package.id);
     if let Some(old) = previous.as_deref_mut() {
         take_down(store, target.game_dir, old, false);
     }
@@ -640,7 +642,7 @@ fn deploy_package(
         manifest: &manifest,
         edits: &edits,
     };
-    let deployment = match deploy::deploy(from, target.game_dir, &placements) {
+    let deployment = match deploy::deploy(from, target.game_dir, &mine) {
         Ok(d) => d,
         Err(source) => {
             if let Some(old) = previous.as_deref() {
@@ -652,6 +654,9 @@ fn deploy_package(
             });
         }
     };
+    for file in &deployment.files {
+        held.insert(file.to_ascii_lowercase(), package.id.clone());
+    }
     Ok(InstalledMod {
         game: target.game.to_owned(),
         id: package.id,
@@ -668,6 +673,9 @@ fn deploy_package(
         legacy_store_dir: String::new(),
         files: package.file_id.into_iter().collect(),
         source: String::new(),
+        priority: previous.as_deref().map_or(0, |old| old.priority),
+        covered_by: Vec::new(),
+        needs: Vec::new(),
         deployment,
         placements,
         edits,
@@ -683,19 +691,24 @@ fn manifest_of(store: &Store, m: &InstalledMod) -> Result<Manifest, InstallError
     })
 }
 
-/// Places a recorded mod, with its edited configs.
-fn put_up(store: &Store, game_dir: &Path, m: &InstalledMod) -> Result<Deployment, InstallError> {
+/// Places a recorded mod, with its edited configs, except the files `held`
+/// by another mod: `settle` decides those.
+fn put_up(
+    store: &Store,
+    game_dir: &Path,
+    m: &InstalledMod,
+    held: &Holders,
+) -> Result<Deployment, InstallError> {
     let manifest = manifest_of(store, m)?;
     let from = Source {
         store,
         manifest: &manifest,
         edits: &m.edits,
     };
-    deploy::deploy(from, game_dir, &placements_of(m, &manifest)).map_err(|source| {
-        InstallError::Deploy {
-            name: m.name.clone(),
-            source,
-        }
+    let mine = free(&placements_of(m, &manifest), held, &m.id);
+    deploy::deploy(from, game_dir, &mine).map_err(|source| InstallError::Deploy {
+        name: m.name.clone(),
+        source,
     })
 }
 
@@ -708,11 +721,22 @@ fn take_down(store: &Store, game_dir: &Path, m: &mut InstalledMod, purge_dirs: b
             manifest: &manifest,
             edits: &m.edits,
         };
-        if let Ok(edits) = deploy::capture_edits(from, game_dir, &placements_of(m, &manifest)) {
+        // A covered config is another mod's file, not an edit of this one.
+        let placed = placed_of(m, &manifest);
+        if let Ok(edits) = deploy::capture_edits(from, game_dir, &placed) {
             m.edits = edits;
         }
     }
     deploy::undeploy(game_dir, &m.deployment, purge_dirs)
+}
+
+/// Placements of the files a mod has in the game.
+fn placed_of(m: &InstalledMod, manifest: &Manifest) -> Vec<Placement> {
+    let placed: HashSet<&String> = m.deployment.files.iter().collect();
+    placements_of(m, manifest)
+        .into_iter()
+        .filter(|p| placed.contains(&p.target))
+        .collect()
 }
 
 /// The files of a package, in order.
@@ -737,25 +761,185 @@ fn game_segment(game: &str) -> String {
     path_segment(&game.replace(':', "-"))
 }
 
-/// Does a file this package wants to place already belong to another mod?
-/// Returns the path and that mod's name, for a message that says which.
-fn owned_elsewhere(
-    placements: &[Placement],
-    existing: &[InstalledMod],
-    id: &str,
-) -> Option<(String, String)> {
-    let wanted: std::collections::HashSet<String> = placements
+/// Files in the game (lower case, like Windows) and the id of the mod that
+/// has each.
+type Holders = HashMap<String, String>;
+
+fn holders(mods: &[InstalledMod]) -> Holders {
+    mods.iter()
+        .flat_map(|m| {
+            m.deployment
+                .files
+                .iter()
+                .map(|f| (f.to_ascii_lowercase(), m.id.clone()))
+        })
+        .collect()
+}
+
+/// The placements of mod `id` that no other mod holds.
+fn free(placements: &[Placement], held: &Holders, id: &str) -> Vec<Placement> {
+    placements
         .iter()
-        .map(|p| p.target.to_ascii_lowercase())
-        .collect();
-    existing.iter().filter(|m| m.id != id).find_map(|m| {
-        let path = m
-            .deployment
-            .files
+        .filter(|p| {
+            held.get(&p.target.to_ascii_lowercase())
+                .is_none_or(|holder| holder == id)
+        })
+        .cloned()
+        .collect()
+}
+
+/// New mods go on top of the game's order, in the order they were placed: a
+/// mod over its dependencies, the last installed over the others. One that
+/// an installed mod requires goes under it instead: a mod's files are made
+/// to win over those of what it needs, whatever the install order.
+fn rank_new(
+    state: &mut State,
+    records: &mut [InstalledMod],
+    existing: &[InstalledMod],
+) -> Result<(), StateError> {
+    let mut next = existing.iter().map(|m| m.priority).max().unwrap_or(0) + 1;
+    for index in 0..records.len() {
+        let (id, game) = (records[index].id.clone(), records[index].game.clone());
+        if existing.iter().any(|m| m.id == id) {
+            continue;
+        }
+        let requires = |m: &InstalledMod| m.needs.iter().any(|r| r.mod_id.is_some_and(|n| mod_key(n) == id));
+        let lowest = state.list(&game)?.iter().filter(|m| requires(m)).map(|m| m.priority).min();
+        match lowest {
+            Some(place) => {
+                state.make_room(&game, place)?;
+                for record in records.iter_mut().filter(|r| r.priority >= place) {
+                    record.priority += 1;
+                }
+                records[index].priority = place;
+                next += 1;
+            }
+            None => {
+                records[index].priority = next;
+                next += 1;
+            }
+        }
+    }
+    Ok(())
+}
+
+/// Several enabled mods can place the same file (a patch for another mod, a
+/// library they all ship): the highest in the game's order has it in the
+/// game, and when it leaves, the next one's comes back. Called after every
+/// change, once the state is saved. `deployment.files` only lists what a mod
+/// really has in the game, so nothing else has to know about this.
+///
+/// A file no mod holds stays untouched, whoever put it there. A mod installed
+/// before placements were recorded only counts as a holder.
+fn settle(state: &mut State, paths: &Paths, game: &str, game_dir: &Path) -> Result<(), InstallError> {
+    let mut mods: Vec<InstalledMod> = state.list(game)?.into_iter().filter(|m| m.enabled).collect();
+    mods.sort_by(|a, b| (a.priority, a.installed_at, &a.id).cmp(&(b.priority, b.installed_at, &b.id)));
+
+    let mut winners = HashMap::new();
+    let mut current = HashMap::new();
+    for (index, m) in mods.iter().enumerate() {
+        for p in m.placements.iter().filter(|p| !Path::new(&p.target).is_absolute()) {
+            winners.insert(p.target.to_ascii_lowercase(), (index, p.clone()));
+        }
+        for file in &m.deployment.files {
+            current.insert(file.to_ascii_lowercase(), (index, file.clone()));
+        }
+    }
+    winners.retain(|path, (winner, _)| current.get(path).is_none_or(|(holder, _)| *holder != *winner));
+    if winners.is_empty() {
+        return Ok(());
+    }
+
+    let store = paths.store();
+    let mut manifests = HashMap::new();
+    for (path, (winner, _)) in &winners {
+        for &index in current.get(path).map(|(holder, _)| holder).into_iter().chain([winner]) {
+            if let Entry::Vacant(slot) = manifests.entry(index) {
+                slot.insert(manifest_of(&store, &mods[index])?);
+            }
+        }
+    }
+
+    let mut changed = BTreeSet::new();
+    let mut failure = None;
+    for (path, (winner, placement)) in winners {
+        match current.get(&path) {
+            Some((holder, file)) => {
+                let m = &mut mods[*holder];
+                // Its config leaves the game: what the player edited stays.
+                if let Some(mine) = m.placements.iter().find(|p| p.target == *file) {
+                    let from = Source {
+                        store: &store,
+                        manifest: &manifests[holder],
+                        edits: &m.edits,
+                    };
+                    if let Ok(edits) = deploy::capture_edits(from, game_dir, std::slice::from_ref(mine)) {
+                        m.edits = edits;
+                    }
+                }
+                if let Err(source) = deploy::release(game_dir, &mut m.deployment, file) {
+                    failure.get_or_insert(InstallError::Deploy {
+                        name: m.name.clone(),
+                        source: DeployError::Io {
+                            path: file.clone(),
+                            source,
+                        },
+                    });
+                    continue;
+                }
+                changed.insert(*holder);
+            }
+            None if fs::symlink_metadata(game_dir.join(&placement.target)).is_ok() => continue,
+            None => {}
+        }
+        let m = &mut mods[winner];
+        let from = Source {
+            store: &store,
+            manifest: &manifests[&winner],
+            edits: &m.edits,
+        };
+        match deploy::place_one(from, game_dir, &placement, &mut m.deployment) {
+            Ok(()) => {
+                changed.insert(winner);
+            }
+            // Nobody holds it now: the next change tries again.
+            Err(source) => {
+                failure.get_or_insert(InstallError::Deploy {
+                    name: m.name.clone(),
+                    source,
+                });
+            }
+        }
+    }
+    let saved: Vec<InstalledMod> = changed.into_iter().map(|index| mods[index].clone()).collect();
+    state.save_all(&saved)?;
+    failure.map_or(Ok(()), Err)
+}
+
+/// Removes from `needs`, for the UI, what got installed since. A requirement
+/// outside Nexus can't be seen from here: it stays.
+pub fn drop_installed_needs(mods: &mut [InstalledMod]) {
+    let installed: HashSet<String> = mods.iter().map(|m| m.id.clone()).collect();
+    for m in mods.iter_mut() {
+        m.needs
+            .retain(|r| r.mod_id.is_none_or(|id| !installed.contains(&mod_key(id))));
+    }
+}
+
+/// Fills `covered_by`, for the UI: the mods that replace part of each one.
+pub fn mark_covered(mods: &mut [InstalledMod]) {
+    let held = holders(mods);
+    let names: HashMap<String, String> = mods.iter().map(|m| (m.id.clone(), m.name.clone())).collect();
+    for m in mods.iter_mut().filter(|m| m.enabled) {
+        let covering: BTreeSet<&String> = m
+            .placements
             .iter()
-            .find(|f| wanted.contains(&f.to_ascii_lowercase()))?;
-        Some((path.clone(), m.name.clone()))
-    })
+            .filter_map(|p| held.get(&p.target.to_ascii_lowercase()))
+            .filter(|holder| **holder != m.id)
+            .filter_map(|holder| names.get(holder))
+            .collect();
+        m.covered_by = covering.into_iter().cloned().collect();
+    }
 }
 
 /// Removes a partial download and its resume journal.
@@ -868,10 +1052,22 @@ pub fn collect_garbage(state: &State, paths: &Paths) -> Result<Freed, InstallErr
     Ok(paths.store().gc(&packages, &blobs)?)
 }
 
-/// Puts back a version already recorded (undo of a failed update). Best
-/// effort: the user can reinstall otherwise.
+/// Puts back a version already recorded (undo of a failed update), with the
+/// files it had. Best effort: the user can reinstall otherwise.
 fn redeploy(store: &Store, game_dir: &Path, old: &InstalledMod) {
-    let _ = put_up(store, game_dir, old);
+    let Ok(manifest) = manifest_of(store, old) else {
+        return;
+    };
+    let from = Source {
+        store,
+        manifest: &manifest,
+        edits: &old.edits,
+    };
+    let settings = placements_of(old, &manifest)
+        .into_iter()
+        .filter(|p| Path::new(&p.target).is_absolute());
+    let placed: Vec<Placement> = placed_of(old, &manifest).into_iter().chain(settings).collect();
+    let _ = deploy::deploy(from, game_dir, &placed);
 }
 
 fn package_kind(loader_root: Option<&str>) -> PackageKind {
@@ -976,14 +1172,15 @@ pub fn set_enabled(
     }
     let store = paths.store();
     if enabled {
-        m.deployment = put_up(&store, game_dir, &m)?;
+        m.deployment = put_up(&store, game_dir, &m, &holders(&state.list(game)?))?;
     } else {
         take_down(&store, game_dir, &mut m, false);
         m.deployment = Deployment::default();
     }
     m.enabled = enabled;
     state.save(&m)?;
-    Ok(m)
+    settle(state, paths, game, game_dir)?;
+    state.get(game, id)?.ok_or(InstallError::NotInstalled)
 }
 
 /// Uninstalls a mod. The loader only goes last, with everything BepInEx
@@ -1003,6 +1200,7 @@ pub fn uninstall(
     let purge_dirs = m.is_loader();
     take_down(&paths.store(), game_dir, &mut m, purge_dirs);
     state.remove(game, id)?;
+    settle(state, paths, game, game_dir)?;
     Ok(m)
 }
 
@@ -1059,9 +1257,10 @@ pub fn put_back(
     let mut m = state.get(game, id)?.ok_or(InstallError::NotInstalled)?;
     let store = paths.store();
     take_down(&store, game_dir, &mut m, false);
-    m.deployment = put_up(&store, game_dir, &m)?;
+    m.deployment = put_up(&store, game_dir, &m, &holders(&state.list(game)?))?;
     state.save(&m)?;
-    Ok(m)
+    settle(state, paths, game, game_dir)?;
+    state.get(game, id)?.ok_or(InstallError::NotInstalled)
 }
 
 /// Goes back to a previous version of a mod, kept in the storage: nothing
@@ -1105,17 +1304,14 @@ pub fn revert(
         ..current.clone()
     };
     if current.enabled {
-        let existing = state.list(game)?;
-        if let Some((path, other)) = owned_elsewhere(&next.placements, &existing, id) {
-            return Err(InstallError::Conflict { path, other });
-        }
+        let mine = free(&next.placements, &holders(&state.list(game)?), id);
         take_down(&store, game_dir, &mut current, false);
         let from = Source {
             store: &store,
             manifest: &manifest,
             edits: &next.edits,
         };
-        next.deployment = match deploy::deploy(from, game_dir, &next.placements) {
+        next.deployment = match deploy::deploy(from, game_dir, &mine) {
             Ok(d) => d,
             Err(source) => {
                 redeploy(&store, game_dir, &current);
@@ -1129,6 +1325,7 @@ pub fn revert(
     state.remove_previous(game, id, &next.package)?;
     state.save(&next)?;
     state.push_previous(&current, now())?;
+    settle(state, paths, game, game_dir)?;
     state.get(game, id)?.ok_or(InstallError::NotInstalled)
 }
 
@@ -1279,10 +1476,11 @@ pub fn restore(
 ) -> Result<InstalledMod, InstallError> {
     let mut m = removed;
     if m.enabled {
-        m.deployment = put_up(&paths.store(), game_dir, &m)?;
+        m.deployment = put_up(&paths.store(), game_dir, &m, &holders(&state.list(&m.game)?))?;
     }
     state.save(&m)?;
-    Ok(m)
+    settle(state, paths, &m.game, game_dir)?;
+    state.get(&m.game, &m.id)?.ok_or(InstallError::NotInstalled)
 }
 
 /// Folders of today's storage; any other folder comes from the old storage

@@ -18,8 +18,10 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useState } from "react";
 
 import { progressDetail, progressLabel } from "@/components/mod/install-button";
+import { ModNeeds } from "@/components/mod/mod-needs";
 import { uninstallWithUndo } from "@/components/mod/uninstall";
 import { ImportButton, ShareButton } from "@/components/game/share-mods";
+import { Marquee } from "@/components/marquee";
 import { Notice } from "@/components/notice";
 import { toast } from "@/components/toaster";
 import {
@@ -27,6 +29,7 @@ import {
 	type PausedDownload,
 	type SteamGame,
 	discardDownload,
+	nexusModUrl,
 	pausedDownloads,
 	splitError,
 } from "@/lib/engine";
@@ -57,7 +60,7 @@ export function MyMods({ game, onDiscover }: { game: SteamGame; onDiscover: () =
 
 	if (mods === undefined) {
 		return (
-			<div className="max-w-3xl space-y-2">
+			<div className="max-w-5xl space-y-2">
 				{[0, 1, 2].map((i) => (
 					<Skeleton key={i} className="h-16 rounded-xl" />
 				))}
@@ -67,7 +70,7 @@ export function MyMods({ game, onDiscover }: { game: SteamGame; onDiscover: () =
 
 	if (mods.length === 0) {
 		return (
-			<div className="max-w-3xl">
+			<div className="max-w-5xl">
 				<InProgress appId={appId} />
 				<div className="glass max-w-xl">
 				<Notice
@@ -93,7 +96,7 @@ export function MyMods({ game, onDiscover }: { game: SteamGame; onDiscover: () =
 	const active = mods.filter((m) => m.enabled && !m.loaderRoot).length;
 
 	return (
-		<div className="max-w-3xl">
+		<div className="max-w-5xl">
 			<InProgress appId={appId} />
 			<div className="mb-3 flex items-center justify-between gap-4">
 				<p className="text-xs text-fg-subtle">
@@ -120,7 +123,8 @@ export function MyMods({ game, onDiscover }: { game: SteamGame; onDiscover: () =
 			<ul className="rounded-xl border border-line bg-surface">
 				{mods.map((m, i) => (
 					<li key={m.id} className={cn(i > 0 && "border-t border-line")}>
-						<ModRow mod={m} appId={appId} />
+						<ModRow mod={m} appId={appId} nexusDomain={game.profile?.nexus?.domain ?? null} />
+						<ModNeeds mod={m} appId={appId} className="pr-4 pb-3 pl-[68px]" />
 					</li>
 				))}
 			</ul>
@@ -265,7 +269,7 @@ function ProgressRow({ appId, modId, active: a }: { appId: number; modId: string
 	);
 }
 
-function ModRow({ mod: m, appId }: { mod: InstalledMod; appId: number }) {
+function ModRow({ mod: m, appId, nexusDomain }: { mod: InstalledMod; appId: number; nexusDomain: string | null }) {
 	const router = useRouter();
 	const [busy, setBusy] = useState(false);
 	const loader = m.loaderRoot !== null;
@@ -312,18 +316,19 @@ function ModRow({ mod: m, appId }: { mod: InstalledMod; appId: number }) {
 				<ModThumb src={m.iconUrl} dimmed={!enabled || removing} />
 				<span className="min-w-0">
 					<span className="flex items-center gap-2">
-						<span className={cn("truncate text-sm font-medium", enabled && !removing ? "text-fg" : "text-fg-subtle")}>
-							{m.name}
-						</span>
+						<Marquee text={m.name} className={cn("text-sm font-medium", enabled && !removing ? "text-fg" : "text-fg-subtle")} />
 						{!picker && <span className="shrink-0 font-mono text-[11px] text-fg-muted">{versionLabel(m.version)}</span>}
 						{loader && <Badge tone="accent">Loader</Badge>}
 						{!loader && !m.explicit && <Badge>Dependency</Badge>}
 						{pending && <Badge tone="accent">Pending</Badge>}
 						{update && !pending && <Badge tone="accent">{versionLabel(update.latest)} available</Badge>}
 					</span>
-					<span className="block truncate text-xs text-fg-subtle">
-						{m.author ? `by ${m.author}` : "\u00a0"}
-					</span>
+					<Marquee
+						className="text-xs text-fg-subtle"
+						text={`${m.author ? `by ${m.author}` : "\u00a0"}${
+							m.coveredBy.length > 0 ? ` \u00b7 Some files replaced by ${m.coveredBy.join(", ")}` : ""
+						}`}
+					/>
 				</span>
 			</button>
 
@@ -347,6 +352,17 @@ function ModRow({ mod: m, appId }: { mod: InstalledMod; appId: number }) {
 				<span className="text-[11px] text-fg-faint">Required by your mods</span>
 			) : (
 				<Switch checked={enabled} onChange={onToggle} label={`${enabled ? "Turn off" : "Turn on"} ${m.name}`} />
+			)}
+			{nexusDomain && /^nexus-\d+$/.test(m.id) && (
+				<button
+					type="button"
+					aria-label={`View ${m.name} on Nexus Mods`}
+					title="View on Nexus Mods"
+					onClick={() => void openExternal(nexusModUrl(nexusDomain, m.id))}
+					className="cursor-pointer rounded-md p-2 text-fg-subtle transition-colors hover:bg-white/10 hover:text-fg"
+				>
+					<ExternalLink className="size-4" />
+				</button>
 			)}
 			<button
 				type="button"
