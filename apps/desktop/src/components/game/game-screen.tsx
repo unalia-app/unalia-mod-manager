@@ -29,13 +29,16 @@ import { useInstalled } from "@/lib/installs";
 
 type Tab = "discover" | "mine";
 
+// Coming back from a mod's page rebuilds the screen: each game keeps the
+// tab it was left on until the app closes.
+const lastTabs = new Map<number, Tab>();
 
 /** A game's screen: game ambience, Discover and My mods tabs. */
 export function GameScreen() {
 	const appId = Number(useSearchParams().get("id"));
 	// `undefined`: loading; `null`: game not found.
 	const [game, setGame] = useState<SteamGame | null | undefined>(undefined);
-	const [tab, setTab] = useState<Tab>("discover");
+	const [tab, setTab] = useState<Tab>(lastTabs.get(appId) ?? "discover");
 	const accent = useAccent(game?.appId ?? null);
 	const installedCount = useInstalled(appId)?.length ?? 0;
 	const onHexium = useOnHexium(game?.profile?.community ?? "");
@@ -60,9 +63,14 @@ export function GameScreen() {
 		},
 	];
 
+	const openTab = (next: Tab) => {
+		lastTabs.set(appId, next);
+		setTab(next);
+	};
+
 	useEffect(() => {
 		setGame(undefined);
-		setTab("discover");
+		setTab(lastTabs.get(appId) ?? "discover");
 		findGame(appId).then(
 			(found) => {
 				setGame(found);
@@ -138,7 +146,7 @@ export function GameScreen() {
 						<GameUpdatedBanner game={game} />
 
 						<div className="mt-10 animate-fade-up [animation-delay:120ms]">
-							<Segmented label="Game sections" variant="tabs" items={tabs} value={tab} onChange={setTab} />
+							<Segmented label="Game sections" variant="tabs" items={tabs} value={tab} onChange={openTab} />
 						</div>
 
 						<div className="mt-6 animate-fade-up [animation-delay:160ms]">
@@ -148,7 +156,7 @@ export function GameScreen() {
 									<Discover community={game.profile.community} appId={game.appId} />
 								</>
 							) : (
-								<MyMods game={game} onDiscover={() => setTab("discover")} />
+								<MyMods game={game} onDiscover={() => openTab("discover")} />
 							)}
 						</div>
 					</>
