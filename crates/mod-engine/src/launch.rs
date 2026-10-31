@@ -185,6 +185,21 @@ pub fn launch_args(modded: Option<&ModdedLaunch>, mods: &[InstalledMod]) -> Vec<
     }
 }
 
+/// What prepares the mods before the game starts, if the profile has it and
+/// its tool is installed: program and arguments.
+pub fn deploy_command(modded: &ModdedLaunch, game_dir: &Path) -> Option<(PathBuf, Vec<String>)> {
+    let tool = modded.tool.as_ref()?;
+    let program = game_dir.join(&tool.path);
+    if tool.deploy.is_empty() || !program.is_file() {
+        return None;
+    }
+    // Without a final separator: `\"` would escape the closing quote.
+    let dir = game_dir.to_string_lossy();
+    let dir = dir.trim_end_matches(['\\', '/']);
+    let args = tool.deploy.iter().map(|a| a.replace("{game}", dir)).collect();
+    Some((program, args))
+}
+
 /// Through Steam with arguments: a `steam://` link drops them, Steam's own
 /// executable keeps them (`-applaunch <id> <args>`). `None`: Steam's
 /// executable isn't in its folder.
@@ -331,6 +346,33 @@ mod tests {
             executable_target(dir.path(), &["Nope.exe".to_string()]),
             None
         );
+    }
+
+    #[test]
+    fn the_deploy_needs_its_tool_in_the_game_folder() {
+        let dir = tempfile::tempdir().unwrap();
+        let modded = ModdedLaunch {
+            args: vec!["-modded".into()],
+            when_prefix: vec!["mods/".into()],
+            tool: Some(crate::games::ModdedTool {
+                name: "REDmod".into(),
+                path: "tools/redMod.exe".into(),
+                url: "https://example.com".into(),
+                deploy: vec!["deploy".into(), "-root=\"{game}\"".into()],
+            }),
+        };
+        assert_eq!(deploy_command(&modded, dir.path()), None);
+
+        std::fs::create_dir(dir.path().join("tools")).unwrap();
+        std::fs::write(dir.path().join("tools/redMod.exe"), b"").unwrap();
+        let (program, args) = deploy_command(&modded, dir.path()).unwrap();
+        assert_eq!(program, dir.path().join("tools/redMod.exe"));
+        assert_eq!(args, ["deploy".to_owned(), format!("-root=\"{}\"", dir.path().display())]);
+
+        // A final separator would escape the closing quote.
+        let slash = format!("{}/", dir.path().display());
+        let (_, args) = deploy_command(&modded, Path::new(&slash)).unwrap();
+        assert_eq!(args[1], format!("-root=\"{}\"", dir.path().display()));
     }
 
     #[test]

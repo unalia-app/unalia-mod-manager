@@ -407,6 +407,7 @@ pub async fn cancel_pending(app: AppHandle, app_id: u32, mod_id: String) -> Resu
 
 #[tauri::command]
 pub async fn installed_mods(
+    library: State<'_, Library>,
     mods: State<'_, Mods>,
     app_id: u32,
 ) -> Result<Vec<InstalledMod>, String> {
@@ -418,6 +419,9 @@ pub async fn installed_mods(
         .map_err(crate::support::logged)?;
     installer::mark_covered(&mut list);
     installer::drop_installed_needs(&mut list);
+    if let Some(game) = library.game(app_id) {
+        installer::drop_present_tool(&mut list, game.profile.modded.as_ref(), &game.dir);
+    }
     Ok(list)
 }
 
@@ -1348,6 +1352,13 @@ pub async fn play_game(
         let installed = state.list(&game_key(app_id)).map_err(crate::support::logged)?;
         launch::launch_args(game.profile.modded.as_ref(), &installed)
     };
+    // REDmod mods reach the game through their tool: `-modded` alone skips it.
+    let deploy = game
+        .profile
+        .modded
+        .as_ref()
+        .filter(|_| !args.is_empty())
+        .and_then(|modded| launch::deploy_command(modded, &game.dir));
     let target = if !args.is_empty() {
         // REDmod mods: the game must start with `-modded`. Through Steam's
         // executable for a Steam game, else the game's own.
@@ -1371,6 +1382,15 @@ pub async fn play_game(
     } else {
         launch::steam_target(app_id)
     };
+    if let Some((program, args)) = deploy {
+        // It takes a while: the game shows as starting meanwhile.
+        mods.starting
+            .lock()
+            .unwrap()
+            .insert(app_id, Starting::new());
+        emit_status(&app, app_id).await;
+        let _ = tauri::async_runtime::spawn_blocking(move || deploy_mods(&program, &args)).await;
+    }
     match target {
         LaunchTarget::Steam(url) => app
             .opener()
@@ -1401,6 +1421,38 @@ pub async fn play_game(
         .insert(app_id, Starting::new());
     emit_status(&app, app_id).await;
     Ok(())
+}
+
+/// Runs the tool that prepares the mods, hidden. On failure the game starts
+/// anyway, without them: better than no game because of one mod.
+fn deploy_mods(program: &Path, args: &[String]) {
+    let mut command = std::process::Command::new(program);
+    if let Some(dir) = program.parent() {
+        command.current_dir(dir);
+    }
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        command.creation_flags(CREATE_NO_WINDOW);
+        // As written: redMod.exe reads `-root="<dir>"`, and ignores the root
+        // when the whole argument is quoted, as `args` would do.
+        for arg in args {
+            command.raw_arg(arg);
+        }
+    }
+    #[cfg(not(windows))]
+    command.args(args);
+    match command.output() {
+        Ok(output) if output.status.success() => log::info!("deployed the mods with {}", program.display()),
+        Ok(output) => {
+            let text = String::from_utf8_lossy(&output.stdout);
+            let end = text.len().saturating_sub(2000);
+            let tail = text.get(end..).unwrap_or(&text);
+            log::warn!("{} failed ({}): {tail}", program.display(), output.status);
+        }
+        Err(error) => log::warn!("couldn't start {}: {error}", program.display()),
+    }
 }
 
 /// Stops waiting for a starting game (launch abandoned in its launcher, or

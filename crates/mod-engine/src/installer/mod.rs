@@ -24,7 +24,7 @@ use crate::archive::{self, ArchiveError, Limits};
 use crate::deploy::{self, DeployError, Deployment, Source};
 use crate::download::{self, Cancel, DownloadError};
 use crate::foreign::{self, Foreign};
-use crate::games::GameCatalog;
+use crate::games::{GameCatalog, ModdedLaunch};
 use crate::loaders::bepinex::BepInEx;
 use crate::loaders::rules::RulesLoader;
 use crate::loaders::{Loader, PackageKind, Placement};
@@ -923,6 +923,19 @@ pub fn drop_installed_needs(mods: &mut [InstalledMod]) {
     for m in mods.iter_mut() {
         m.needs
             .retain(|r| r.mod_id.is_none_or(|id| !installed.contains(&mod_key(id))));
+    }
+}
+
+/// Removes the tool mods need once it is in the game: installed apart, like
+/// a DLC, nothing else tells Unalia it arrived.
+pub fn drop_present_tool(mods: &mut [InstalledMod], modded: Option<&ModdedLaunch>, game_dir: &Path) {
+    let Some(tool) = modded.and_then(|m| m.tool.as_ref()) else {
+        return;
+    };
+    if game_dir.join(&tool.path).is_file() {
+        for m in mods.iter_mut() {
+            m.needs.retain(|r| r.url.as_deref() != Some(tool.url.as_str()));
+        }
     }
 }
 

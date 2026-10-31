@@ -106,6 +106,10 @@ pub struct ModdedTool {
     /// Its file, relative to the game folder.
     pub path: String,
     pub url: String,
+    /// Its arguments to prepare the mods before the game starts, `{game}`
+    /// being the game folder. The game's own arguments don't do it.
+    #[serde(default)]
+    pub deploy: Vec<String>,
 }
 
 impl ModdedLaunch {

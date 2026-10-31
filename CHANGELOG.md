@@ -9,7 +9,7 @@ All notable changes to Unalia Mod Manager. The format follows [Keep a Changelog]
 ### Added
 
 - Share your mod list with a code, and import a friend's to play with the same mods.
-- Cyberpunk 2077: REDmod mods load. Play starts the game with `-modded` when one is on, and Unalia says when the free REDmod DLC is missing.
+- Cyberpunk 2077: REDmod mods load. When one is on, Play deploys them and starts the game with `-modded`, and Unalia says when the free REDmod DLC is missing.
 - Unreal Engine games: proxy DLLs, ASI plugins, ReShade and UE4SS C++ mods go where they must.
 - Unreal Engine games: `Engine.ini` mods are merged into the player's settings.
 - Unreal Engine games: ReShade presets install, and Unalia says when ReShade is missing.
