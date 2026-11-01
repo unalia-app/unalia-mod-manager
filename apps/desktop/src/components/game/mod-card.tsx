@@ -7,6 +7,7 @@ import { useState } from "react";
 
 import { Marquee } from "@/components/marquee";
 import { InstallStateBadge } from "@/components/mod/install-button";
+import { useAdultBlur } from "@/lib/adult-content";
 import { uninstallWithUndo } from "@/components/mod/uninstall";
 import { type ModSummary, SOURCE_LABEL } from "@/lib/engine";
 import { compactNumber, relativeDate } from "@/lib/format";
@@ -42,6 +43,7 @@ export function ModCard({
 	// of itself. Nexus thumbnails, already 16:9, fill it.
 	const [square, setSquare] = useState(false);
 	const category = mod.categories[0];
+	const blur = useAdultBlur(mod.adult);
 
 	return (
 		<article
@@ -76,6 +78,7 @@ export function ModCard({
 									src={mod.iconUrl ?? ""}
 									alt=""
 									aria-hidden
+									style={blur}
 									className="absolute inset-0 size-full scale-125 object-cover opacity-50 blur-xl"
 								/>
 							)}
@@ -90,6 +93,7 @@ export function ModCard({
 									setImage("loaded");
 								}}
 								onError={() => setImage("missing")}
+								style={blur}
 								className={cn(
 									"relative size-full transition-[opacity,scale] duration-500 ease-out group-hover:scale-[1.04]",
 									square ? "object-contain" : "object-cover",
@@ -102,11 +106,18 @@ export function ModCard({
 					<span className="liquid-glass absolute bottom-2 left-2 rounded-full px-2 py-0.5 font-tight text-[10px] font-semibold">
 						{SOURCE_LABEL[mod.source] ?? mod.source}
 					</span>
-					{mod.deprecated && (
-						<Badge tone="warning" className="absolute top-2 left-2 backdrop-blur-md">
-							Deprecated
-						</Badge>
-					)}
+					<div className="absolute top-2 left-2 flex gap-1.5">
+						{mod.adult && (
+							<Badge tone="danger" className="backdrop-blur-md">
+								18+
+							</Badge>
+						)}
+						{mod.deprecated && (
+							<Badge tone="warning" className="backdrop-blur-md">
+								Deprecated
+							</Badge>
+						)}
+					</div>
 				</div>
 
 				<QuickInstall appId={appId} modId={mod.id} name={mod.name} source={mod.source} />

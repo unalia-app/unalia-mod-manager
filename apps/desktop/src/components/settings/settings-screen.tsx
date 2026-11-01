@@ -1,11 +1,12 @@
 "use client";
 
 import { cn } from "@modalia/ui";
-import { ChevronLeft, HardDrive, LifeBuoy, Link2, Monitor } from "lucide-react";
+import { ChevronLeft, EyeOff, HardDrive, LifeBuoy, Link2, Monitor } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 
 import { AppHeader } from "@/components/app-header";
+import { AdultContent } from "@/components/settings/adult-content";
 import { Connections } from "@/components/settings/connections";
 import { Display } from "@/components/settings/display";
 import { Storage } from "@/components/settings/storage";
@@ -14,6 +15,7 @@ import { Support } from "@/components/settings/support";
 const sections = [
 	{ id: "connections", label: "Connections", icon: <Link2 className="size-3.5" /> },
 	{ id: "display", label: "Display", icon: <Monitor className="size-3.5" /> },
+	{ id: "adult", label: "Adult content", icon: <EyeOff className="size-3.5" /> },
 	{ id: "storage", label: "Storage", icon: <HardDrive className="size-3.5" /> },
 	{ id: "support", label: "Support", icon: <LifeBuoy className="size-3.5" /> },
 ] as const;
@@ -59,6 +61,7 @@ export function SettingsScreen() {
 				<section key={section} className="flex min-w-0 flex-1 animate-fade-up flex-col gap-6">
 					{section === "connections" && <Connections />}
 					{section === "display" && <Display />}
+					{section === "adult" && <AdultContent />}
 					{section === "storage" && <Storage />}
 					{section === "support" && <Support />}
 				</section>

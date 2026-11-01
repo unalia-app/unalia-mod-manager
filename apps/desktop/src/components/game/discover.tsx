@@ -2,13 +2,16 @@
 
 import {
 	Button,
+	Combobox,
+	ComboboxContent,
+	ComboboxEmpty,
+	type ComboboxFilter,
+	ComboboxInput,
+	ComboboxItem,
+	ComboboxList,
+	ComboboxTrigger,
 	SearchField,
 	Segmented,
-	Select,
-	SelectContent,
-	SelectItem,
-	SelectTrigger,
-	SelectValue,
 } from "@modalia/ui";
 import { PackageSearch, RotateCw, TriangleAlert } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
@@ -34,6 +37,14 @@ const SORTS: { value: ModSort; label: string }[] = [
 ];
 
 const ALL_CATEGORIES = "all";
+
+// Coming back from a mod's page rebuilds the screen: each game keeps its
+// view until the app closes.
+const lastViews = new Map<string, { source: Source; text: string; sort: ModSort; category: string }>();
+
+/** On the name alone: a Thunderstore category's value is a number. */
+const matchesName: ComboboxFilter = (_, query, keywords) =>
+	keywords.join(" ").toLowerCase().includes(query.trim().toLowerCase());
 
 type Source = "thunderstore" | "hexium";
 
@@ -78,15 +89,16 @@ type Results = {
  */
 export function Discover({ community: gameCommunity, appId }: { community: string; appId: number }) {
 	const onHexium = useOnHexium(gameCommunity);
-	const [picked, setPicked] = useState<Source>("thunderstore");
+	const saved = lastViews.get(gameCommunity);
+	const [picked, setPicked] = useState<Source>(saved?.source ?? "thunderstore");
 	const source: Source = onHexium ? picked : "thunderstore";
 	const community = source === "hexium" ? `hexium:${gameCommunity}` : gameCommunity;
 	const sourceLabel = gameCommunity.startsWith("nexus:") ? "Nexus Mods" : SOURCE_LABEL[source];
-	const [text, setText] = useState("");
+	const [text, setText] = useState(saved?.text ?? "");
 	const query = useDebounced(text.trim(), 250);
-	const [sort, setSort] = useState<ModSort>("popular");
+	const [sort, setSort] = useState<ModSort>(saved?.sort ?? "popular");
 	const [categories, setCategories] = useState<ModCategory[]>([]);
-	const [pickedCategory, setPickedCategory] = useState(ALL_CATEGORIES);
+	const [pickedCategory, setPickedCategory] = useState(saved?.category ?? ALL_CATEGORIES);
 	const category = pickedCategory === ALL_CATEGORIES ? null : pickedCategory;
 	const [results, setResults] = useState<Results | null>(null);
 	const [loadingMore, setLoadingMore] = useState(false);
@@ -95,12 +107,16 @@ export function Discover({ community: gameCommunity, appId }: { community: strin
 	// Each new search invalidates the answers still in flight.
 	const generation = useRef(0);
 
+	useEffect(() => {
+		lastViews.set(gameCommunity, { source: picked, text, sort, category: pickedCategory });
+	}, [gameCommunity, picked, text, sort, pickedCategory]);
+
 	// Each source has its own. Without them, the search works all the same.
 	useEffect(() => {
 		let current = true;
 		setCategories([]);
 		modCategories(community).then(
-			(list) => current && setCategories(list),
+			(list) => current && setCategories([...list].sort((a, b) => a.name.localeCompare(b.name))),
 			() => {},
 		);
 		return () => {
@@ -172,19 +188,22 @@ export function Discover({ community: gameCommunity, appId }: { community: strin
 					className="h-10 max-w-sm flex-1"
 				/>
 				{categories.length > 0 && (
-					<Select value={pickedCategory} onValueChange={setPickedCategory} className="w-52">
-						<SelectTrigger aria-label="Filter by category" className="h-10">
-							<SelectValue />
-						</SelectTrigger>
-						<SelectContent className="max-h-72 overflow-y-auto">
-							<SelectItem value={ALL_CATEGORIES}>All categories</SelectItem>
-							{categories.map((c) => (
-								<SelectItem key={c.id} value={c.id}>
-									{c.name}
-								</SelectItem>
-							))}
-						</SelectContent>
-					</Select>
+					<Combobox value={pickedCategory} onValueChange={setPickedCategory} filter={matchesName} className="w-56">
+						<ComboboxTrigger>
+							<ComboboxInput aria-label="Filter by category" placeholder="Search categories" />
+						</ComboboxTrigger>
+						<ComboboxContent>
+							<ComboboxList ariaLabel="Categories">
+								<ComboboxItem value={ALL_CATEGORIES}>All categories</ComboboxItem>
+								{categories.map((c) => (
+									<ComboboxItem key={c.id} value={c.id}>
+										{c.name}
+									</ComboboxItem>
+								))}
+								<ComboboxEmpty>No category found.</ComboboxEmpty>
+							</ComboboxList>
+						</ComboboxContent>
+					</Combobox>
 				)}
 				<Segmented label="Sort mods" items={SORTS} value={sort} onChange={setSort} />
 				{results && (

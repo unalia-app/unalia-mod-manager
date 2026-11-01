@@ -11,10 +11,18 @@ All notable changes to Unalia Mod Manager. The format follows [Keep a Changelog]
 - Discover: filter a game's mods by category (Weapons, Gameplay, Utilities...).
 - Mod page: the mod's changelog, when its author wrote one.
 - An invitation to the Unalia Discord after a mod installs, shown once, and a link to it in What's new.
+- Mods marked as adult content now show up in Discover, with their images blurred. Settings > Adult content picks how strongly, or turns the blur off. Clicking an image on a mod's page shows it as is.
+
+### Changed
+
+- A mod's page has a Back to mods button, like the one in Settings.
+- Discover: the category filter is a list you can search.
 
 ### Fixed
 
-- Coming back from a mod's page returns to the tab you left, My Mods included, instead of Discover.
+- Coming back from a mod's page returns to the tab you left, My Mods included, instead of Discover, with your search, category and sort still there.
+- A mod's page says when a dependency is already installed, instead of asking to install it.
+- Import a mod list: a long mod name stays inside the window.
 
 ## [0.1.5] - 2026-10-31
 

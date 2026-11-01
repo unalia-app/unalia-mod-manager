@@ -26,6 +26,7 @@ import { ImportButton, ShareButton } from "@/components/game/share-mods";
 import { Marquee } from "@/components/marquee";
 import { Notice } from "@/components/notice";
 import { toast } from "@/components/toaster";
+import { useAdultBlur } from "@/lib/adult-content";
 import {
 	type InstalledMod,
 	type PausedDownload,
@@ -61,13 +62,22 @@ const SORTS: { value: MyModsSort; label: string }[] = [
 	{ value: "recent", label: "Recent" },
 ];
 
+// Coming back from a mod's page rebuilds the screen: each game keeps its
+// view until the app closes.
+const lastViews = new Map<number, { text: string; sort: MyModsSort }>();
+
 /** My mods tab: search, enable, disable, remove with "Undo", share the list with friends. */
 export function MyMods({ game, onDiscover }: { game: SteamGame; onDiscover: () => void }) {
 	const appId = game.appId;
 	const mods = useInstalled(appId);
 	const updates = useUpdates(appId) ?? [];
-	const [text, setText] = useState("");
-	const [sort, setSort] = useState<MyModsSort>("name");
+	const saved = lastViews.get(appId);
+	const [text, setText] = useState(saved?.text ?? "");
+	const [sort, setSort] = useState<MyModsSort>(saved?.sort ?? "name");
+
+	useEffect(() => {
+		lastViews.set(appId, { text, sort });
+	}, [appId, text, sort]);
 
 	if (mods === undefined) {
 		return (
@@ -357,7 +367,7 @@ function ModRow({ mod: m, appId, nexusDomain }: { mod: InstalledMod; appId: numb
 				onClick={() => router.push(modHref(appId, m.id, m.source))}
 				className="flex min-w-0 flex-1 cursor-pointer items-center gap-3 text-left"
 			>
-				<ModThumb src={m.iconUrl} dimmed={!enabled || removing} />
+				<ModThumb src={m.iconUrl} adult={m.adult} dimmed={!enabled || removing} />
 				<span className="min-w-0">
 					<span className="flex items-center gap-2">
 						<Marquee text={m.name} className={cn("text-sm font-medium", enabled && !removing ? "text-fg" : "text-fg-subtle")} />
@@ -483,8 +493,9 @@ function versionLabel(version: string): string {
 	return /^\d{4}-\d{2}-\d{2}$/.test(version) ? version : `v${version}`;
 }
 
-function ModThumb({ src, dimmed }: { src: string | null; dimmed: boolean }) {
+function ModThumb({ src, adult, dimmed }: { src: string | null; adult: boolean; dimmed: boolean }) {
 	const [failed, setFailed] = useState(false);
+	const blur = useAdultBlur(adult);
 	return (
 		<span
 			className={cn(
@@ -493,7 +504,7 @@ function ModThumb({ src, dimmed }: { src: string | null; dimmed: boolean }) {
 			)}
 		>
 			{src && !failed ? (
-				<img src={src} alt="" className="size-full object-cover" onError={() => setFailed(true)} />
+				<img src={src} alt="" style={blur} className="size-full object-cover" onError={() => setFailed(true)} />
 			) : (
 				<Package className="size-4 text-fg-faint" />
 			)}

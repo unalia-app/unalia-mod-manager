@@ -2,7 +2,7 @@
 
 import { cn } from "@modalia/ui";
 import { ChevronLeft, ChevronRight, X } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { type CSSProperties, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 /**
@@ -54,11 +54,13 @@ export function GalleryStrip({
 	images,
 	measured,
 	onOpen,
+	imageStyle,
 }: {
 	candidates: string[];
 	images: string[];
 	measured: (src: string, large: boolean) => void;
 	onOpen: (index: number) => void;
+	imageStyle?: CSSProperties;
 }) {
 	const shown = images.length >= 2;
 	const row = useRef<HTMLDivElement>(null);
@@ -113,6 +115,7 @@ export function GalleryStrip({
 									)
 								}
 								onError={() => measured(src, false)}
+								style={imageStyle}
 								className="size-full object-cover"
 							/>
 						</button>

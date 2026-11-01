@@ -1,8 +1,7 @@
 "use client";
 
 import { Badge, Button, Skeleton, cn } from "@modalia/ui";
-import { ArrowLeft, Download, ExternalLink, Globe, Heart, Package, RotateCw, TriangleAlert } from "lucide-react";
-import Link from "next/link";
+import { ChevronLeft, Download, ExternalLink, Globe, Heart, Package, RotateCw, TriangleAlert } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { type CSSProperties, type ReactNode, useEffect, useMemo, useState } from "react";
 
@@ -12,7 +11,7 @@ import { GameSwitcher } from "@/components/game/game-switcher";
 import { PlayButton } from "@/components/game/play-button";
 import { Markdown } from "@/components/markdown";
 import { GalleryStrip, ImageViewer, descriptionImages, useGallery } from "@/components/mod/gallery";
-import { InstallButton } from "@/components/mod/install-button";
+import { InstallButton, InstallStateBadge } from "@/components/mod/install-button";
 import { Notice } from "@/components/notice";
 import { useAccent } from "@/hooks/use-accent";
 import {
@@ -26,7 +25,9 @@ import {
 	sourceName,
 } from "@/lib/engine";
 import { compactNumber, relativeDate } from "@/lib/format";
-import { findGame, gameHref, modHref } from "@/lib/games-store";
+import { useAdultBlur } from "@/lib/adult-content";
+import { findGame, modHref } from "@/lib/games-store";
+import { useInstalled } from "@/lib/installs";
 import { useNexusAccount } from "@/lib/nexus";
 import { openExternal } from "@/lib/open";
 
@@ -39,6 +40,7 @@ export function ModScreen() {
 	const modId = params.get("id") ?? "";
 	// Opened from Hexium's Discover: the mod is looked up on Hexium first.
 	const hexium = params.get("source") === "hexium";
+	const router = useRouter();
 
 	const [game, setGame] = useState<SteamGame | null>(null);
 	const [details, setDetails] = useState<Load<ModDetails>>({ status: "loading" });
@@ -95,13 +97,14 @@ export function ModScreen() {
 			</AppHeader>
 
 			<div className="relative z-10 mx-auto w-full max-w-[120rem] px-8 pb-20 xl:px-12">
-				<Link
-					href={gameHref(appId)}
-					className="mt-6 inline-flex items-center gap-1.5 text-xs font-medium text-fg-subtle transition-colors hover:text-fg"
+				<button
+					type="button"
+					onClick={() => router.back()}
+					className="mt-6 -ml-[17px] flex cursor-pointer items-center gap-2 rounded-md px-3 py-2 text-xs font-medium text-fg-subtle transition-colors hover:bg-white/10 hover:text-fg"
 				>
-					<ArrowLeft className="size-3.5" />
-					{game ? `${game.name} mods` : "Back"}
-				</Link>
+					<ChevronLeft className="size-3.5" />
+					Back to mods
+				</button>
 
 				{details.status === "loading" && <HeroSkeleton />}
 
@@ -178,6 +181,7 @@ function ModDetailsView({
 	// The header's picture opens too, even when it is too small for the row
 	// (a Thunderstore icon).
 	const main = mod.images[0];
+	const blur = useAdultBlur(mod.adult);
 	const viewable = useMemo(
 		() => (main && !images.includes(main) ? [main, ...images] : images),
 		[main, images],
@@ -196,6 +200,7 @@ function ModDetailsView({
 			<section className="mt-6 flex items-start gap-6">
 				<ModIcon
 					src={main}
+					imageStyle={blur}
 					onOpen={main ? () => zoom.open(main) : undefined}
 					className="size-28 animate-fade-up rounded-xl shadow-2xl shadow-black/50"
 				/>
@@ -255,6 +260,7 @@ function ModDetailsView({
 				candidates={candidates}
 				images={images}
 				measured={measured}
+				imageStyle={blur}
 				onOpen={(index) => setViewing(viewable.indexOf(images[index] ?? ""))}
 			/>
 			{viewing !== null && (
@@ -281,7 +287,7 @@ function ModDetailsView({
 					)}
 					{description.status === "ready" &&
 						(description.value.trim() ? (
-							<Markdown internalLink={(href) => modLink(href, game)} zoom={zoom}>
+							<Markdown internalLink={(href) => modLink(href, game)} zoom={zoom} imageStyle={blur}>
 								{description.value}
 							</Markdown>
 						) : (
@@ -293,7 +299,7 @@ function ModDetailsView({
 								Changelog
 							</summary>
 							<div className="mt-4">
-								<Markdown internalLink={(href) => modLink(href, game)} zoom={zoom}>
+								<Markdown internalLink={(href) => modLink(href, game)} zoom={zoom} imageStyle={blur}>
 									{changelog}
 								</Markdown>
 							</div>
@@ -365,13 +371,16 @@ function DependencyRow({
 	source: string;
 }) {
 	const router = useRouter();
+	const installed = useInstalled(appId)?.find((m) => m.id === d.id);
 	// Thunderstore publishes each version's icon at a predictable URL.
 	const icon = nexus ? undefined : `https://gcdn.thunderstore.io/live/repository/icons/${d.id}-${d.minVersion}.png`;
-	const detail = nexus
-		? d.automatic
-			? "Installed automatically"
-			: "Install it too, from Nexus Mods"
-		: `by ${d.author} · ${d.minVersion} or newer`;
+	const detail = installed
+		? `v${installed.version}`
+		: nexus
+			? d.automatic
+				? "Installed automatically"
+				: "Install it too, from Nexus Mods"
+			: `by ${d.author} · ${d.minVersion} or newer`;
 
 	const content = (
 		<>
@@ -390,7 +399,11 @@ function DependencyRow({
 				title={nexus ? "Installed automatically from its author's GitHub" : "Installed automatically with your first mod"}
 			>
 				{content}
-				<Badge tone="accent">{nexus ? "Framework" : "Loader"}</Badge>
+				{installed ? (
+					<InstallStateBadge appId={appId} modId={d.id} className="shrink-0" />
+				) : (
+					<Badge tone="accent">{nexus ? "Framework" : "Loader"}</Badge>
+				)}
 			</div>
 		);
 	}
@@ -401,12 +414,23 @@ function DependencyRow({
 			className="flex w-full cursor-pointer items-center gap-2.5 rounded-lg px-1 py-1.5 text-left transition-colors hover:bg-surface-hover"
 		>
 			{content}
+			<InstallStateBadge appId={appId} modId={d.id} className="shrink-0" />
 		</button>
 	);
 }
 
 /** `onOpen`: the picture opens in the viewer once it has loaded. */
-function ModIcon({ src, className, onOpen }: { src?: string; className?: string; onOpen?: () => void }) {
+function ModIcon({
+	src,
+	className,
+	onOpen,
+	imageStyle,
+}: {
+	src?: string;
+	className?: string;
+	onOpen?: () => void;
+	imageStyle?: CSSProperties;
+}) {
 	const [status, setStatus] = useState<"loading" | "loaded" | "missing">(src ? "loading" : "missing");
 	const open = onOpen && status === "loaded" ? onOpen : undefined;
 	return (
@@ -429,6 +453,7 @@ function ModIcon({ src, className, onOpen }: { src?: string; className?: string;
 					alt=""
 					onLoad={() => setStatus("loaded")}
 					onError={() => setStatus("missing")}
+					style={imageStyle}
 					className={cn(
 						"absolute inset-0 size-full object-cover transition-opacity duration-300",
 						status === "loaded" ? "opacity-100" : "opacity-0",

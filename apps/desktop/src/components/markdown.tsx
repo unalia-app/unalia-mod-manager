@@ -1,7 +1,7 @@
 "use client";
 
 import { useRouter } from "next/navigation";
-import { type ComponentProps, useMemo } from "react";
+import { type CSSProperties, type ComponentProps, useMemo } from "react";
 import ReactMarkdown, { type Components } from "react-markdown";
 import rehypeRaw from "rehype-raw";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
@@ -25,15 +25,18 @@ const schema = {
  * the same game), else `null` and the link opens in the browser.
  * `zoom`: the image opens in the viewer, when it is one of the mod's
  * screenshots (not a badge).
+ * `imageStyle`: applied to every image (the blur of an adult mod).
  */
 export function Markdown({
 	children,
 	internalLink,
 	zoom,
+	imageStyle,
 }: {
 	children: string;
 	internalLink?: (href: string) => string | null;
 	zoom?: { can: (src: string) => boolean; open: (src: string) => void };
+	imageStyle?: CSSProperties;
 }) {
 	const router = useRouter();
 	const components: Components = useMemo(
@@ -70,12 +73,13 @@ export function Markdown({
 						decoding="async"
 						referrerPolicy="no-referrer"
 						onClick={zoomable ? () => zoom?.open(src) : undefined}
+						style={imageStyle}
 						className={zoomable ? "cursor-zoom-in" : undefined}
 					/>
 				);
 			},
 		}),
-		[internalLink, router, zoom],
+		[imageStyle, internalLink, router, zoom],
 	);
 
 	return (

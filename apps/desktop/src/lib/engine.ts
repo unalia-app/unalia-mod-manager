@@ -162,6 +162,8 @@ export type ModSummary = {
 	updatedAt: string;
 	pinned: boolean;
 	deprecated: boolean;
+	/** Its author marked it as adult content. */
+	adult: boolean;
 };
 
 export type ModDependency = { id: string; minVersion: string };
@@ -255,6 +257,8 @@ export type InstalledMod = {
 	author: string;
 	version: string;
 	iconUrl: string | null;
+	/** Marked as adult content by its source. */
+	adult: boolean;
 	/** Loader package: its root folder in the archive. */
 	loaderRoot: string | null;
 	enabled: boolean;
