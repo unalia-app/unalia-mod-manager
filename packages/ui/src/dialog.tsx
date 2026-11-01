@@ -67,7 +67,7 @@ export function Dialog({
 				aria-labelledby={titleId}
 				tabIndex={-1}
 				className={cn(
-					"relative grid w-full max-w-md animate-dialog-in gap-5 rounded-2xl border border-white/8 bg-bg p-6 shadow-2xl shadow-black/60 outline-none",
+					"relative grid w-full max-w-md animate-dialog-in grid-cols-[minmax(0,1fr)] gap-5 rounded-2xl border border-white/8 bg-bg p-6 shadow-2xl shadow-black/60 outline-none",
 					className,
 				)}
 			>

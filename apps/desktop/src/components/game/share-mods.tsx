@@ -4,6 +4,7 @@ import { Badge, Button, Dialog, DialogDescription, DialogFooter, DialogHeader, D
 import { ClipboardPaste, Share2 } from "lucide-react";
 import { useState } from "react";
 
+import { Marquee } from "@/components/marquee";
 import { toast } from "@/components/toaster";
 import { type InstalledMod, type SteamGame, splitError } from "@/lib/engine";
 import { install, toggle } from "@/lib/installs";
@@ -147,7 +148,7 @@ function ImportDialog({ game, mods, onClose }: { game: SteamGame; mods: Installe
 						{steps.map(({ mod, action, yours }, i) => (
 							<li key={mod.id} className={cn("flex items-center gap-3 px-4 py-2.5", i > 0 && "border-t border-line")}>
 								<span className="min-w-0 flex-1">
-									<span className="block truncate text-sm text-fg">{mod.name}</span>
+									<Marquee text={mod.name} className="text-sm text-fg" />
 									<span className="block truncate font-mono text-[11px] text-fg-subtle">
 										{mod.version && `v${mod.version}`}
 										{yours && yours !== mod.version && ` · yours: v${yours}`}
