@@ -18,6 +18,7 @@ export async function uninstallWithUndo(appId: number, modId: string, name: stri
 		if (outcome === "done") {
 			toast({
 				title: `${name} removed`,
+				details: "Its files are gone from the game.",
 				action: { label: "Undo", onClick: () => restore(appId, modId).catch(fail) },
 			});
 		}

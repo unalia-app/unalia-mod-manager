@@ -96,8 +96,8 @@ Before creating a component, check that it doesn't exist in Unalia (`components/
 ## Toasts
 
 - **Rare.** Only for what has no other place on screen: "Undo" after a removal, or an error with nowhere to show. Never to confirm a success the screen already shows.
-- Opaque dark pill, bottom center, without blur or colored edge. Action as accent text ("Undo"). Error: small red icon, technical detail folded behind "Details".
-- No cross: the toast leaves by itself after 4 s, hover pauses the timer. Two at most on screen.
+- Opaque card on the app background and grain, bottom center. The tone shows on the outlined icon and a thin line of light on the top edge. Always a short line under the title, a long one scrolls. Action as a small neutral button on the title's line ("Undo").
+- The toast leaves by itself after 4 s, hover pauses the timer, and the cross closes it. With an action, a strip under it shows the time left, and a click there keeps it open. Three at most on screen.
 - The details of an error tied to an element (Install button…) unfold in place, not in a toast.
 
 ## Window

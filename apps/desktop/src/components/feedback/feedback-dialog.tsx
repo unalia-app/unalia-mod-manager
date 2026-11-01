@@ -76,7 +76,7 @@ export function FeedbackDialog() {
 			await submitFeedback({ type, message: message.trim(), attach: type === "bug" && attach });
 			setSent(true);
 		} catch {
-			toast({ title: "An error occurred. Please try again.", tone: "error" });
+			toast({ title: "An error occurred", details: "Check your connection, then send it again.", tone: "error" });
 		} finally {
 			setSending(false);
 		}

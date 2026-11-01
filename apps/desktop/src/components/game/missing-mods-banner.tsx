@@ -42,7 +42,7 @@ export function MissingModsBanner({ game }: { game: SteamGame }) {
 		try {
 			const count = await putBackMods(game.appId);
 			await refreshInstalled(game.appId);
-			toast({ title: `${count} mod${count > 1 ? "s" : ""} put back` });
+			toast({ title: `${count} mod${count > 1 ? "s" : ""} put back`, details: "Their files are back in the game." });
 		} catch (error) {
 			const { message, details } = splitError(error);
 			toast({ title: message, details: details ?? undefined, tone: "error" });

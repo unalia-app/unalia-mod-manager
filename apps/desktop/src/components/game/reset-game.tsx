@@ -59,7 +59,7 @@ export function ResetGame({ game }: { game: SteamGame }) {
 				toast({
 					title: "Some files couldn't be moved",
 					details: `Close the game and any program using its folder, then reset again. Still there: ${done.left.join(", ")}.`,
-					tone: "error",
+					tone: "warning",
 				});
 			} else {
 				toast({ title: `${game.name} is back to no mods`, details: summary(done.mods, done.foreign) });

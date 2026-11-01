@@ -1,22 +1,22 @@
 "use client";
 // beui.dev/components/motion/animated-toast-stack, adapted to the
-// @modalia/ui tokens: each toast holds its timer (paused on hover and while
-// the details are open), with a time-left bar.
+// @modalia/ui tokens: each toast holds its timer (paused on hover). One with
+// an action shows the time left, and a click there keeps it open.
 
 import { AnimatePresence, motion, type Transition, useReducedMotion } from "motion/react";
-import { Check, CircleAlert, Info, type LucideIcon, X } from "lucide-react";
+import { CircleAlert, CircleCheck, Info, type LucideIcon, TriangleAlert, X } from "lucide-react";
 import { memo, type ReactNode, useEffect, useRef, useState } from "react";
 
 import { cn } from "./cn";
 
-export type ToastTone = "neutral" | "info" | "success" | "error";
+export type ToastTone = "neutral" | "info" | "success" | "warning" | "error";
 
 export type ToastStackItem = {
 	id: number;
 	title: ReactNode;
 	tone: ToastTone;
-	/** Technical detail, folded behind "Details". */
-	details?: string;
+	/** Under the title. Can be technical: a long one scrolls. */
+	details: string;
 	action?: { label: string; onClick: () => void };
 	/** En millisecondes. */
 	duration: number;
@@ -29,21 +29,42 @@ const STACK_SPRING: Transition = { type: "spring", stiffness: 420, damping: 34, 
 const TONE_ICON: Record<ToastTone, LucideIcon> = {
 	neutral: Info,
 	info: Info,
-	success: Check,
+	success: CircleCheck,
+	warning: TriangleAlert,
 	error: CircleAlert,
 };
 
 const TONE_CLASS: Record<ToastTone, string> = {
-	neutral: "bg-surface-strong text-fg-muted",
-	info: "bg-info/15 text-info",
-	success: "bg-success/15 text-success",
-	error: "bg-danger/15 text-danger",
+	neutral: "text-fg-muted",
+	info: "text-info",
+	success: "text-success",
+	warning: "text-warning",
+	error: "text-danger",
+};
+
+/** The line of light on the top edge. */
+const EDGE_CLASS: Record<ToastTone, string> = {
+	neutral: "via-white/25",
+	info: "via-info/60",
+	success: "via-success/60",
+	warning: "via-warning/50",
+	error: "via-danger/60",
+};
+
+/** What that line casts on the toast. */
+const GLOW_CLASS: Record<ToastTone, string> = {
+	neutral: "from-white/[0.03]",
+	info: "from-info/[0.06]",
+	success: "from-success/[0.06]",
+	warning: "from-warning/[0.05]",
+	error: "from-danger/[0.06]",
 };
 
 const TIMER_CLASS: Record<ToastTone, string> = {
 	neutral: "bg-accent",
 	info: "bg-info",
 	success: "bg-success",
+	warning: "bg-warning",
 	error: "bg-danger",
 };
 
@@ -82,8 +103,9 @@ const ToastItem = memo(function ToastItem({
 }) {
 	const reduce = useReducedMotion();
 	const [hovered, setHovered] = useState(false);
-	const [open, setOpen] = useState(false);
-	const paused = hovered || open;
+	const [stopped, setStopped] = useState(false);
+	const [seconds, setSeconds] = useState(Math.ceil(toast.duration / 1000));
+	const paused = hovered || stopped;
 	const remaining = useRef(toast.duration);
 	const Icon = TONE_ICON[toast.tone];
 
@@ -91,8 +113,12 @@ const ToastItem = memo(function ToastItem({
 		if (paused) return;
 		const started = Date.now();
 		const timer = window.setTimeout(() => onDismiss(toast.id), remaining.current);
+		const clock = window.setInterval(() => {
+			setSeconds(Math.max(Math.ceil((remaining.current - (Date.now() - started)) / 1000), 1));
+		}, 200);
 		return () => {
 			window.clearTimeout(timer);
+			window.clearInterval(clock);
 			remaining.current = Math.max(remaining.current - (Date.now() - started), MIN_REMAINING_MS);
 		};
 	}, [paused, onDismiss, toast.id]);
@@ -121,72 +147,58 @@ const ToastItem = memo(function ToastItem({
 			style={{ zIndex: 20 - index }}
 		>
 			{/* Opaque surface: a toast must show over any ambience. */}
-			<div className="relative overflow-hidden rounded-2xl border border-line-strong bg-[#18181b]/95 p-3 shadow-[0_16px_48px_rgba(0,0,0,0.55)] backdrop-blur-xl">
-				<div className="flex items-start gap-3">
-					<span
-						className={cn("mt-0.5 inline-flex size-7 shrink-0 items-center justify-center rounded-full", TONE_CLASS[toast.tone])}
-					>
-						<Icon className="size-3.5" strokeWidth={2.5} />
-					</span>
+			<div className="grain relative overflow-hidden rounded-2xl border border-line bg-bg shadow-[0_16px_48px_rgba(0,0,0,0.55)]">
+				<span aria-hidden className={cn("absolute inset-x-0 top-0 h-10 bg-gradient-to-b to-transparent", GLOW_CLASS[toast.tone])} />
+				<span
+					aria-hidden
+					className={cn("absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent to-transparent", EDGE_CLASS[toast.tone])}
+				/>
 
-					<div className="min-w-0 flex-1 pt-1">
+				<div className="relative flex items-start gap-3 p-3.5">
+					<Icon className={cn("mt-px size-[18px] shrink-0", TONE_CLASS[toast.tone])} />
+
+					<div className="min-w-0 flex-1">
 						<p className="text-sm leading-5 font-medium text-fg">{toast.title}</p>
-
-						{(toast.action || toast.details) && (
-							<div className="mt-2 flex flex-wrap items-center gap-2">
-								{toast.action && (
-									<button
-										type="button"
-										onClick={() => {
-											toast.action?.onClick();
-											onDismiss(toast.id);
-										}}
-										className="inline-flex h-7 cursor-pointer items-center rounded-full bg-accent px-3 text-xs font-semibold text-bg transition-[filter] hover:brightness-110"
-									>
-										{toast.action.label}
-									</button>
-								)}
-								{toast.details && (
-									<button
-										type="button"
-										aria-expanded={open}
-										onClick={() => setOpen((o) => !o)}
-										className="inline-flex h-7 cursor-pointer items-center rounded-full bg-surface-strong px-3 text-xs font-medium text-fg-muted transition-colors hover:text-fg"
-									>
-										{open ? "Hide details" : "Details"}
-									</button>
-								)}
-							</div>
-						)}
-
-						<AnimatePresence initial={false}>
-							{open && toast.details && (
-								<motion.p
-									initial={reduce ? { opacity: 0 } : { opacity: 0, height: 0 }}
-									animate={reduce ? { opacity: 1 } : { opacity: 1, height: "auto" }}
-									exit={reduce ? { opacity: 0 } : { opacity: 0, height: 0 }}
-									transition={{ duration: 0.22, ease: EASE_OUT }}
-									className="overflow-hidden"
-								>
-									<span className="mt-2 block border-t border-line pt-2 font-mono text-[11px] leading-relaxed break-words text-fg-subtle select-text">
-										{toast.details}
-									</span>
-								</motion.p>
-							)}
-						</AnimatePresence>
+						<p className="mt-1 max-h-32 overflow-y-auto text-sm leading-5 break-words text-fg-muted select-text">
+							{toast.details}
+						</p>
 					</div>
+
+					{/* Negative margins: centered on the title's line, whatever its height. */}
+					{toast.action && (
+						<button
+							type="button"
+							onClick={() => {
+								toast.action?.onClick();
+								onDismiss(toast.id);
+							}}
+							className="-my-1.5 inline-flex h-8 shrink-0 cursor-pointer items-center rounded-full border border-line bg-surface-hover px-3.5 text-xs font-medium text-fg transition-colors hover:bg-surface-strong"
+						>
+							{toast.action.label}
+						</button>
+					)}
 
 					<button
 						type="button"
 						onClick={() => onDismiss(toast.id)}
 						aria-label="Dismiss"
-						className="inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-full text-fg-subtle transition-colors hover:bg-surface-strong hover:text-fg"
+						className="-m-1 inline-flex size-7 shrink-0 cursor-pointer items-center justify-center rounded-md text-fg-subtle transition-colors hover:text-fg"
 					>
-						<X className="size-3.5" />
+						<X className="size-[18px]" />
 					</button>
 				</div>
 
-				<TimeLeft duration={toast.duration} paused={paused} className={TIMER_CLASS[toast.tone]} />
+				{toast.action && !stopped && (
+					<button
+						type="button"
+						onClick={() => setStopped(true)}
+						className="relative block w-full cursor-pointer bg-surface px-3.5 py-2 text-left text-xs text-fg-subtle"
+					>
+						This message will close in {seconds} second{seconds > 1 ? "s" : ""}.{" "}
+						<span className="font-medium text-fg">Click to stop.</span>
+						<TimeLeft duration={toast.duration} paused={paused} className={TIMER_CLASS[toast.tone]} />
+					</button>
+				)}
 			</div>
 		</motion.li>
 	);

@@ -1,6 +1,6 @@
 "use client";
 
-import { ToastStack, type ToastStackItem } from "@modalia/ui";
+import { ToastStack, type ToastStackItem, type ToastTone } from "@modalia/ui";
 import { useSyncExternalStore } from "react";
 
 /**
@@ -12,7 +12,12 @@ import { useSyncExternalStore } from "react";
 
 type Toast = Omit<ToastStackItem, "title"> & { title: string };
 
-type ToastInput = Omit<Toast, "id" | "duration" | "tone"> & Partial<Pick<Toast, "tone" | "duration">>;
+/** Always a line under the title: only an error, with nothing more to say, can leave it to `ERROR_HELP`. */
+type ToastInput = Pick<Toast, "title" | "action"> &
+	Partial<Pick<Toast, "duration">> &
+	({ tone?: Exclude<ToastTone, "error">; details: string } | { tone: "error"; details?: string });
+
+const ERROR_HELP = "Try again. If it keeps failing, tell us in Help & Feedback.";
 
 const MAX_VISIBLE = 3;
 
@@ -28,7 +33,7 @@ export function toast(input: ToastInput) {
 	const id = nextId++;
 	// Same message already shown: replace it rather than stack it.
 	const others = toasts.filter((t) => t.title !== input.title);
-	const next: Toast = { tone: "neutral", duration: 4000, ...input, id };
+	const next: Toast = { tone: "neutral", duration: 4000, ...input, details: input.details ?? ERROR_HELP, id };
 	toasts = [...others, next].slice(-MAX_VISIBLE);
 	emit();
 	return id;

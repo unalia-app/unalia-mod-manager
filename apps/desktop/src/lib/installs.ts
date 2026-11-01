@@ -154,7 +154,7 @@ function listenOnce() {
 			}),
 		);
 		// What it needs stays in view next to the mod (ModNeeds).
-		toast({ title: `${name ?? "Mod"} installed`, tone: "success" });
+		toast({ title: `${name ?? "Mod"} installed`, details: "It's ready for your next launch.", tone: "success" });
 		window.dispatchEvent(new Event(MOD_INSTALLED));
 	});
 }

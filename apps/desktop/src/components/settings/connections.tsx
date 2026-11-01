@@ -72,7 +72,7 @@ function NexusCard() {
 		setBusy(true);
 		try {
 			const connected = await loginNexus();
-			toast({ title: `Connected to Nexus Mods as ${connected.name}` });
+			toast({ title: `Connected to Nexus Mods as ${connected.name}`, details: "Downloads from Nexus Mods now use your account." });
 		} catch (error) {
 			fail(error);
 		} finally {
@@ -84,7 +84,7 @@ function NexusCard() {
 		setBusy(true);
 		try {
 			await disconnectNexus();
-			toast({ title: "Nexus Mods account disconnected" });
+			toast({ title: "Nexus Mods account disconnected", details: "Connect it again to download from Nexus Mods." });
 		} catch (error) {
 			fail(error);
 		} finally {
@@ -170,7 +170,7 @@ function ApiKeyForm({ onCancel }: { onCancel: () => void }) {
 		setError(null);
 		try {
 			const connected = await connectNexus(key);
-			toast({ title: `Connected to Nexus Mods as ${connected.name}` });
+			toast({ title: `Connected to Nexus Mods as ${connected.name}`, details: "Downloads from Nexus Mods now use your account." });
 		} catch (e) {
 			setError(splitError(e).message);
 		} finally {

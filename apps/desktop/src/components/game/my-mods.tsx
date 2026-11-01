@@ -455,6 +455,7 @@ function VersionPicker({
 			.then((reverted) => {
 				toast({
 					title: `${m.name} is back to ${versionLabel(reverted.version)}`,
+					details: "Undo returns to the version you left.",
 					// The version left became a previous version.
 					action: { label: "Undo", onClick: () => void revert(appId, m.id, m.package).catch(onError) },
 				});
