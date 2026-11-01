@@ -2,7 +2,7 @@
 
 All notable changes to Unalia Mod Manager. The format follows [Keep a Changelog](https://keepachangelog.com), and versions follow [Semantic Versioning](https://semver.org).
 
-## [Unreleased]
+## [0.1.6] - 2026-11-01
 
 ### Added
 
@@ -16,13 +16,15 @@ All notable changes to Unalia Mod Manager. The format follows [Keep a Changelog]
 ### Changed
 
 - A mod's page has a Back to mods button, like the one in Settings.
-- Discover: the category filter is a list you can search.
+- Discover: the category filter is a list you can search, with a cross to clear it.
+- Notifications have a new look. Their details show right away, and one you can undo tells how long it stays, with a click to keep it open.
 
 ### Fixed
 
 - Coming back from a mod's page returns to the tab you left, My Mods included, instead of Discover, with your search, category and sort still there.
 - A mod's page says when a dependency is already installed, instead of asking to install it.
 - Import a mod list: a long mod name stays inside the window.
+- Import a mod list: the list shows the dependencies too and says how many mods it found. They still come with their mods, in the version made for your game.
 
 ## [0.1.5] - 2026-10-31
 
