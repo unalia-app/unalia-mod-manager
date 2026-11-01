@@ -13,7 +13,9 @@
 ## What it does
 
 - **Finds your games.** Reads your Steam libraries in a second. Games outside Steam (GOG, Epic, standalone) can be added by picking their folder, and added to Steam for its overlay.
+- **Helps you find mods.** Search a game's mods, filter them by category and sort them. Mods marked as adult content have their images blurred, and Settings picks how strongly.
 - **Installs in one click.** The mod, its dependencies and the loader or framework it needs (BepInEx, UE4SS, RED4ext…), in the right order.
+- **Plays well with friends.** Share your mod list with a code: they paste it and get the same mods.
 - **Lets you change your mind.** Turn a mod off without uninstalling it, remove it with an Undo, go back to a previous version without downloading it again.
 - **Keeps you up to date, on your terms.** Updates are shown, never forced: a working setup stays working.
 - **Waits for your game.** Changes made while the game runs are queued and applied when you close it.
@@ -27,8 +29,8 @@
 |---|---|---|
 | [Thunderstore](https://thunderstore.io) | Every game listed there (Hollow Knight: Silksong, Lethal Company, Valheim…) | BepInEx, MelonLoader, Shimloader, UMM, Northstar… |
 | [Hexium](https://hexium.gg) | Its games also on Thunderstore (Valheim, Sunkenland…), as a second source in Discover | Same as Thunderstore |
-| [Nexus Mods](https://www.nexusmods.com) | Cyberpunk 2077 | Cyber Engine Tweaks, RED4ext, redscript, ArchiveXL, TweakXL, Codeware |
-| Nexus Mods | Unreal Engine games, recognized on their own by their name on Nexus (Phantom Blade Zero, Hogwarts Legacy…) | `.pak` mods, LogicMods, UE4SS |
+| [Nexus Mods](https://www.nexusmods.com) | Cyberpunk 2077 | Cyber Engine Tweaks, RED4ext, redscript, ArchiveXL, TweakXL, Codeware, REDmod |
+| Nexus Mods | Unreal Engine games, recognized on their own by their name on Nexus (Phantom Blade Zero, Hogwarts Legacy…) | `.pak` mods, LogicMods, UE4SS, proxy DLLs, ASI plugins, ReShade presets, `Engine.ini` |
 | Nexus Mods | Skyrim Special Edition, Fallout 4 | Plugins, archives and loose files, `plugins.txt` kept in sync |
 
 Archives can be `.zip`, `.7z` or `.rar`. Nexus Mods works with a free account: the app sends you to the mod's page for the "Mod Manager Download" click Nexus requires, then takes over.
