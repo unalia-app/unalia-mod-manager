@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronsUpDown, Search } from "lucide-react";
+import { ChevronsUpDown, Search, X } from "lucide-react";
 import type {
   InputHTMLAttributes,
   KeyboardEvent as ReactKeyboardEvent,
@@ -13,9 +13,11 @@ import { mergeRefs, useComboboxContext } from "./context";
 export interface ComboboxTriggerProps {
   children: ReactNode;
   className?: string;
+  /** Given when there is a choice to clear: a cross replaces the chevrons. */
+  onClear?: () => void;
 }
 
-export function ComboboxTrigger({ children, className }: ComboboxTriggerProps) {
+export function ComboboxTrigger({ children, className, onClear }: ComboboxTriggerProps) {
   const context = useComboboxContext("ComboboxTrigger");
 
   return (
@@ -37,9 +39,25 @@ export function ComboboxTrigger({ children, className }: ComboboxTriggerProps) {
       )}
     >
       <span className="min-w-0 flex-1 text-left">{children}</span>
-      <span aria-hidden className="shrink-0 text-fg-subtle">
-        <ChevronsUpDown className="size-4" />
-      </span>
+      {onClear ? (
+        <button
+          type="button"
+          aria-label="Clear"
+          // The trigger opens the list on any press outside the input.
+          onPointerDown={(event) => event.stopPropagation()}
+          onClick={() => {
+            context.setOpen(false);
+            onClear();
+          }}
+          className="shrink-0 cursor-pointer text-fg-subtle transition-colors hover:text-fg"
+        >
+          <X className="size-4" />
+        </button>
+      ) : (
+        <span aria-hidden className="shrink-0 text-fg-subtle">
+          <ChevronsUpDown className="size-4" />
+        </span>
+      )}
     </div>
   );
 }

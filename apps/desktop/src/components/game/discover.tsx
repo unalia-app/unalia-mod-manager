@@ -189,7 +189,7 @@ export function Discover({ community: gameCommunity, appId }: { community: strin
 				/>
 				{categories.length > 0 && (
 					<Combobox value={pickedCategory} onValueChange={setPickedCategory} filter={matchesName} className="w-56">
-						<ComboboxTrigger>
+						<ComboboxTrigger onClear={category ? () => setPickedCategory(ALL_CATEGORIES) : undefined}>
 							<ComboboxInput aria-label="Filter by category" placeholder="Search categories" />
 						</ComboboxTrigger>
 						<ComboboxContent>
