@@ -462,6 +462,7 @@ async fn updates_are_detected_then_applied_in_one_click() {
     assert!(
         installer::available_updates(&w.source, COMMUNITY, &installed)
             .await
+            .updates
             .is_empty()
     );
 
@@ -486,7 +487,9 @@ async fn updates_are_detected_then_applied_in_one_click() {
     )
     .await;
 
-    let updates = installer::available_updates(&w.source, COMMUNITY, &installed).await;
+    let updates = installer::available_updates(&w.source, COMMUNITY, &installed)
+        .await
+        .updates;
     assert_eq!(
         updates,
         [installer::Update {

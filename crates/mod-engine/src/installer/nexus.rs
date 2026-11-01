@@ -746,7 +746,7 @@ pub async fn available_updates_nexus(
     profile: &GameProfile,
     installed: &[InstalledMod],
     before: Option<&str>,
-) -> Vec<super::Update> {
+) -> super::UpdateCheck {
     use crate::sources::nexus::parse_mod_key;
 
     let newer = |m: &InstalledMod, latest: &str| {
@@ -770,8 +770,18 @@ pub async fn available_updates_nexus(
         }
     }
     let Some(domain) = profile.nexus.as_ref().map(|n| &n.domain) else {
-        return updates;
+        return super::UpdateCheck { updates, deprecated: Vec::new() };
     };
+    let latest = nexus.latest_versions(domain, &from_nexus).await;
+    let deprecated = installed
+        .iter()
+        .filter(|m| {
+            parse_mod_key(&m.id).is_some_and(|id| {
+                latest.as_ref().is_ok_and(|l| l.get(&id).is_some_and(|l| l.retired))
+            })
+        })
+        .map(|m| m.id.clone())
+        .collect();
     if let Some(before) = before {
         for m in installed {
             let Some(id) = parse_mod_key(&m.id).filter(|id| from_nexus.contains(id)) else {
@@ -787,12 +797,13 @@ pub async fn available_updates_nexus(
                 updates.extend(newer(m, &file_version(&info, &file, Some(before))));
             }
         }
-    } else if let Ok(latest) = nexus.latest_versions(domain, &from_nexus).await {
+    } else if let Ok(latest) = latest {
         for m in installed {
             let Some(id) = parse_mod_key(&m.id) else {
                 continue;
             };
-            let Some(update) = latest.get(&id).and_then(|version| newer(m, version)) else {
+            let version = latest.get(&id).and_then(|l| l.version.as_deref());
+            let Some(update) = version.and_then(|version| newer(m, version)) else {
                 continue;
             };
             // The page's version is the main file's. Installed without it,
@@ -810,7 +821,7 @@ pub async fn available_updates_nexus(
             }
         }
     }
-    updates
+    super::UpdateCheck { updates, deprecated }
 }
 
 /// What a site link installs. An optional file is an add-on (a patch for

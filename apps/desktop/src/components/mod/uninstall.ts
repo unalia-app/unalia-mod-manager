@@ -1,6 +1,6 @@
 import { toast } from "@/components/toaster";
 import { splitError } from "@/lib/engine";
-import { remove, restore } from "@/lib/installs";
+import { remove, removeMany, restore, restoreMany } from "@/lib/installs";
 
 function fail(error: unknown) {
 	const { message, details } = splitError(error);
@@ -25,4 +25,17 @@ export async function uninstallWithUndo(appId: number, modId: string, name: stri
 	} catch (error) {
 		fail(error);
 	}
+}
+
+/** Removes several mods, with one "Undo" for all of them. */
+export async function uninstallManyWithUndo(appId: number, modIds: string[]): Promise<void> {
+	const { removed, failed } = await removeMany(appId, modIds);
+	if (removed.length > 0) {
+		toast({
+			title: `${removed.length} mod${removed.length === 1 ? "" : "s"} removed`,
+			details: "Their files are gone from the game.",
+			action: { label: "Undo", onClick: () => restoreMany(appId, removed).catch(fail) },
+		});
+	}
+	if (failed) fail(failed.reason);
 }

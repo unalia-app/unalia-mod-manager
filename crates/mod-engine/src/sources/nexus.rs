@@ -128,6 +128,14 @@ pub struct ModFile {
     pub description: String,
 }
 
+/// What an update check learns about a mod.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct LatestMod {
+    pub version: Option<String>,
+    /// Hidden or removed by its author.
+    pub retired: bool,
+}
+
 /// What we need to know about a mod to install it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ModInfo {
@@ -427,33 +435,34 @@ impl Nexus {
         })
     }
 
-    /// Latest published version of each mod, in one request.
+    /// Latest published version and state of each mod, in as few requests
+    /// as the API's page allows. A mod its author hid or removed still
+    /// answers here, not in a search.
     pub async fn latest_versions(
         &self,
         domain: &str,
         mod_ids: &[u32],
-    ) -> Result<HashMap<u32, String>, SourceError> {
-        if mod_ids.is_empty() {
-            return Ok(HashMap::new());
+    ) -> Result<HashMap<u32, LatestMod>, SourceError> {
+        let mut latest = HashMap::new();
+        for page in mod_ids.chunks(LATEST_PAGE) {
+            let ids: Vec<_> = page
+                .iter()
+                .map(|id| json!({ "gameDomain": domain, "modId": id }))
+                .collect();
+            let data: LegacyData = self
+                .graphql(
+                    "query($ids: [CompositeDomainWithIdInput!]!, $count: Int) {
+                        legacyModsByDomain(ids: $ids, count: $count) { nodes { modId version status } }
+                    }",
+                    json!({ "ids": ids, "count": page.len() }),
+                )
+                .await?;
+            latest.extend(data.legacy_mods_by_domain.nodes.into_iter().map(|n| {
+                let retired = retired(n.status.as_deref());
+                (n.mod_id, LatestMod { version: n.version, retired })
+            }));
         }
-        let ids: Vec<_> = mod_ids
-            .iter()
-            .map(|id| json!({ "gameDomain": domain, "modId": id }))
-            .collect();
-        let data: LegacyData = self
-            .graphql(
-                "query($ids: [CompositeDomainWithIdInput!]!) {
-                    legacyModsByDomain(ids: $ids) { nodes { modId version } }
-                }",
-                json!({ "ids": ids }),
-            )
-            .await?;
-        Ok(data
-            .legacy_mods_by_domain
-            .nodes
-            .into_iter()
-            .filter_map(|n| Some((n.mod_id, n.version?)))
-            .collect())
+        Ok(latest)
     }
 
     /// Download URL of a file. Without `link` (the site's `nxm://` link),
@@ -679,6 +688,14 @@ async fn parse<T: DeserializeOwned>(response: reqwest::Response) -> Result<T, So
 const MOD_FIELDS: &str = "modId name summary author thumbnailUrl thumbnailLargeUrl pictureUrl downloads \
     updatedAt createdAt version adultContent status modCategory { name }";
 
+/// The most `legacyModsByDomain` returns at once: 20 without `count`, 80 with.
+const LATEST_PAGE: usize = 80;
+
+/// Hidden, removed or deleted: its author no longer offers it.
+fn retired(status: Option<&str>) -> bool {
+    status.is_some_and(|s| s != "published")
+}
+
 impl ModSource for Nexus {
     fn name(&self) -> &'static str {
         NAME
@@ -816,7 +833,7 @@ impl ModSource for Nexus {
             updated_at: node.updated_at.unwrap_or_default(),
             website_url: None,
             donation_url,
-            deprecated: node.status.as_deref().is_some_and(|s| s != "published"),
+            deprecated: retired(node.status.as_deref()),
             adult: node.adult_content,
             versions,
         })

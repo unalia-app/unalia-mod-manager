@@ -445,8 +445,11 @@ export function resetGame(appId: number, foreign: string[]): Promise<ResetResult
 
 export type ModUpdate = { modId: string; current: string; latest: string };
 
-export function checkUpdates(appId: number): Promise<ModUpdate[]> {
-	if (!isTauri()) return Promise.resolve([]);
+/** `deprecated`: mods their author marked as deprecated, hid or removed. */
+export type UpdateCheck = { updates: ModUpdate[]; deprecated: string[] };
+
+export function checkUpdates(appId: number): Promise<UpdateCheck> {
+	if (!isTauri()) return Promise.resolve({ updates: [], deprecated: [] });
 	return invoke("check_updates", { appId });
 }
 

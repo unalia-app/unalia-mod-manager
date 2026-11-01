@@ -1142,6 +1142,15 @@ pub struct Update {
     pub latest: String,
 }
 
+/// What a check found on the installed mods.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateCheck {
+    pub updates: Vec<Update>,
+    /// Ids of the mods their author marked as deprecated, hid or removed.
+    pub deprecated: Vec<String>,
+}
+
 /// Updates available among `installed`. Nothing is installed: we tell, the
 /// user confirms. A mod the source no longer finds, or an unreachable
 /// source, doesn't prevent checking the others.
@@ -1149,12 +1158,16 @@ pub async fn available_updates<S: ModSource>(
     source: &S,
     community: &str,
     installed: &[InstalledMod],
-) -> Vec<Update> {
+) -> UpdateCheck {
     let mut updates = Vec::new();
+    let mut deprecated = Vec::new();
     for m in installed {
         let Ok(latest) = source.get(community, &m.id).await else {
             continue;
         };
+        if latest.deprecated {
+            deprecated.push(m.id.clone());
+        }
         if let Some(version) = latest.latest()
             && resolver::compare_versions(&version.number, &m.version)
                 == std::cmp::Ordering::Greater
@@ -1166,7 +1179,7 @@ pub async fn available_updates<S: ModSource>(
             });
         }
     }
-    updates
+    UpdateCheck { updates, deprecated }
 }
 
 /// Enables or disables a mod: its files leave the game (or come back), the

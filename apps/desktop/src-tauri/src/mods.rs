@@ -12,7 +12,7 @@ use std::time::{Duration, Instant};
 use mod_engine::download::Cancel;
 use mod_engine::foreign::{self, Foreign};
 use mod_engine::installer::{
-    self, InstallError, Installer, NexusFile, NexusInstall, Paths, Progress, Target, Update,
+    self, InstallError, Installer, NexusFile, NexusInstall, Paths, Progress, Target, UpdateCheck,
 };
 use mod_engine::launch::{self, LaunchTarget, PendingOp, ProcessWatcher};
 use mod_engine::sources::SourceError;
@@ -433,7 +433,7 @@ pub async fn check_updates(
     catalog: State<'_, Catalog>,
     mods: State<'_, Mods>,
     app_id: u32,
-) -> Result<Vec<Update>, String> {
+) -> Result<UpdateCheck, String> {
     let game = library.game(app_id).ok_or(UNKNOWN_GAME)?;
     // The database is not held during network calls.
     let installed = mods
@@ -455,12 +455,13 @@ pub async fn check_updates(
     // Each mod is checked on the source it came from.
     let (hexium, thunderstore): (Vec<InstalledMod>, Vec<InstalledMod>) =
         installed.into_iter().partition(|m| m.source == "hexium");
-    let (mut updates, from_hexium) = tokio::join!(
+    let (mut check, from_hexium) = tokio::join!(
         installer::available_updates(&catalog.thunderstore, &game.community, &thunderstore),
         installer::available_updates(&catalog.hexium, &game.community, &hexium),
     );
-    updates.extend(from_hexium);
-    Ok(updates)
+    check.updates.extend(from_hexium.updates);
+    check.deprecated.extend(from_hexium.deprecated);
+    Ok(check)
 }
 
 #[derive(Clone, Serialize)]

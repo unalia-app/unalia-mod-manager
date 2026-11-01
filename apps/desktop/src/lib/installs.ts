@@ -45,11 +45,17 @@ export type VariantChoice = { appId: number; modId: string; name?: string; varia
 /** Install that just failed: shown in a dialog, not only on its card. */
 export type InstallFailure = { appId: number; modId: string; name?: string; message: string; details: string | null };
 
+/** `at`: when the last check succeeded. */
+export type UpdateCheckStatus = { running: boolean; failed: boolean; at: number | null };
+
 type Snapshot = {
 	installed: Map<number, InstalledMod[]>;
 	active: Map<string, ActiveInstall>;
-	/** Available updates per game (checked once per session). */
+	/** Available updates per game (checked once per session, then on demand). */
 	updates: Map<number, ModUpdate[]>;
+	/** Mods their author retired, per game, from the same check. */
+	deprecated: Map<number, string[]>;
+	checks: Map<number, UpdateCheckStatus>;
 	choice: FileChoice | null;
 	variantChoice: VariantChoice | null;
 	failure: InstallFailure | null;
@@ -59,6 +65,8 @@ let snapshot: Snapshot = {
 	installed: new Map(),
 	active: new Map(),
 	updates: new Map(),
+	deprecated: new Map(),
+	checks: new Map(),
 	choice: null,
 	variantChoice: null,
 	failure: null,
@@ -70,6 +78,8 @@ function update(change: (draft: Snapshot) => void) {
 		installed: new Map(snapshot.installed),
 		active: new Map(snapshot.active),
 		updates: new Map(snapshot.updates),
+		deprecated: new Map(snapshot.deprecated),
+		checks: new Map(snapshot.checks),
 		choice: snapshot.choice,
 		variantChoice: snapshot.variantChoice,
 		failure: snapshot.failure,
@@ -361,15 +371,43 @@ export async function toggle(appId: number, modId: string, enabled: boolean): Pr
 	}
 }
 
+const firstFailure = (outcomes: PromiseSettledResult<unknown>[]) =>
+	outcomes.find((o): o is PromiseRejectedResult => o.status === "rejected");
+
+/** Turns several mods on or off: the engine takes them one by one. */
+export async function toggleMany(appId: number, modIds: string[], enabled: boolean) {
+	const failed = firstFailure(await Promise.allSettled(modIds.map((modId) => toggle(appId, modId, enabled))));
+	if (failed) throw failed.reason;
+}
+
 export async function remove(appId: number, modId: string): Promise<"done" | "queued"> {
 	const outcome = await uninstallMod(appId, modId);
 	if (outcome.status === "done") await refreshInstalled(appId);
 	return outcome.status;
 }
 
+/** Removes several mods. `removed`: the ones gone now, not waiting for the game to close. */
+export async function removeMany(appId: number, modIds: string[]) {
+	const outcomes = await Promise.allSettled(
+		modIds.map((modId) => uninstallMod(appId, modId).then((o) => (o.status === "done" ? modId : null))),
+	);
+	await refreshInstalled(appId);
+	return {
+		removed: outcomes.flatMap((o) => (o.status === "fulfilled" && o.value ? [o.value] : [])),
+		failed: firstFailure(outcomes),
+	};
+}
+
 export async function restore(appId: number, modId: string) {
 	await restoreMod(appId, modId);
 	await refreshInstalled(appId);
+}
+
+export async function restoreMany(appId: number, modIds: string[]) {
+	const outcomes = await Promise.allSettled(modIds.map((modId) => restoreMod(appId, modId)));
+	await refreshInstalled(appId);
+	const failed = firstFailure(outcomes);
+	if (failed) throw failed.reason;
 }
 
 /** Game removed from Unalia: its in-memory mods and updates go too. */
@@ -435,27 +473,49 @@ export function overallProgress(progress: InstallProgress): number {
 
 const checking = new Set<number>();
 
+/** Checks the game's mods now. What the last check found stays until the answer. */
+export function runUpdateCheck(appId: number) {
+	if (checking.has(appId)) return;
+	checking.add(appId);
+	update((s) => {
+		s.checks.set(appId, { running: true, failed: false, at: s.checks.get(appId)?.at ?? null });
+	});
+	void checkUpdates(appId)
+		.then(
+			({ updates, deprecated }) =>
+				update((s) => {
+					s.updates.set(appId, updates);
+					s.deprecated.set(appId, deprecated);
+					s.checks.set(appId, { running: false, failed: false, at: Date.now() });
+				}),
+			() =>
+				update((s) => {
+					s.checks.set(appId, { running: false, failed: true, at: s.checks.get(appId)?.at ?? null });
+				}),
+		)
+		.finally(() => checking.delete(appId));
+}
+
 /** Available updates for the game (`undefined` while the check runs). */
 export function useUpdates(appId: number): ModUpdate[] | undefined {
 	const list = useSyncExternalStore(subscribe, () => snapshot.updates.get(appId), () => undefined);
 	useEffect(() => {
-		if (snapshot.updates.has(appId) || checking.has(appId)) return;
-		checking.add(appId);
-		void checkUpdates(appId)
-			.then(
-				(updates) =>
-					update((s) => {
-						s.updates.set(appId, updates);
-					}),
-				() => {},
-			)
-			.finally(() => checking.delete(appId));
-	}, [appId]);
+		if (!snapshot.updates.has(appId)) runUpdateCheck(appId);
+	}, [appId, list]);
 	return list;
 }
 
 export function useModUpdate(appId: number, modId: string): ModUpdate | undefined {
 	return useUpdates(appId)?.find((u) => u.modId === modId);
+}
+
+export function useUpdateCheck(appId: number): UpdateCheckStatus | undefined {
+	return useSyncExternalStore(subscribe, () => snapshot.checks.get(appId), () => undefined);
+}
+
+/** Its author marked it as deprecated, hid or removed it. */
+export function useDeprecated(appId: number, modId: string): boolean {
+	return useSyncExternalStore(subscribe, () => snapshot.deprecated.get(appId)?.includes(modId) ?? false, () => false);
 }
 
 /** Updates to check again (e.g. after a game update). */

@@ -643,13 +643,65 @@ async fn the_main_file_keeps_an_optional_file_installed_first() {
 }
 
 #[tokio::test]
+async fn a_mod_its_author_hid_is_flagged_by_the_check() {
+    let mut w = World::new().await;
+    publish_cool_hud(&mut w).await;
+    w.install(COOL_HUD, NexusFile::Link(&link(COOL_HUD)))
+        .await
+        .unwrap();
+    w.graphql(
+        vec![
+            Matcher::Regex(r"nodes \{ modId version status \}".into()),
+            mod_id_matcher(COOL_HUD),
+        ],
+        json!({ "legacyModsByDomain": { "nodes": [
+            { "modId": COOL_HUD, "version": "1.2.0", "status": "hidden" },
+        ] } }),
+    )
+    .await;
+
+    let installed = w.state.list(GAME).unwrap();
+    let check = available_updates_nexus(&w.nexus, &w.github, &w.profile, &installed, None).await;
+    assert_eq!(check.deprecated, ["nexus-5000"]);
+    assert!(check.updates.is_empty(), "{:?}", check.updates);
+}
+
+#[tokio::test]
+async fn the_check_asks_for_every_mod_page_by_page() {
+    let mut w = World::new().await;
+    let pages = [(80, 1), (1, 81)].map(|(count, first)| {
+        w.server
+            .mock("POST", "/graphql")
+            .match_body(Matcher::AllOf(vec![
+                Matcher::Regex(format!(r#""count":{count}\b"#)),
+                mod_id_matcher(first),
+            ]))
+            .with_body(
+                json!({ "data": { "legacyModsByDomain": { "nodes": [
+                    { "modId": first, "version": "1.0", "status": "published" },
+                ] } } })
+                .to_string(),
+            )
+            .expect(1)
+            .create()
+    });
+
+    let ids: Vec<u32> = (1..=81).collect();
+    let latest = w.nexus.latest_versions("cyberpunk2077", &ids).await.unwrap();
+    assert!(latest.contains_key(&1) && latest.contains_key(&81), "{latest:?}");
+    for page in pages {
+        page.assert();
+    }
+}
+
+#[tokio::test]
 async fn a_mod_without_its_main_file_is_offered_no_update_it_would_not_install() {
     let mut w = World::new().await;
     publish_patched(&mut w).await;
     w.install(PATCHED, NexusFile::Link(&patch_link())).await.unwrap();
     w.graphql(
         vec![
-            Matcher::Regex(r"nodes \{ modId version \}".into()),
+            Matcher::Regex(r"nodes \{ modId version status \}".into()),
             mod_id_matcher(PATCHED),
         ],
         json!({ "legacyModsByDomain": { "nodes": [{ "modId": PATCHED, "version": "3.01" }] } }),
@@ -658,7 +710,9 @@ async fn a_mod_without_its_main_file_is_offered_no_update_it_would_not_install()
 
     let installed = w.state.list(GAME).unwrap();
     assert_eq!(installed[0].version, "1.5l");
-    let updates = available_updates_nexus(&w.nexus, &w.github, &w.profile, &installed, None).await;
+    let updates = available_updates_nexus(&w.nexus, &w.github, &w.profile, &installed, None)
+        .await
+        .updates;
     assert!(updates.is_empty(), "{updates:?}");
 }
 
@@ -782,7 +836,7 @@ async fn updates_come_from_github_for_frameworks_and_nexus_for_mods() {
     // A more recent version of Cool HUD on Nexus.
     w.graphql(
         vec![
-            Matcher::Regex(r"nodes \{ modId version \}".into()),
+            Matcher::Regex(r"nodes \{ modId version status \}".into()),
             mod_id_matcher(COOL_HUD),
         ],
         json!({ "legacyModsByDomain": { "nodes": [{ "modId": COOL_HUD, "version": "1.3.0" }] } }),
@@ -790,7 +844,9 @@ async fn updates_come_from_github_for_frameworks_and_nexus_for_mods() {
     .await;
 
     let installed = w.state.list(GAME).unwrap();
-    let updates = available_updates_nexus(&w.nexus, &w.github, &w.profile, &installed, None).await;
+    let updates = available_updates_nexus(&w.nexus, &w.github, &w.profile, &installed, None)
+        .await
+        .updates;
     let updates: Vec<_> = updates
         .iter()
         .map(|u| (u.mod_id.as_str(), u.latest.as_str()))
@@ -989,7 +1045,8 @@ async fn a_game_kept_on_an_older_version_gets_the_files_of_its_time() {
         &installed,
         w.before.as_deref(),
     )
-    .await;
+    .await
+    .updates;
     assert!(updates.is_empty(), "{updates:?}");
 
     // Installed for 2.5 before going back: the previous version is
@@ -1009,7 +1066,8 @@ async fn a_game_kept_on_an_older_version_gets_the_files_of_its_time() {
         &installed,
         w.before.as_deref(),
     )
-    .await;
+    .await
+    .updates;
     let back: Vec<_> = updates
         .iter()
         .map(|u| (u.mod_id.as_str(), u.current.as_str(), u.latest.as_str()))

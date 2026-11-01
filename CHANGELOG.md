@@ -2,6 +2,21 @@
 
 All notable changes to Unalia Mod Manager. The format follows [Keep a Changelog](https://keepachangelog.com), and versions follow [Semantic Versioning](https://semver.org).
 
+## [Unreleased]
+
+### Added
+
+- My Mods: when the mods were last checked for updates, with a button to check again.
+- My Mods: a Deprecated badge on a mod its author marked as deprecated, hid or removed.
+- My Mods: an Off first sort brings the mods you turned off to the top.
+- My Mods: select several mods, or a range with Shift, to turn them on or off or remove them at once, with one Undo.
+- My Mods: a compact layout puts the mods in columns across the window, to see more of a long list at once.
+
+### Fixed
+
+- Nexus Mods: a game with more than 20 Nexus mods has them all checked for updates, not only 20 of them.
+- Changing the game's version or resetting it checks for updates again right away.
+
 ## [0.1.6] - 2026-11-01
 
 ### Added

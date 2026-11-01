@@ -406,6 +406,7 @@ async fn a_new_ue4ss_build_is_an_update() {
     let installed = w.state.list(GAME).unwrap();
     let updates = available_updates_nexus(&w.nexus, &github, &w.profile, &installed, None).await;
     let ue4ss = updates
+        .updates
         .iter()
         .find(|u| u.mod_id == UE4SS_ID)
         .unwrap();
