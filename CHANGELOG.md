@@ -19,6 +19,7 @@ All notable changes to Unalia Mod Manager. The format follows [Keep a Changelog]
 
 - Nexus Mods: a game with more than 20 Nexus mods has them all checked for updates, not only 20 of them.
 - Changing the game's version or resetting it checks for updates again right away.
+- The invitation to the Discord also shows after installing a mod from Thunderstore or Hexium, not only from Nexus Mods.
 
 ## [0.1.6] - 2026-11-01
 

@@ -261,6 +261,7 @@ export function install(
 						// Installed at its latest version: no pending update anymore.
 						const updates = s.updates.get(appId);
 						if (updates) s.updates.set(appId, updates.filter((u) => u.modId !== modId));
+						window.dispatchEvent(new Event(MOD_INSTALLED));
 					}
 					s.active.delete(k);
 					sources.delete(k);
