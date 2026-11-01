@@ -70,7 +70,7 @@ export function WhatsNew() {
 					leftIcon={<DiscordIcon className="size-3.5" />}
 					onClick={() => void openExternal(DISCORD_URL)}
 				>
-					Join the Discord
+					Vote for the next game
 				</Button>
 				<Button onClick={() => setOpen(false)}>Got it</Button>
 			</DialogFooter>

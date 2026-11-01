@@ -11,6 +11,9 @@ All notable changes to Unalia Mod Manager. The format follows [Keep a Changelog]
 - My Mods: an Off first sort brings the mods you turned off to the top.
 - My Mods: select several mods, or a range with Shift, to turn them on or off or remove them at once, with one Undo.
 - My Mods: a compact layout puts the mods in columns across the window, to see more of a long list at once.
+- A failed install offers to ask for help on Discord.
+- Help & Feedback says where to follow up after sending, as the form can't get you a reply.
+- Import a mod list: a link to the mod lists shared on Discord.
 
 ### Fixed
 

@@ -1,17 +1,20 @@
 "use client";
 
-import { Button, Dialog, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@modalia/ui";
+import { Button, Dialog, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DiscordIcon } from "@modalia/ui";
 import { RotateCcw, RotateCw, TriangleAlert } from "lucide-react";
 import { useRouter } from "next/navigation";
 
 import { requestReset } from "@/components/game/reset-game";
 import { gameHref } from "@/lib/games-store";
 import { clearError, dismissFailure, install, useInstallFailure } from "@/lib/installs";
+import { DISCORD_URL } from "@/lib/links";
+import { openExternal } from "@/lib/open";
 
 /**
  * An install just failed: the reason and what to do, in a dialog rather
  * than small on the mod card. When the engine advises "Reset mods" (files
- * left by another tool), the button is there.
+ * left by another tool), the button is there. Discord stays one click away:
+ * it's when a player needs a human the most.
  */
 export function InstallErrorDialog() {
 	const failure = useInstallFailure();
@@ -55,6 +58,13 @@ export function InstallErrorDialog() {
 				</details>
 			)}
 			<DialogFooter>
+				<Button
+					variant="outline"
+					leftIcon={<DiscordIcon className="size-3.5" />}
+					onClick={() => void openExternal(DISCORD_URL)}
+				>
+					Ask on Discord
+				</Button>
 				<Button variant="secondary" onClick={dismissFailure}>
 					Close
 				</Button>

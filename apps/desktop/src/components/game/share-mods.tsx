@@ -8,6 +8,8 @@ import { Marquee } from "@/components/marquee";
 import { toast } from "@/components/toaster";
 import { type InstalledMod, type SteamGame, splitError } from "@/lib/engine";
 import { install, toggle } from "@/lib/installs";
+import { DISCORD_URL } from "@/lib/links";
+import { openExternal } from "@/lib/open";
 import { type SharedList, type SharedMod, decodeList, dependenciesToShare, encodeList, modsToShare } from "@/lib/share";
 
 /** Copies the code of the mods turned on, for friends to paste in Import. */
@@ -22,7 +24,7 @@ export function ShareButton({ game, mods }: { game: SteamGame; mods: InstalledMo
 			await navigator.clipboard.writeText(code);
 			toast({
 				title: "Mod list copied",
-				details: `Send it to your friends: in My mods, Import then paste it to get the same ${total} mod${total === 1 ? "" : "s"}.`,
+				details: `Send it to your friends, or post it in mod-lists on Discord. In My mods, Import then paste it to get the same ${total} mod${total === 1 ? "" : "s"}.`,
 				duration: 8000,
 			});
 		} catch (error) {
@@ -144,6 +146,17 @@ function ImportDialog({ game, mods, onClose }: { game: SteamGame; mods: Installe
 						className="w-full resize-none rounded-lg border border-line bg-surface px-3 py-2 font-mono text-xs break-all text-fg/80 outline-none placeholder:text-white/22 focus:border-line-strong"
 					/>
 					{error && <p className="text-xs text-danger">{error}</p>}
+					<p className="text-xs text-fg-subtle">
+						No code yet? Find and share mod lists on{" "}
+						<button
+							type="button"
+							className="cursor-pointer text-fg-muted underline-offset-2 hover:underline"
+							onClick={() => void openExternal(DISCORD_URL)}
+						>
+							Discord
+						</button>
+						.
+					</p>
 				</div>
 			) : otherGame ? (
 				<p className="text-sm text-fg-muted">

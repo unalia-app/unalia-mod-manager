@@ -46,9 +46,9 @@ export function DiscordBubble() {
 
 	return (
 		<Bubble leaving={leaving} onDismiss={dismiss}>
-			<p className="pr-5 text-sm leading-snug font-semibold text-fg">Unalia has a Discord</p>
+			<p className="pr-5 text-sm leading-snug font-semibold text-fg">Talk directly to the dev</p>
 			<p className="mt-1 text-xs leading-relaxed text-fg-subtle">
-				Get help with a mod, suggest what comes next, and meet other players.
+				On Discord: get help with a mod, vote for the next game, and test new versions early.
 			</p>
 			<Button
 				className="mt-3 w-full"

@@ -1,6 +1,6 @@
 "use client";
 
-import { Button, Switch, cn } from "@modalia/ui";
+import { Button, DiscordIcon, Switch, cn } from "@modalia/ui";
 import { Bug, CircleCheckBig, ChevronRight, Lightbulb, MessageCircle } from "lucide-react";
 import { type FormEvent, type ReactNode, useEffect, useState } from "react";
 import { createPortal } from "react-dom";
@@ -14,6 +14,8 @@ import {
 	submitFeedback,
 	useFeedbackOpen,
 } from "@/lib/feedback";
+import { DISCORD_URL } from "@/lib/links";
+import { openExternal } from "@/lib/open";
 
 const TYPES: { value: FeedbackType; label: string; icon: ReactNode }[] = [
 	{ value: "bug", label: "Bug report", icon: <Bug className="size-3.5" /> },
@@ -24,7 +26,8 @@ const TYPES: { value: FeedbackType; label: string; icon: ReactNode }[] = [
 /**
  * Help & Feedback dialog, taken from Unalia: feedback type, message, then
  * thanks. In a portal: `fixed` must not depend on any transformed parent
- * (DESIGN.md).
+ * (DESIGN.md). The form has no contact field, so the thanks point to Discord
+ * for a reply.
  */
 export function FeedbackDialog() {
 	const open = useFeedbackOpen();
@@ -104,10 +107,18 @@ export function FeedbackDialog() {
 						<div className="space-y-1.5">
 							<h3 className="text-lg font-semibold text-fg">Thanks for your feedback!</h3>
 							<p className="text-sm text-fg-subtle">We read every submission and use it to improve Unalia.</p>
+							<p className="text-sm text-fg-subtle">We can't reply to this form. To follow up, talk to the dev on Discord.</p>
 						</div>
-						<Button className="mt-2" onClick={closeFeedback}>
-							Close
-						</Button>
+						<div className="mt-2 flex items-center gap-2">
+							<Button
+								variant="outline"
+								leftIcon={<DiscordIcon className="size-3.5" />}
+								onClick={() => void openExternal(DISCORD_URL)}
+							>
+								Join the Discord
+							</Button>
+							<Button onClick={closeFeedback}>Close</Button>
+						</div>
 					</div>
 				) : (
 					<form onSubmit={submit}>
