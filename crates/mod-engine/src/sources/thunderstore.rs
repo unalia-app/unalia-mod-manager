@@ -159,6 +159,9 @@ impl ModSource for Thunderstore {
         if let Some(category) = &query.category {
             params.push(("included_categories", category.clone()));
         }
+        if query.include_adult {
+            params.push(("nsfw", "true".to_owned()));
+        }
 
         let listing: Listing = self.fetch(&url, &params).await?;
         Ok(Page {
@@ -309,6 +312,8 @@ struct ListingItem {
     is_pinned: bool,
     #[serde(default)]
     is_deprecated: bool,
+    #[serde(default)]
+    is_nsfw: bool,
 }
 
 #[derive(Deserialize)]
@@ -330,6 +335,7 @@ impl ListingItem {
             updated_at: self.last_updated,
             pinned: self.is_pinned,
             deprecated: self.is_deprecated,
+            adult: self.is_nsfw,
         }
     }
 }
@@ -342,6 +348,8 @@ struct Package {
     date_updated: String,
     #[serde(default)]
     is_deprecated: bool,
+    #[serde(default)]
+    has_nsfw_content: bool,
     /// -1 when Thunderstore doesn't compute it.
     total_downloads: i64,
     latest: Version,
@@ -419,6 +427,7 @@ impl Package {
             website_url: latest.website_url.filter(|u| !u.is_empty()),
             donation_url: None,
             deprecated: self.is_deprecated,
+            adult: self.has_nsfw_content,
             versions: vec![ModVersion {
                 dependencies: latest
                     .dependencies

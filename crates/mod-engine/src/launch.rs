@@ -389,6 +389,7 @@ mod tests {
             author: String::new(),
             version: "1.0".into(),
             icon_url: None,
+            adult: false,
             loader_root: None,
             enabled,
             explicit: true,

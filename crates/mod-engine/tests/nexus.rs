@@ -1262,3 +1262,43 @@ async fn a_category_replaces_the_libraries_filter_and_adds_to_the_text() {
     mock.assert_async().await;
     assert_eq!(page.total, 0);
 }
+
+#[tokio::test]
+async fn adult_mods_stay_out_unless_asked_for_and_are_flagged() {
+    let mut server = mockito::Server::new_async().await;
+    let nexus = Nexus::with_urls(
+        reqwest::Client::new(),
+        &format!("{}/graphql", server.url()),
+        &format!("{}/v1", server.url()),
+    );
+    let hidden = server
+        .mock("POST", "/graphql")
+        .match_body(Matcher::Regex("\"adultContent\":\\[".into()))
+        .with_body(json!({ "data": { "mods": { "totalCount": 0, "nodes": [] } } }).to_string())
+        .create_async()
+        .await;
+    nexus.search(COMMUNITY, &SearchQuery::default()).await.unwrap();
+    hidden.assert_async().await;
+
+    let shown = server
+        .mock("POST", "/graphql")
+        .with_body(
+            json!({ "data": { "mods": { "totalCount": 1, "nodes": [{
+                "modId": 1, "name": "Mod", "summary": null, "author": null,
+                "thumbnailUrl": null, "pictureUrl": null, "downloads": null,
+                "updatedAt": null, "version": null, "status": null,
+                "adultContent": true, "modCategory": null, "gameId": null,
+                "description": null, "modRequirements": null,
+            }] } } })
+            .to_string(),
+        )
+        .create_async()
+        .await;
+    let query = SearchQuery {
+        include_adult: true,
+        ..Default::default()
+    };
+    let page = nexus.search(COMMUNITY, &query).await.unwrap();
+    shown.assert_async().await;
+    assert!(page.items[0].adult);
+}

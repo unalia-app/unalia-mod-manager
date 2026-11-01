@@ -167,6 +167,36 @@ async fn a_mod_without_a_changelog_gets_an_empty_one() {
 }
 
 #[tokio::test]
+async fn adult_mods_are_only_asked_for_on_request() {
+    let (mut server, ts) = source().await;
+    let adult = server
+        .mock("GET", "/api/cyberstorm/listing/hollow-knight-silksong/")
+        .match_query(Matcher::UrlEncoded("nsfw".into(), "true".into()))
+        .with_body(fixture("listing-silksong.json"))
+        .create_async()
+        .await;
+
+    let query = SearchQuery {
+        include_adult: true,
+        ..Default::default()
+    };
+    ts.search("hollow-knight-silksong", &query).await.unwrap();
+    adult.assert_async().await;
+
+    let plain = server
+        .mock("GET", "/api/cyberstorm/listing/hollow-knight-silksong/")
+        .match_query(Matcher::Any)
+        .match_request(|req| !req.path_and_query().contains("nsfw"))
+        .with_body(fixture("listing-silksong.json"))
+        .create_async()
+        .await;
+    ts.search("hollow-knight-silksong", &SearchQuery::default())
+        .await
+        .unwrap();
+    plain.assert_async().await;
+}
+
+#[tokio::test]
 async fn search_filters_on_a_category() {
     let (mut server, ts) = source().await;
     let mock = server

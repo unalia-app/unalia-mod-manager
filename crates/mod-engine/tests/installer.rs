@@ -847,6 +847,7 @@ async fn the_old_storage_moves_to_packages_without_downloading() {
             author: "shownyoung".into(),
             version: "0.6.7".into(),
             icon_url: None,
+            adult: false,
             loader_root: None,
             enabled: true,
             explicit: true,

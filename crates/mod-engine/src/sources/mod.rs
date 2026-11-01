@@ -34,6 +34,8 @@ pub struct ModSummary {
     /// Featured by the source (often loaders and libraries).
     pub pinned: bool,
     pub deprecated: bool,
+    /// Its author marked it as adult content.
+    pub adult: bool,
 }
 
 /// Full page of a mod (detail page, install).
@@ -55,6 +57,8 @@ pub struct Mod {
     /// The author's donation link (Ko-fi, Patreon…), if they published one.
     pub donation_url: Option<String>,
     pub deprecated: bool,
+    /// Its author marked it as adult content.
+    pub adult: bool,
     /// Versions, the most recent first.
     pub versions: Vec<ModVersion>,
 }
@@ -113,6 +117,8 @@ pub struct SearchQuery {
     pub include_libraries: bool,
     /// Only the mods of this category (`ModCategory::id`).
     pub category: Option<String>,
+    /// Include mods marked as adult content. Off by default.
+    pub include_adult: bool,
 }
 
 /// A category of a game's mods, as its source defines them.

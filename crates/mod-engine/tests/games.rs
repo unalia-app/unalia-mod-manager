@@ -332,6 +332,7 @@ fn store_paths_can_be_rebased_after_a_move() {
         author: "a".into(),
         version: "1.0.0".into(),
         icon_url: None,
+        adult: false,
         loader_root: None,
         enabled: true,
         explicit: true,

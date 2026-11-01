@@ -28,6 +28,8 @@ pub struct PlanStep {
     /// from another source than the requested mod.
     pub source: &'static str,
     pub icon_url: Option<String>,
+    /// Marked as adult content by its source.
+    pub adult: bool,
     /// Loader package (installs at the game root).
     pub loader: bool,
     /// Already installed in an older version: update.
@@ -205,6 +207,7 @@ impl<L: Fn(&str) -> bool> State<'_, L> {
         self.steps.push(PlanStep {
             replaces: self.installed.versions.get(&id).cloned(),
             source: package.source,
+            adult: package.adult,
             icon_url: package.images.into_iter().next(),
             name: package.name,
             id,

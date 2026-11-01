@@ -27,6 +27,8 @@ pub struct InstalledMod {
     pub author: String,
     pub version: String,
     pub icon_url: Option<String>,
+    /// Marked as adult content by its source: the UI blurs its images.
+    pub adult: bool,
     /// Loader package: its root folder in the archive (e.g. `BepInExPack`).
     pub loader_root: Option<String>,
     pub enabled: bool,
@@ -136,6 +138,7 @@ CREATE TABLE IF NOT EXISTS installed_mods (
     source       TEXT NOT NULL DEFAULT '',
     priority     INTEGER NOT NULL DEFAULT 0,
     needs        TEXT NOT NULL DEFAULT '[]',
+    adult        INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (game, id)
 );
 
@@ -262,9 +265,9 @@ impl State {
                 "INSERT OR REPLACE INTO installed_mods
                  (game, id, name, author, version, icon_url, loader_root, enabled, explicit,
                   sha256, installed_at, store_dir, deployment, placements, files, package, edits,
-                  source, priority, needs)
+                  source, priority, needs, adult)
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15,
-                         ?16, ?17, ?18, ?19, ?20)",
+                         ?16, ?17, ?18, ?19, ?20, ?21)",
                 params![
                     m.game,
                     m.id,
@@ -286,6 +289,7 @@ impl State {
                     m.source,
                     m.priority,
                     serde_json::to_string(&m.needs)?,
+                    m.adult,
                 ],
             )?;
         }
@@ -556,6 +560,7 @@ fn migrate(conn: &Connection) -> rusqlite::Result<()> {
         ("source", "TEXT", "''"),
         ("priority", "INTEGER", "0"),
         ("needs", "TEXT", "'[]'"),
+        ("adult", "INTEGER", "0"),
     ] {
         let present = conn
             .prepare("SELECT 1 FROM pragma_table_info('installed_mods') WHERE name = ?1")?
@@ -578,6 +583,7 @@ fn row(r: &rusqlite::Row<'_>) -> rusqlite::Result<Row> {
             author: r.get("author")?,
             version: r.get("version")?,
             icon_url: r.get("icon_url")?,
+            adult: r.get("adult")?,
             loader_root: r.get("loader_root")?,
             enabled: r.get("enabled")?,
             explicit: r.get("explicit")?,

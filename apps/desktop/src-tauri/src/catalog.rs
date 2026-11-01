@@ -229,6 +229,8 @@ pub async fn search_mods(
         sort,
         page,
         category,
+        // Always listed: their images are blurred on the app's side.
+        include_adult: true,
         ..Default::default()
     };
     if nexus::domain_of(&community).is_some() {

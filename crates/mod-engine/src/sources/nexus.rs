@@ -139,6 +139,7 @@ pub struct ModInfo {
     pub author: String,
     pub version: String,
     pub thumbnail_url: Option<String>,
+    pub adult: bool,
     pub files: Vec<ModFile>,
     pub requirements: Vec<Requirement>,
 }
@@ -420,6 +421,7 @@ impl Nexus {
             author: node.author.clone().unwrap_or_default(),
             version: node.version.clone().unwrap_or_default(),
             thumbnail_url: node.thumbnail_url.clone(),
+            adult: node.adult_content,
             requirements: node.requirements(),
             files,
         })
@@ -688,10 +690,10 @@ impl ModSource for Nexus {
         query: &SearchQuery,
     ) -> Result<Page<ModSummary>, SourceError> {
         let domain = domain_of(game).ok_or(SourceError::NotFound { source_name: NAME })?;
-        let mut filters = vec![
-            json!({ "gameDomainName": [{ "value": domain, "op": "EQUALS" }] }),
-            json!({ "adultContent": [{ "value": false, "op": "EQUALS" }] }),
-        ];
+        let mut filters = vec![json!({ "gameDomainName": [{ "value": domain, "op": "EQUALS" }] })];
+        if !query.include_adult {
+            filters.push(json!({ "adultContent": [{ "value": false, "op": "EQUALS" }] }));
+        }
         let text = query.text.trim();
         if !text.is_empty() {
             filters.push(json!({ "nameStemmed": [{ "value": text, "op": "MATCHES" }] }));
@@ -748,7 +750,6 @@ impl ModSource for Nexus {
                 json!({
                     "filter": { "op": "AND", "filter": [
                         { "gameDomainName": [{ "value": domain, "op": "EQUALS" }] },
-                        { "adultContent": [{ "value": false, "op": "EQUALS" }] },
                     ] },
                 }),
             )
@@ -816,6 +817,7 @@ impl ModSource for Nexus {
             website_url: None,
             donation_url,
             deprecated: node.status.as_deref().is_some_and(|s| s != "published"),
+            adult: node.adult_content,
             versions,
         })
     }
@@ -1185,6 +1187,8 @@ struct ModNode {
     updated_at: Option<String>,
     version: Option<String>,
     status: Option<String>,
+    #[serde(default)]
+    adult_content: bool,
     mod_category: Option<Category>,
     game_id: Option<u32>,
     description: Option<String>,
@@ -1205,6 +1209,7 @@ impl ModNode {
             updated_at: self.updated_at.unwrap_or_default(),
             pinned: false,
             deprecated: false,
+            adult: self.adult_content,
         }
     }
 
@@ -1453,6 +1458,7 @@ mod tests {
             description: String::new(),
         };
         let mut info = ModInfo {
+            adult: false,
             mod_id: 1,
             name: String::new(),
             description: String::new(),
@@ -1486,6 +1492,7 @@ mod tests {
             description: String::new(),
         };
         let info = |files| ModInfo {
+            adult: false,
             mod_id: 1,
             name: String::new(),
             description: String::new(),
@@ -1527,6 +1534,7 @@ mod tests {
             description: String::new(),
         };
         let info = |files| ModInfo {
+            adult: false,
             mod_id: 12,
             name: String::new(),
             description: String::new(),

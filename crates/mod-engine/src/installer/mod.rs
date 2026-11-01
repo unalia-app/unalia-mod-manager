@@ -214,6 +214,7 @@ pub struct Package {
     pub author: String,
     pub version: String,
     pub icon_url: Option<String>,
+    pub adult: bool,
     pub download_url: String,
     pub sha256: Option<String>,
     /// Precise file of a Nexus mod: a mod has several (variants) with the
@@ -240,6 +241,7 @@ impl Package {
                     step.id
                 ))
             }),
+            adult: step.adult,
             download_url: step.version.download_url.clone(),
             sha256: step.version.sha256.clone(),
             file_id: None,
@@ -664,6 +666,7 @@ fn deploy_package(
         author: package.author,
         version: package.version,
         icon_url: package.icon_url,
+        adult: package.adult,
         loader_root,
         enabled: true,
         explicit: false,

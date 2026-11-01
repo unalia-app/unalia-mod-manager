@@ -147,7 +147,7 @@ impl ModSource for Hexium {
         let mut found: Vec<&Package> = catalog
             .packages
             .iter()
-            .filter(|p| !p.has_nsfw_content && p.latest().is_some())
+            .filter(|p| (query.include_adult || !p.has_nsfw_content) && p.latest().is_some())
             .filter(|p| words.iter().all(|w| p.matches(w)))
             .filter(|p| {
                 query
@@ -367,6 +367,7 @@ impl Package {
             updated_at: self.date_updated.clone(),
             pinned: self.is_pinned,
             deprecated: self.is_deprecated,
+            adult: self.has_nsfw_content,
         }
     }
 
@@ -403,6 +404,7 @@ impl Package {
                 .clone()
                 .filter(|l| l.starts_with("https://")),
             deprecated: self.is_deprecated,
+            adult: self.has_nsfw_content,
             versions: versions
                 .into_iter()
                 .map(|v| ModVersion {
