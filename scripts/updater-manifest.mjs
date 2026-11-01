@@ -10,8 +10,8 @@
 //                                     [--out latest.json] [--notes notes.md]
 //
 // The release notes come from the `CHANGELOG.md` section that carries the
-// version number. `--notes` also writes them separately, for the GitHub
-// release description.
+// version number, or from `[Unreleased]` for a beta (`0.1.7-beta.1`).
+// `--notes` also writes them separately, for the GitHub release description.
 
 import { createHash, createPublicKey, verify } from "node:crypto";
 import { readdir, readFile, writeFile } from "node:fs/promises";
@@ -54,9 +54,10 @@ if (!signedBy(await readFile(join(nsis, installer)), signature, config.plugins.u
 	process.exit(1);
 }
 
-const notes = await changelogNotes(version);
+const section = version.includes("-") ? "Unreleased" : version;
+const notes = await changelogNotes(section);
 if (!notes) {
-	console.error(`Section ## [${version}] empty or missing from CHANGELOG.md: the release notes come from it.`);
+	console.error(`Section ## [${section}] empty or missing from CHANGELOG.md: the release notes come from it.`);
 	process.exit(1);
 }
 if (values.notes) await writeFile(values.notes, `${notes}\n`);

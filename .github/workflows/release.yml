@@ -2,6 +2,12 @@
 # the GitHub release. Nothing runs on other pushes (no test CI for now,
 # tests run locally).
 #
+# Beta for the testers: a `vX.Y.Z-beta.N` tag, with that same version in the
+# three files below. It's published as a pre-release, so /releases/latest,
+# the site and the updater stay on the last stable version. Its notes come
+# from the `[Unreleased]` section, and the link goes in #testers on Discord.
+# A tester moves to the next stable version through the updater as usual.
+#
 # Before setting the tag:
 #   1. same version in `apps/desktop/src-tauri/tauri.conf.json`,
 #      `apps/desktop/src-tauri/Cargo.toml` and `apps/desktop/package.json`;
@@ -21,7 +27,7 @@ name: Release
 
 on:
   push:
-    tags: ["v[0-9]+.[0-9]+.[0-9]+"]
+    tags: ["v[0-9]+.[0-9]+.[0-9]+", "v[0-9]+.[0-9]+.[0-9]+-beta.[0-9]+"]
 
 permissions:
   contents: write
@@ -69,7 +75,7 @@ jobs:
       # Installer under a fixed name, without spaces: the site points to
       # /releases/latest/download/unalia-mod-manager-setup.exe, and the updater
       # reads `latest.json` at the same URL (`tauri.conf.json`).
-      # No `--prerelease`: GitHub would leave it out of /releases/latest.
+      # `--prerelease` for betas only: GitHub leaves them out of /releases/latest.
       - name: Publish the release
         env:
           GH_TOKEN: ${{ github.token }}
@@ -80,4 +86,5 @@ jobs:
           Copy-Item "$nsis/Unalia Mod Manager_${env:VERSION}_x64-setup.exe.sig" "$installer.sig"
           $url = "$env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/releases/download/$env:GITHUB_REF_NAME/$installer"
           node scripts/updater-manifest.mjs --url $url --out latest.json --notes release-notes.md
-          gh release create $env:GITHUB_REF_NAME $installer "$installer.sig" latest.json --title "Unalia Mod Manager $env:VERSION" --notes-file release-notes.md
+          $prerelease = if ($env:VERSION.Contains("-")) { @("--prerelease") } else { @() }
+          gh release create $env:GITHUB_REF_NAME $installer "$installer.sig" latest.json --title "Unalia Mod Manager $env:VERSION" --notes-file release-notes.md @prerelease
