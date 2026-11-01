@@ -8,19 +8,21 @@ import { Marquee } from "@/components/marquee";
 import { toast } from "@/components/toaster";
 import { type InstalledMod, type SteamGame, splitError } from "@/lib/engine";
 import { install, toggle } from "@/lib/installs";
-import { type SharedList, type SharedMod, decodeList, encodeList, modsToShare } from "@/lib/share";
+import { type SharedList, type SharedMod, decodeList, dependenciesToShare, encodeList, modsToShare } from "@/lib/share";
 
 /** Copies the code of the mods turned on, for friends to paste in Import. */
 export function ShareButton({ game, mods }: { game: SteamGame; mods: InstalledMod[] }) {
 	const shared = modsToShare(mods);
+	const dependencies = dependenciesToShare(mods);
+	const total = shared.length + dependencies.length;
 	const share = async () => {
 		if (!game.profile) return;
 		try {
-			const code = await encodeList({ game: game.profile.id, gameName: game.name, mods: shared });
+			const code = await encodeList({ game: game.profile.id, gameName: game.name, mods: shared, dependencies });
 			await navigator.clipboard.writeText(code);
 			toast({
 				title: "Mod list copied",
-				details: `Send it to your friends: in My mods, Import then paste it to get the same ${shared.length} mod${shared.length === 1 ? "" : "s"}.`,
+				details: `Send it to your friends: in My mods, Import then paste it to get the same ${total} mod${total === 1 ? "" : "s"}.`,
 				duration: 8000,
 			});
 		} catch (error) {
@@ -42,22 +44,29 @@ export function ShareButton({ game, mods }: { game: SteamGame; mods: InstalledMo
 }
 
 /** What importing does to one mod of the list, on this player's side. */
-type Step = { mod: SharedMod; action: "install" | "update" | "enable" | "none"; yours: string | null };
+type Step = { mod: SharedMod; action: "install" | "update" | "enable" | "follow" | "none"; yours: string | null };
 
 function plan(list: SharedList, installed: InstalledMod[]): Step[] {
-	return list.mods.map((mod) => {
+	const mods = list.mods.map((mod): Step => {
 		const mine = installed.find((m) => m.id === mod.id);
 		if (!mine) return { mod, action: "install", yours: null };
 		if (!mine.enabled) return { mod, action: "enable", yours: mine.version };
 		if (mine.version !== mod.version) return { mod, action: "update", yours: mine.version };
 		return { mod, action: "none", yours: mine.version };
 	});
+	// Never asked for: they follow the mods, in the version made for this game.
+	const dependencies = list.dependencies.map((mod): Step => {
+		const mine = installed.find((m) => m.id === mod.id);
+		return { mod, action: mine ? "none" : "follow", yours: mine?.version ?? null };
+	});
+	return [...mods, ...dependencies];
 }
 
 const LABEL: Record<Step["action"], string> = {
 	install: "To install",
 	update: "To update",
 	enable: "To turn on",
+	follow: "Comes with a mod",
 	none: "Installed",
 };
 
@@ -97,7 +106,7 @@ function ImportDialog({ game, mods, onClose }: { game: SteamGame; mods: Installe
 
 	const otherGame = list && list.game !== game.profile?.id;
 	const steps = list && !otherGame ? plan(list, mods) : [];
-	const todo = steps.filter((s) => s.action !== "none");
+	const todo = steps.filter((s) => s.action !== "none" && s.action !== "follow");
 	const extra = list && !otherGame ? mods.filter((m) => m.explicit && m.loaderRoot === null && !list.mods.some((s) => s.id === m.id)) : [];
 	const nexus = !!game.profile?.nexus && todo.some((s) => s.action === "install" || s.action === "update");
 
@@ -114,7 +123,7 @@ function ImportDialog({ game, mods, onClose }: { game: SteamGame; mods: Installe
 	};
 
 	return (
-		<Dialog open onClose={onClose} className="max-w-lg">
+		<Dialog open onClose={onClose} className="max-w-xl">
 			<DialogHeader>
 				<DialogTitle>Import a mod list</DialogTitle>
 				<DialogDescription>
@@ -143,8 +152,15 @@ function ImportDialog({ game, mods, onClose }: { game: SteamGame; mods: Installe
 				</p>
 			) : (
 				<div className="space-y-3">
-					{todo.length === 0 && <p className="text-sm text-fg-muted">You already have every mod of this list.</p>}
-					<ul className="max-h-72 overflow-y-auto rounded-xl border border-line bg-surface">
+					<p className="text-sm text-fg-muted">
+						<span className="font-medium text-fg">
+							{steps.length} mod{steps.length === 1 ? "" : "s"} found
+						</span>
+						{list.dependencies.length > 0 &&
+							`, ${list.dependencies.length === 1 ? "1 is a dependency" : `${list.dependencies.length} are dependencies`}`}
+						.{todo.length === 0 && " You already have every mod of this list."}
+					</p>
+					<ul className="scrollbar-visible max-h-[min(24rem,50vh)] overflow-y-auto rounded-xl border border-line bg-surface">
 						{steps.map(({ mod, action, yours }, i) => (
 							<li key={mod.id} className={cn("flex items-center gap-3 px-4 py-2.5", i > 0 && "border-t border-line")}>
 								<span className="min-w-0 flex-1">

@@ -2,15 +2,16 @@ import type { InstalledMod } from "@/lib/engine";
 
 /**
  * Shared mod list: a code to paste, with no server. A snapshot of the mods
- * the player turned on (dependencies and the loader follow by themselves,
- * as for a normal install), compressed then in base64url.
+ * the player turned on, compressed then in base64url. Dependencies and the
+ * loader are listed to show them: they follow by themselves, as for a normal
+ * install, in the version made for the friend's game.
  */
 
 /** A mod of the list. `files`: the exact Nexus files, in their order. */
 export type SharedMod = { id: string; name: string; version: string; source: string; files: number[] };
 
 /** `game`: the game's profile (the same for everyone, unlike a manually added game's id). */
-export type SharedList = { game: string; gameName: string; mods: SharedMod[] };
+export type SharedList = { game: string; gameName: string; mods: SharedMod[]; dependencies: SharedMod[] };
 
 const PREFIX = "unalia-mods:";
 
@@ -19,20 +20,24 @@ const PREFIX = "unalia-mods:";
  * game's order: installed in the same order, a patch stays over its mod.
  */
 export function modsToShare(installed: InstalledMod[]): SharedMod[] {
-	return installed
-		.filter((m) => m.enabled && m.explicit && m.loaderRoot === null)
+	return toShare(installed.filter((m) => m.enabled && m.explicit && m.loaderRoot === null));
+}
+
+/** Turned on and not asked for: what came with those mods. */
+export function dependenciesToShare(installed: InstalledMod[]): SharedMod[] {
+	return toShare(installed.filter((m) => m.enabled && (!m.explicit || m.loaderRoot !== null)));
+}
+
+function toShare(mods: InstalledMod[]): SharedMod[] {
+	return mods
 		.toSorted((a, b) => a.priority - b.priority)
 		.map((m) => ({ id: m.id, name: m.name, version: m.version, source: m.source, files: m.files }));
 }
 
 export async function encodeList(list: SharedList): Promise<string> {
 	// Short keys and arrays: a shorter code to paste in a chat.
-	const raw = {
-		v: 1,
-		g: list.game,
-		n: list.gameName,
-		m: list.mods.map((m) => [m.id, m.name, m.version, m.source, m.files]),
-	};
+	const row = (m: SharedMod) => [m.id, m.name, m.version, m.source, m.files];
+	const raw = { v: 1, g: list.game, n: list.gameName, m: list.mods.map(row), d: list.dependencies.map(row) };
 	const packed = await pipe(new TextEncoder().encode(JSON.stringify(raw)), new CompressionStream("deflate-raw"));
 	let binary = "";
 	for (const byte of packed) binary += String.fromCharCode(byte);
@@ -48,14 +53,16 @@ export async function decodeList(code: string): Promise<SharedList | null> {
 		const bytes = Uint8Array.from(binary, (c) => c.charCodeAt(0));
 		const raw = JSON.parse(new TextDecoder().decode(await pipe(bytes, new DecompressionStream("deflate-raw"))));
 		if (raw.v !== 1 || typeof raw.g !== "string" || !Array.isArray(raw.m)) return null;
-		const mods: SharedMod[] = raw.m.map(([id, name, version, source, files]: unknown[]) => ({
+		const row = ([id, name, version, source, files]: unknown[]): SharedMod => ({
 			id: String(id),
 			name: String(name),
 			version: String(version),
 			source: typeof source === "string" ? source : "",
 			files: Array.isArray(files) ? files.filter((f): f is number => Number.isInteger(f)) : [],
-		}));
-		return { game: raw.g, gameName: String(raw.n ?? ""), mods };
+		});
+		// Codes copied before 0.1.6 have no dependencies.
+		const dependencies = Array.isArray(raw.d) ? raw.d.map(row) : [];
+		return { game: raw.g, gameName: String(raw.n ?? ""), mods: raw.m.map(row), dependencies };
 	} catch {
 		return null;
 	}

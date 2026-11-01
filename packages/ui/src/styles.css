@@ -229,6 +229,31 @@ body {
 	display: none;
 }
 
+/*
+ * A list's bar, always visible, with the look of `OverlayScrollbar`. Not an
+ * `@utility`: the layer would lose to the rule above. It takes its column.
+ */
+.scrollbar-visible::-webkit-scrollbar {
+	display: block;
+	width: 12px;
+}
+
+.scrollbar-visible::-webkit-scrollbar-track {
+	margin-block: 4px;
+	background: transparent;
+}
+
+.scrollbar-visible::-webkit-scrollbar-thumb {
+	border: 3px solid transparent;
+	border-radius: 9999px;
+	background-color: rgb(255 255 255 / 0.22);
+	background-clip: padding-box;
+}
+
+.scrollbar-visible::-webkit-scrollbar-thumb:hover {
+	background-color: rgb(255 255 255 / 0.35);
+}
+
 @media (prefers-reduced-motion: reduce) {
 	*,
 	*::before,
