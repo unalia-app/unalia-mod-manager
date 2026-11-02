@@ -1,6 +1,6 @@
 # Unalia Mod Manager
 
-**Pick your mods. We handle the rest.** A one-click mod manager for PC games: no folder to find, no file to copy, no install guide to read.
+**Pick your mods. We handle the rest.** The mod manager for players who'd never open a mod manager: one click per mod, no folder to find, no file to copy, no install guide to read.
 
 [![Latest release](https://img.shields.io/github/v/release/unalia-app/unalia-mod-manager?label=release)](https://github.com/unalia-app/unalia-mod-manager/releases/latest)
 [![License: GPL v3](https://img.shields.io/badge/license-GPL%20v3-blue)](LICENSE)
@@ -15,9 +15,10 @@
 - **Finds your games.** Reads your Steam libraries in a second. Games outside Steam (GOG, Epic, standalone) can be added by picking their folder, and added to Steam for its overlay.
 - **Helps you find mods.** Search a game's mods, filter them by category and sort them. Mods marked as adult content have their images blurred, and Settings picks how strongly.
 - **Installs in one click.** The mod, its dependencies and the loader or framework it needs (BepInEx, UE4SS, RED4ext…), in the right order.
-- **Plays well with friends.** Share your mod list with a code: they paste it and get the same mods.
+- **Plays well with friends.** Share your mod list with a code: they paste it, get the same mods, and launch the game from Steam as usual.
 - **Lets you change your mind.** Turn a mod off without uninstalling it, remove it with an Undo, go back to a previous version without downloading it again.
-- **Keeps you up to date, on your terms.** Updates are shown, never forced: a working setup stays working.
+- **Keeps you up to date, on your terms.** Updates are shown, never forced: a working setup stays working. Mods their author deprecated or removed are flagged.
+- **Handles long lists.** Search and sort your mods, select several or a range to turn them on, off or remove them at once with one Undo, and switch to a compact layout to see more of them.
 - **Waits for your game.** Changes made while the game runs are queued and applied when you close it.
 - **Cleans up after other tools.** "Reset mods" removes what was installed by hand or by another manager, to the Recycle Bin.
 - **Warns you about anti-cheats.** Games with Easy Anti-Cheat or BattlEye get a clear warning: mods stay your call, but online they can get you banned.
