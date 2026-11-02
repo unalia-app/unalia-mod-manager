@@ -182,7 +182,7 @@ impl Loader for Unreal {
     }
 
     fn place(&self, package_id: &str, _kind: &PackageKind, files: &[String]) -> Vec<Placement> {
-        let skip = wrapper_depth(files, &self.project);
+        let skip = wrapper_depth(files, &self.project, &self.binaries);
         let stripped: Vec<(&String, Vec<&str>)> = files
             .iter()
             .map(|f| (f, f.split('/').skip(skip).collect()))
@@ -332,10 +332,13 @@ impl Unreal {
 
 /// Wrapper folders to skip (`My Mod v1.2/…`), as for REDengine: we go down
 /// as long as the whole package sits in a single folder that means nothing
-/// to the game.
-fn wrapper_depth(files: &[String], project: &str) -> usize {
+/// to the game. The executable's folder counts when it sits outside the
+/// project (`platform/steam/…`): such an archive mirrors the game.
+fn wrapper_depth(files: &[String], project: &str, binaries: &str) -> usize {
+    let binaries_root = binaries.split('/').next().unwrap_or_default();
     let meaningful = |segment: &str| {
         segment.eq_ignore_ascii_case(project)
+            || segment.eq_ignore_ascii_case(binaries_root)
             || [
                 "content",
                 "binaries",
@@ -666,6 +669,40 @@ mod tests {
                 ),
                 ("ue4ss/UE4SS.dll", "platform/steam/ue4ss/UE4SS.dll"),
             ])
+        );
+    }
+
+    #[test]
+    fn an_archive_that_mirrors_an_executable_folder_outside_the_project_stays_whole() {
+        // Phantom Blade Zero's "Full Map and All Bells": the mod's settings
+        // sit next to its proxy DLL and must come with it.
+        let place = |files: &[&str]| {
+            let files: Vec<String> = files.iter().map(|f| f.to_string()).collect();
+            let mut out: Vec<(String, String)> = Unreal {
+                project: "ProjectPBZ".into(),
+                binaries: "platform/steam".into(),
+                settings: None,
+            }
+            .place("Cool Mod", &PackageKind::Mod, &files)
+            .into_iter()
+            .map(|p| (p.source, p.target))
+            .collect();
+            out.sort();
+            out
+        };
+        let files = [
+            "platform/steam/PBZFullMap.ini",
+            "platform/steam/PBZFullMap_README.txt",
+            "platform/steam/version.dll",
+        ];
+        let expected: Vec<(String, String)> = files.iter().map(|f| (f.to_string(), f.to_string())).collect();
+        assert_eq!(place(&files), expected);
+        // Inside a wrapper folder, the same.
+        let wrapped: Vec<String> = files.iter().map(|f| format!("Full Map v1/{f}")).collect();
+        let wrapped: Vec<&str> = wrapped.iter().map(String::as_str).collect();
+        assert_eq!(
+            place(&wrapped).into_iter().map(|(_, target)| target).collect::<Vec<_>>(),
+            files.to_vec()
         );
     }
 
