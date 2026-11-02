@@ -4,6 +4,8 @@ All notable changes to Unalia Mod Manager. The format follows [Keep a Changelog]
 
 ## [0.1.7] - 2026-11-02
 
+Thanks to Captiongomer for the ideas and bug reports behind this update.
+
 ### Added
 
 - My Mods: when the mods were last checked for updates, with a button to check again.
