@@ -553,10 +553,6 @@ export function nexusLogin(): Promise<NexusAccount> {
 	return invoke("nexus_login");
 }
 
-export function nexusConnect(apiKey: string): Promise<NexusAccount> {
-	return invoke("nexus_connect", { apiKey });
-}
-
 export function nexusDisconnect(): Promise<void> {
 	return invoke("nexus_disconnect");
 }

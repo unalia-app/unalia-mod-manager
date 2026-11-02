@@ -147,7 +147,7 @@ pub enum SourceError {
     },
     #[error("this mod no longer exists on {source_name}")]
     NotFound { source_name: &'static str },
-    #[error("connect your {source_name} account first")]
+    #[error("downloads from {source_name} are paused until it approves Unalia's login")]
     NotConnected { source_name: &'static str },
     #[error("{source_name} refused your API key")]
     Unauthorized { source_name: &'static str },

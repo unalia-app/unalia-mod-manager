@@ -2,6 +2,12 @@
 
 All notable changes to Unalia Mod Manager. The format follows [Keep a Changelog](https://keepachangelog.com), and versions follow [Semantic Versioning](https://semver.org).
 
+## [0.1.8] - 2026-11-02
+
+### Changed
+
+- Nexus Mods: downloads are paused. Nexus doesn't allow personal API keys in apps, so Unalia no longer asks for one, and a key saved before is deleted. You can still browse Nexus mods and see their updates. Downloads come back once Nexus approves Unalia's login.
+
 ## [0.1.7] - 2026-11-02
 
 Thanks to Captiongomer for the ideas and bug reports behind this update.

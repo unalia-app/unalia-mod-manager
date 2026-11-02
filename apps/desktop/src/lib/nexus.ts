@@ -1,6 +1,6 @@
 import { useEffect, useSyncExternalStore } from "react";
 
-import { type NexusAccount, type NexusStatus, nexusConnect, nexusDisconnect, nexusLogin, nexusStatus } from "@/lib/engine";
+import { type NexusAccount, type NexusStatus, nexusDisconnect, nexusLogin, nexusStatus } from "@/lib/engine";
 
 /** Nexus state of the session: `undefined` while it is unknown. */
 let status: NexusStatus | undefined;
@@ -59,10 +59,6 @@ function connected(account: NexusAccount) {
 
 export async function loginNexus(): Promise<NexusAccount> {
 	return connected(await nexusLogin());
-}
-
-export async function connectNexus(apiKey: string): Promise<NexusAccount> {
-	return connected(await nexusConnect(apiKey));
 }
 
 export async function disconnectNexus() {

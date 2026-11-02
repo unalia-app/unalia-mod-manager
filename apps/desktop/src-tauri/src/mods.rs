@@ -1660,24 +1660,28 @@ async fn remember_account(mods: &Mods, account: Option<&Account>) {
     let _ = mods.state.lock().await.set_setting(NEXUS_ACCOUNT, value.as_deref());
 }
 
-/// At startup: saved Nexus key (in dev, falls back on `NEXUS_API_KEY` from
-/// the `.env` at the repo root), and `nxm://` links.
+/// At startup: the Nexus key (only in dev, `NEXUS_API_KEY` from the `.env`
+/// at the repo root), and `nxm://` links.
+///
+/// Nexus doesn't allow personal API keys in apps: they must use its OAuth
+/// login, which Unalia waits for. A key pasted in 0.1.7 or earlier is
+/// deleted here, never used.
 pub fn nexus_setup(app: &AppHandle) {
     let saved = tauri::async_runtime::block_on(async {
-        app.state::<Mods>()
-            .state
-            .lock()
-            .await
-            .setting(NEXUS_KEY)
-            .ok()
-            .flatten()
+        let mods = app.state::<Mods>();
+        let mut state = mods.state.lock().await;
+        let saved = state.setting(NEXUS_KEY).ok().flatten();
+        if saved.as_deref().is_some_and(|key| !key.is_empty()) {
+            let _ = state.set_setting(NEXUS_KEY, None);
+            let _ = state.set_setting(NEXUS_ACCOUNT, None);
+        }
+        saved
     });
     // An empty string: the user logged out, the dev `.env` key must not
     // come back.
     let key = match saved {
         Some(saved) if saved.is_empty() => None,
-        Some(saved) => Some(saved),
-        None => dev_env("NEXUS_API_KEY"),
+        _ => dev_env("NEXUS_API_KEY"),
     };
     let connected = key.is_some();
     app.state::<Catalog>().nexus.set_api_key(key);
@@ -1729,8 +1733,8 @@ fn register_nxm(app: &AppHandle) {
 }
 
 /// Application id that Nexus gives to the mod managers it approves, for
-/// one-click login (SSO). Pending: while it is missing, login goes through
-/// the personal API key.
+/// one-click login (SSO). Pending: while it is missing, there is no login
+/// and nothing downloads from Nexus.
 const NEXUS_SSO_APP: Option<&str> = None;
 
 #[derive(Serialize)]
@@ -1820,21 +1824,6 @@ async fn save_nexus_key(
     remember_account(mods, Some(&account)).await;
     register_nxm(app);
     Ok(account)
-}
-
-/// Checks the key with Nexus, then saves it on this machine.
-#[tauri::command]
-pub async fn nexus_connect(
-    app: AppHandle,
-    catalog: State<'_, Catalog>,
-    mods: State<'_, Mods>,
-    api_key: String,
-) -> Result<Account, String> {
-    let key = api_key.trim().to_owned();
-    if key.is_empty() || key.len() > 512 || key.chars().any(char::is_whitespace) {
-        return Err("This doesn't look like a Nexus Mods API key.".into());
-    }
-    save_nexus_key(&app, &catalog, &mods, key).await
 }
 
 #[tauri::command]

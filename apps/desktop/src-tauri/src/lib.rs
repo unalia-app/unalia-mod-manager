@@ -905,7 +905,6 @@ pub fn run() {
             mods::cancel_starting,
             mods::nexus_status,
             mods::nexus_login,
-            mods::nexus_connect,
             mods::nexus_disconnect,
             support::diagnostics,
             support::open_logs_folder,

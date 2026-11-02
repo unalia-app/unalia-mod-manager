@@ -166,7 +166,7 @@ function ModDetailsView({
 	const hint = !nexus
 		? undefined
 		: account === null && !mod.direct
-			? "Link your Nexus Mods account in Settings first"
+			? "Downloads from Nexus Mods are paused until Nexus approves Unalia's login"
 			: account && !account.premium && !mod.direct
 				? "Nexus asks free accounts to confirm each download on its website"
 				: undefined;

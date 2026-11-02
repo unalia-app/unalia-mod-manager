@@ -34,7 +34,7 @@
 | Nexus Mods | Unreal Engine games, recognized on their own by their name on Nexus (Phantom Blade Zero, Hogwarts Legacy…) | `.pak` mods, LogicMods, UE4SS, proxy DLLs, ASI plugins, ReShade presets, `Engine.ini` |
 | Nexus Mods | Skyrim Special Edition, Fallout 4 | Plugins, archives and loose files, `plugins.txt` kept in sync |
 
-Archives can be `.zip`, `.7z` or `.rar`. Nexus Mods works with a free account: the app sends you to the mod's page for the "Mod Manager Download" click Nexus requires, then takes over.
+Archives can be `.zip`, `.7z` or `.rar`. **Nexus Mods downloads are paused:** Nexus doesn't allow personal API keys in apps, and Unalia is waiting for Nexus to approve its login. Until then, you can browse Nexus mods and see their updates in the app.
 
 Next on the list: script extenders and FOMOD installers for Bethesda games, more loaders (RE Engine, Godot) and more sources. See the [roadmap](ROADMAP.md).
 

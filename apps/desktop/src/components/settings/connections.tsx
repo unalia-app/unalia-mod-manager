@@ -1,15 +1,12 @@
 "use client";
 
 import { Button, cn } from "@modalia/ui";
-import { Check, ExternalLink, KeyRound, LogOut } from "lucide-react";
-import { type FormEvent, type ReactNode, useState } from "react";
+import { Check, LogOut } from "lucide-react";
+import { type ReactNode, useState } from "react";
 
 import { toast } from "@/components/toaster";
 import { splitError } from "@/lib/engine";
-import { connectNexus, disconnectNexus, loginNexus, useNexusStatus } from "@/lib/nexus";
-import { openExternal } from "@/lib/open";
-
-const API_KEYS_PAGE = "https://next.nexusmods.com/settings/api-keys";
+import { disconnectNexus, loginNexus, useNexusStatus } from "@/lib/nexus";
 
 /** Accounts of the mod sources, modeled on Unalia's Connections. */
 export function Connections() {
@@ -55,7 +52,6 @@ function NexusCard() {
 	const account = status?.account ?? null;
 	const linked = account !== null || status?.offline === true;
 	const [busy, setBusy] = useState(false);
-	const [keyForm, setKeyForm] = useState(false);
 	const [confirmDisconnect, setConfirmDisconnect] = useState(false);
 
 	const fail = (error: unknown) => {
@@ -64,11 +60,6 @@ function NexusCard() {
 	};
 
 	const connect = async () => {
-		// Without Nexus's approval, the personal key is the only way.
-		if (!status?.sso) {
-			setKeyForm(true);
-			return;
-		}
 		setBusy(true);
 		try {
 			const connected = await loginNexus();
@@ -140,82 +131,23 @@ function NexusCard() {
 							Disconnect
 						</Button>
 					)
-				) : keyForm ? (
-					<ApiKeyForm onCancel={() => setKeyForm(false)} />
-				) : (
+				) : status?.sso ? (
 					<Button size="sm" disabled={busy} onClick={() => void connect()}>
 						{busy ? "Waiting for Nexus…" : "Connect Nexus Mods"}
 					</Button>
+				) : (
+					// Nexus doesn't allow personal API keys in apps: the login
+					// comes with its approval, nothing to link until then.
+					<p className="max-w-xl text-xs leading-relaxed text-fg-subtle">
+						Nexus Mods asks apps to use its own login, and Unalia is waiting for its approval. Until then, you can
+						browse Nexus mods and see their updates, but not download them from Unalia.
+					</p>
 				)}
 				{busy && status?.sso && (
 					<p className="mt-2 text-xs text-fg-subtle">Click Authorise on the Nexus Mods page that opened in your browser.</p>
 				)}
 			</div>
 		</ConnectionCard>
-	);
-}
-
-/**
- * Personal API key: the way Nexus allows for applications it hasn't
- * approved yet. It stays on this machine.
- */
-function ApiKeyForm({ onCancel }: { onCancel: () => void }) {
-	const [key, setKey] = useState("");
-	const [busy, setBusy] = useState(false);
-	const [error, setError] = useState<string | null>(null);
-
-	const submit = async (event: FormEvent) => {
-		event.preventDefault();
-		setBusy(true);
-		setError(null);
-		try {
-			const connected = await connectNexus(key);
-			toast({ title: `Connected to Nexus Mods as ${connected.name}`, details: "Downloads from Nexus Mods now use your account." });
-		} catch (e) {
-			setError(splitError(e).message);
-		} finally {
-			setBusy(false);
-		}
-	};
-
-	return (
-		<form onSubmit={submit} className="max-w-xl">
-			<p className="text-xs leading-relaxed text-fg-subtle">
-				Until Nexus approves Unalia's one-click login, link your account with your personal API key. Open{" "}
-				<button
-					type="button"
-					onClick={() => void openExternal(API_KEYS_PAGE)}
-					className="inline-flex cursor-pointer items-center gap-0.5 text-fg-muted underline underline-offset-2 hover:text-fg"
-				>
-					your API keys
-					<ExternalLink className="size-3" />
-				</button>
-				, copy the Personal API Key at the bottom of the page, and paste it here. It never leaves this computer.
-			</p>
-			<div className="mt-3 flex gap-2">
-				<label className="flex h-9 min-w-0 flex-1 items-center gap-2 rounded-md border border-line-strong bg-surface-strong px-3 focus-within:border-white/30 focus-within:ring-2 focus-within:ring-white/20">
-					<KeyRound className="size-3.5 shrink-0 text-fg-faint" />
-					<input
-						type="password"
-						value={key}
-						onChange={(e) => setKey(e.target.value)}
-						placeholder="Personal API key"
-						autoComplete="off"
-						spellCheck={false}
-						// The form opens on demand, to paste the key.
-						autoFocus
-						className="h-full min-w-0 flex-1 bg-transparent text-sm text-fg outline-none placeholder:text-fg-faint"
-					/>
-				</label>
-				<Button type="submit" size="sm" disabled={busy || !key.trim()}>
-					{busy ? "Checking…" : "Link"}
-				</Button>
-				<Button type="button" size="sm" variant="secondary" onClick={onCancel}>
-					Cancel
-				</Button>
-			</div>
-			{error && <p className="mt-2 text-xs text-danger">{error}</p>}
-		</form>
 	);
 }
 

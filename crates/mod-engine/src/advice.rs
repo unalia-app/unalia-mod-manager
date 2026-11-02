@@ -135,7 +135,11 @@ fn resolve(e: &ResolveError) -> Advice {
 fn source(e: &SourceError) -> Advice {
     match e {
         SourceError::Network { .. } => advice(true, CONNECTION),
-        SourceError::NotConnected { .. } => advice(true, "Link it in Settings > Connections."),
+        // Nothing to link for now: the message says what is happening.
+        SourceError::NotConnected { .. } => Advice {
+            show_cause: true,
+            action: None,
+        },
         SourceError::Unauthorized { .. } => advice(true, "Link your account again in Settings > Connections."),
         SourceError::Unexpected { .. } => advice(true, LATER),
         // The message already says what to do, or there is nothing to do.

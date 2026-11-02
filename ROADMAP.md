@@ -9,7 +9,7 @@ What comes after the first release, in order of priority. Plans change with your
 - **Storage clean-up, part two.** Keep a store per drive so games outside `C:` still use hard links.
 - **More safety.** A warning when a placed file changes outside the app, and trust signals for very new mods from unknown authors. Games with an anti-cheat are already flagged with a ban warning (done).
 - **Conflicts by priority.** When two mods ship the same file, choose which one wins, without drivers or injection.
-- **Nexus Mods, continued.** "Log in with Nexus", API key in the system keychain, more games, collections, and never taking over `nxm://` links from Vortex or Mod Organizer 2 without asking.
+- **Nexus Mods, continued.** "Log in with Nexus" through its OAuth, once Nexus approves Unalia: downloads come back with it. Then more games, collections, and never taking over `nxm://` links from Vortex or Mod Organizer 2 without asking.
 - **Remove a game added by hand** (done).
 - **Reset a game's mods** (done). Start clean when another tool left mods behind.
 - **Signed installer.** Updates are already signed (done).
