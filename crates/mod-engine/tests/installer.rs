@@ -399,6 +399,93 @@ async fn mods_wiped_by_a_game_reinstall_are_put_back_from_storage() {
 }
 
 #[tokio::test]
+async fn a_vanilla_session_takes_every_mod_out_then_brings_them_back() {
+    let mut w = World::new().await;
+    let original = snapshot(&w.game);
+    w.publish_knight().await;
+    w.install(KNIGHT).await.0.unwrap();
+    let game = "steam:1030300";
+    let modded = snapshot(&w.game);
+    let before = w.state.list(game).unwrap();
+
+    installer::enter_vanilla(&mut w.state, &w.paths, game, &w.game, None).unwrap();
+    assert_eq!(snapshot(&w.game), original);
+    assert!(w.state.is_vanilla(game).unwrap());
+    // Out on purpose: not reported as missing, and still on in the list.
+    assert!(installer::missing(&w.state, game, &w.game).unwrap().is_empty());
+    assert!(w.state.list(game).unwrap().iter().all(|m| m.enabled));
+
+    let failed = installer::leave_vanilla(&mut w.state, &w.paths, game, &w.game, None).unwrap();
+    assert!(failed.is_empty());
+    assert!(!w.state.is_vanilla(game).unwrap());
+    assert_eq!(snapshot(&w.game), modded);
+    assert_eq!(w.state.list(game).unwrap(), before);
+
+    // The loader still takes its folders with it.
+    installer::uninstall(&mut w.state, &w.paths, game, &w.game, KNIGHT).unwrap();
+    installer::uninstall(&mut w.state, &w.paths, game, &w.game, PREPATCHER).unwrap();
+    installer::uninstall(&mut w.state, &w.paths, game, &w.game, LOADER).unwrap();
+    assert_eq!(snapshot(&w.game), original);
+}
+
+#[tokio::test]
+async fn what_the_loader_wrote_survives_a_vanilla_session() {
+    let mut w = World::new().await;
+    let original = snapshot(&w.game);
+    w.publish_knight().await;
+    w.install(KNIGHT).await.0.unwrap();
+    let game = "steam:1030300";
+    let log = w.game.join("BepInEx/LogOutput.log");
+    fs::write(&log, "written by the game").unwrap();
+
+    installer::enter_vanilla(&mut w.state, &w.paths, game, &w.game, None).unwrap();
+    assert!(log.is_file());
+    installer::leave_vanilla(&mut w.state, &w.paths, game, &w.game, None).unwrap();
+    assert!(log.is_file());
+
+    // Its folder didn't exist before the loader: it still goes with it.
+    installer::uninstall(&mut w.state, &w.paths, game, &w.game, KNIGHT).unwrap();
+    installer::uninstall(&mut w.state, &w.paths, game, &w.game, PREPATCHER).unwrap();
+    installer::uninstall(&mut w.state, &w.paths, game, &w.game, LOADER).unwrap();
+    assert_eq!(snapshot(&w.game), original);
+}
+
+#[tokio::test]
+async fn a_vanilla_session_stopped_halfway_still_ends_with_every_mod_back() {
+    let mut w = World::new().await;
+    w.publish_knight().await;
+    w.install(KNIGHT).await.0.unwrap();
+    let game = "steam:1030300";
+    let modded = snapshot(&w.game);
+
+    // Unalia crashed while taking the mods out: only some files left.
+    w.state.set_vanilla(game, true).unwrap();
+    let knight = w.state.get(game, KNIGHT).unwrap().unwrap();
+    fs::remove_file(w.game.join(&knight.deployment.files[0])).unwrap();
+
+    let failed = installer::leave_vanilla(&mut w.state, &w.paths, game, &w.game, None).unwrap();
+    assert!(failed.is_empty());
+    assert_eq!(snapshot(&w.game), modded);
+}
+
+#[tokio::test]
+async fn a_vanilla_session_keeps_the_order_of_plugins_txt() {
+    let mut w = World::new().await;
+    w.publish_knight().await;
+    w.install(KNIGHT).await.0.unwrap();
+    let game = "steam:1030300";
+    let list = w.game.parent().unwrap().join("plugins.txt");
+    fs::write(&list, "*Second.esp\r\n*First.esp\r\n").unwrap();
+
+    installer::enter_vanilla(&mut w.state, &w.paths, game, &w.game, Some(&list)).unwrap();
+    fs::write(&list, "").unwrap();
+    installer::leave_vanilla(&mut w.state, &w.paths, game, &w.game, Some(&list)).unwrap();
+
+    assert_eq!(fs::read_to_string(&list).unwrap(), "*Second.esp\r\n*First.esp\r\n");
+    assert!(!list.with_extension("txt.unalia-vanilla").exists());
+}
+
+#[tokio::test]
 async fn forgetting_an_uninstalled_game_frees_its_storage() {
     let mut w = World::new().await;
     w.publish_knight().await;

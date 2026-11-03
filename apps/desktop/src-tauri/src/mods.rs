@@ -62,6 +62,9 @@ pub struct Mods {
     /// Picked files of a Nexus mod waiting for their `nxm://` link (free
     /// account: one click on the site per file).
     chosen_files: SyncMutex<HashMap<(u32, String), Vec<u32>>>,
+    /// Games in a session without mods (keys), kept in the database too:
+    /// the mods come back even if Unalia closed during the session.
+    vanilla: SyncMutex<HashSet<String>>,
 }
 
 impl Mods {
@@ -86,6 +89,7 @@ impl Mods {
         if let Some(base) = data.parent() {
             state.rebase_store(&base.join(OLD_IDENTIFIER).join("mods"), &data.join("mods"))?;
         }
+        let vanilla = state.vanilla_games()?.into_iter().collect();
         Ok(Self {
             state: Mutex::new(state),
             paths: Paths {
@@ -101,6 +105,7 @@ impl Mods {
             cancels: SyncMutex::default(),
             paused: SyncMutex::new(Paused::load(data.join("downloads.json"))),
             chosen_files: SyncMutex::default(),
+            vanilla: SyncMutex::new(vanilla),
         })
     }
 
@@ -110,10 +115,18 @@ impl Mods {
     }
 
     /// Is the game running right now? Checked on demand, without waiting
-    /// for the next pass of the watch.
-    fn is_running(&self, game: &KnownGame) -> bool {
+    /// for the next pass of the watch. A session without mods counts from
+    /// the start: changes wait for its end, as they do for a running game.
+    fn is_running(&self, app_id: u32, game: &KnownGame) -> bool {
+        if self.is_vanilla(app_id) {
+            return true;
+        }
         let exes = self.processes.lock().unwrap().running_exes();
         launch::game_running(&game.dir, &exes, &game.profile.launchers)
+    }
+
+    fn is_vanilla(&self, app_id: u32) -> bool {
+        self.vanilla.lock().unwrap().contains(&game_key(app_id))
     }
 
     /// Start of an install: its cancel flag.
@@ -317,6 +330,8 @@ pub struct GameStatus {
     app_id: u32,
     running: bool,
     starting: bool,
+    /// Session without mods.
+    vanilla: bool,
     pending: Vec<PendingInfo>,
 }
 
@@ -348,6 +363,7 @@ async fn status(app: &AppHandle, app_id: u32) -> GameStatus {
         app_id,
         starting: !running && mods.is_starting(app_id),
         running,
+        vanilla: mods.is_vanilla(app_id),
         pending,
     }
 }
@@ -489,7 +505,7 @@ pub async fn install_mod(
 ) -> Result<Outcome<Vec<InstalledMod>>, String> {
     let game = library.game(app_id).ok_or(UNKNOWN_GAME)?;
     if game.profile.nexus.is_some() {
-        if mods.is_running(&game) {
+        if mods.is_running(app_id, &game) {
             return Err(close_first(&game));
         }
         let file = match &files {
@@ -528,7 +544,7 @@ pub async fn install_mod(
             .map(|m| m.source)
             .filter(|s| !s.is_empty()),
     };
-    if mods.is_running(&game) {
+    if mods.is_running(app_id, &game) {
         queue(
             &app,
             app_id,
@@ -588,7 +604,7 @@ pub async fn install_file(
     if game.profile.nexus.is_none() {
         return Err("Mods for this game install from Discover.".into());
     }
-    if mods.is_running(&game) {
+    if mods.is_running(app_id, &game) {
         return Err(close_first(&game));
     }
     let catalog = app.state::<Catalog>();
@@ -1064,7 +1080,7 @@ pub async fn set_mod_enabled(
     enabled: bool,
 ) -> Result<Outcome<InstalledMod>, String> {
     let game = library.game(app_id).ok_or(UNKNOWN_GAME)?;
-    if mods.is_running(&game) {
+    if mods.is_running(app_id, &game) {
         queue(&app, app_id, PendingOp::SetEnabled { mod_id, enabled }).await?;
         return Ok(Outcome::Queued);
     }
@@ -1084,7 +1100,7 @@ pub async fn uninstall_mod(
     mod_id: String,
 ) -> Result<Outcome<()>, String> {
     let game = library.game(app_id).ok_or(UNKNOWN_GAME)?;
-    if mods.is_running(&game) {
+    if mods.is_running(app_id, &game) {
         queue(&app, app_id, PendingOp::Uninstall { mod_id }).await?;
         return Ok(Outcome::Queued);
     }
@@ -1131,7 +1147,7 @@ pub async fn restore_mod(
     mod_id: String,
 ) -> Result<InstalledMod, String> {
     let game = library.game(app_id).ok_or(UNKNOWN_GAME)?;
-    if mods.is_running(&game) {
+    if mods.is_running(app_id, &game) {
         return Err("Close the game first, then try again.".into());
     }
     let key = game_key(app_id);
@@ -1158,7 +1174,7 @@ pub async fn revert_mod(
     package: String,
 ) -> Result<InstalledMod, String> {
     let game = library.game(app_id).ok_or(UNKNOWN_GAME)?;
-    if mods.is_running(&game) {
+    if mods.is_running(app_id, &game) {
         return Err("Close the game first, then try again.".into());
     }
     let mut state = mods.state.lock().await;
@@ -1218,7 +1234,7 @@ pub async fn put_back_mods(
     app_id: u32,
 ) -> Result<usize, String> {
     let game = library.game(app_id).ok_or(UNKNOWN_GAME)?;
-    if mods.is_running(&game) {
+    if mods.is_running(app_id, &game) {
         return Err("Close the game first, then try again.".into());
     }
     let key = game_key(app_id);
@@ -1326,7 +1342,7 @@ pub async fn remove_manual_game(
     app_id: u32,
 ) -> Result<usize, String> {
     if let Some(game) = library.game(app_id)
-        && mods.is_running(&game)
+        && mods.is_running(app_id, &game)
     {
         return Err(close_first(&game));
     }
@@ -1387,7 +1403,7 @@ pub async fn reset_game(
     foreign: Vec<String>,
 ) -> Result<installer::Reset, String> {
     let game = library.game(app_id).ok_or(UNKNOWN_GAME)?;
-    if mods.is_running(&game) {
+    if mods.is_running(app_id, &game) {
         return Err(close_first(&game));
     }
     let _fetching = mods.fetching.lock().await;
@@ -1418,24 +1434,33 @@ pub async fn reset_game(
 // ---------------------------------------------------------------- game
 
 /// Launches the game: through Steam, or through its executable for a
-/// manually added game.
+/// manually added game. `vanilla`: without any mod, they come back when the
+/// game closes (`end_vanilla`).
 #[tauri::command]
 pub async fn play_game(
     app: AppHandle,
     library: State<'_, Library>,
     mods: State<'_, Mods>,
     app_id: u32,
+    vanilla: bool,
 ) -> Result<(), String> {
     let game = library.game(app_id).ok_or(UNKNOWN_GAME)?;
-    if mods.is_running(&game) {
+    if mods.is_running(app_id, &game) {
         return Ok(());
+    }
+    if vanilla {
+        start_vanilla(&mods, app_id, &game).await?;
     }
     // A plugin removed by hand since: the list is brought back in line.
     let args = {
         let state = mods.state.lock().await;
         sync_plugins(&state, app_id, &game);
         let installed = state.list(&game_key(app_id)).map_err(crate::support::logged)?;
-        launch::launch_args(game.profile.modded.as_ref(), &installed)
+        if vanilla {
+            Vec::new()
+        } else {
+            launch::launch_args(game.profile.modded.as_ref(), &installed)
+        }
     };
     // REDmod mods reach the game through their tool: `-modded` alone skips it.
     let deploy = game
@@ -1506,6 +1531,62 @@ pub async fn play_game(
         .insert(app_id, Starting::new());
     emit_status(&app, app_id).await;
     Ok(())
+}
+
+/// Takes the game's mods out for a session without them.
+async fn start_vanilla(mods: &Mods, app_id: u32, game: &KnownGame) -> Result<(), String> {
+    if mods.cancels.lock().unwrap().keys().any(|(id, _)| *id == app_id) {
+        return Err("Wait for your mods to finish installing, then try again.".into());
+    }
+    // Before the mods leave: the watch ends a session with no game on its way.
+    mods.starting.lock().unwrap().insert(app_id, Starting::new());
+    let key = game_key(app_id);
+    let plugins = game.profile.plugins_file();
+    let mut state = mods.state.lock().await;
+    match installer::enter_vanilla(&mut state, &mods.paths, &key, &game.dir, plugins.as_deref()) {
+        Ok(()) => {
+            mods.vanilla.lock().unwrap().insert(key);
+            Ok(())
+        }
+        Err(error) => {
+            mods.starting.lock().unwrap().remove(&app_id);
+            Err(error_message(&error))
+        }
+    }
+}
+
+/// Puts the mods back after a session without them.
+async fn end_vanilla(app: &AppHandle, app_id: u32, game: &KnownGame) {
+    let mods = app.state::<Mods>();
+    let key = game_key(app_id);
+    let plugins = game.profile.plugins_file();
+    let mut state = mods.state.lock().await;
+    let failed = match installer::leave_vanilla(&mut state, &mods.paths, &key, &game.dir, plugins.as_deref()) {
+        Ok(failed) => failed,
+        // The next pass of the watch tries again.
+        Err(error) => {
+            log::warn!("couldn't put the mods of {key} back: {error}");
+            return;
+        }
+    };
+    mods.vanilla.lock().unwrap().remove(&key);
+    sync_plugins(&state, app_id, game);
+    drop(state);
+    let failed = failed
+        .into_iter()
+        .map(|(mod_id, error)| Failure {
+            mod_id,
+            message: error_message(&error),
+        })
+        .collect();
+    let _ = app.emit(
+        "pending-applied",
+        AppliedEvent {
+            app_id,
+            applied: 0,
+            failed,
+        },
+    );
 }
 
 /// Runs the tool that prepares the mods, hidden. On failure the game starts
@@ -1589,6 +1670,23 @@ pub async fn watch(app: AppHandle) {
                 }
                 over
             };
+            // Session without mods: over once the game closed or never came,
+            // even if Unalia closed meanwhile. The mods come back first.
+            if mods.is_vanilla(app_id) {
+                let waiting = mods.starting.lock().unwrap().contains_key(&app_id);
+                let over = !now && !waiting;
+                if now {
+                    mods.running.lock().unwrap().insert(app_id);
+                } else if over {
+                    end_vanilla(&app, app_id, &game).await;
+                    mods.running.lock().unwrap().remove(&app_id);
+                    apply_pending(&app, app_id, &game).await;
+                }
+                if over || now != before || starting_expired {
+                    emit_status(&app, app_id).await;
+                }
+                continue;
+            }
             // Game closed with a pending queue, even without a seen
             // transition (Modalia closed during the session, then restarted): apply.
             if !now && !before && has_pending(&app, app_id).await {
@@ -2012,7 +2110,7 @@ async fn handle_nxm(app: AppHandle, url: String) {
     };
     let mut website = None;
     let mut variants = None;
-    let result = if mods.is_running(&game) {
+    let result = if mods.is_running(app_id, &game) {
         Err(Some(close_first(&game)))
     } else {
         run_nexus_install(&app, app_id, &game, &mod_id, file, None)

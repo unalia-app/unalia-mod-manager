@@ -570,6 +570,21 @@ async fn a_file_shared_by_three_mods_goes_down_the_order() {
 }
 
 #[tokio::test]
+async fn a_vanilla_session_gives_a_shared_file_back_to_the_same_mod() {
+    let mut w = hud_and_its_patch().await;
+    assert_eq!(hud_file(&w), b"remix");
+
+    installer::enter_vanilla(&mut w.state, &w.paths, GAME, &w.game, None).unwrap();
+    assert!(!w.game.join(HUD).exists());
+    assert!(installer::leave_vanilla(&mut w.state, &w.paths, GAME, &w.game, None).unwrap().is_empty());
+    assert_eq!(hud_file(&w), b"remix");
+
+    // The order still holds: the file goes down it, as if nothing happened.
+    installer::uninstall(&mut w.state, &w.paths, GAME, &w.game, REMIX).unwrap();
+    assert_eq!(hud_file(&w), b"hud");
+}
+
+#[tokio::test]
 async fn a_mod_can_ship_a_file_of_the_framework_installed_with_it() {
     let mut w = World::new().await;
     w.publish_frameworks().await;

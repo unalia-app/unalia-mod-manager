@@ -33,7 +33,7 @@ One adapter per family of games, never one per game.
 ## Later
 
 - Restore your mods in one click after reinstalling a game (done).
-- A "vanilla" launch: everything off for one session, back on in one click.
+- A "vanilla" launch: everything off for one session, back on in one click (done).
 - Profiles: several setups per game.
 - Shareable mod lists and modpacks.
 - Community game themes.

@@ -6,6 +6,7 @@ All notable changes to Unalia Mod Manager. The format follows [Keep a Changelog]
 
 ### Added
 
+- Play vanilla: start a game without any of its mods, loader included. They come back by themselves when the game closes.
 - Nexus games: install a mod from a file. Download it from its Nexus page and drop the `.zip`, `.7z` or `.rar` on the game, or use Add from file in My Mods. A file from a Nexus page stays linked to its mod and keeps its updates; any other archive is tracked under its own name.
 
 ## [0.1.8] - 2026-11-02

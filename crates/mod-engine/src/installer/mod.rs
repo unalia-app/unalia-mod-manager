@@ -186,6 +186,8 @@ pub enum InstallError {
     LoaderToggle,
     #[error("this mod isn't installed")]
     NotInstalled,
+    #[error("{0} couldn't leave the game folder")]
+    StillInGame(String),
     #[error("this version is no longer kept: install it again from the mod's page")]
     NoPreviousVersion,
     #[error("couldn't access Unalia's storage")]
@@ -1251,18 +1253,27 @@ pub fn uninstall_all(state: &mut State, game: &str, game_dir: &Path) -> Result<u
 /// Bethesda games: `plugins.txt` (`list`) follows the plugins of the
 /// enabled mods, after each change. Returns `true` if it changed.
 pub fn sync_plugins(state: &State, game: &str, game_dir: &Path, list: &Path) -> Result<bool, InstallError> {
-    let deployed: Vec<String> = state
-        .list(game)?
-        .into_iter()
-        .filter(|m| m.enabled)
-        .flat_map(|m| m.deployment.files)
-        .collect();
+    // Out for a session without mods, whatever their records say.
+    let deployed: Vec<String> = if state.is_vanilla(game)? {
+        Vec::new()
+    } else {
+        state
+            .list(game)?
+            .into_iter()
+            .filter(|m| m.enabled)
+            .flat_map(|m| m.deployment.files)
+            .collect()
+    };
     Ok(crate::loaders::bethesda::sync_plugins(game_dir, list, &deployed)?)
 }
 
 /// Enabled mods with at least one file gone from the game: game
 /// reinstalled, files verified by Steam, or deleted by hand. Loader first.
 pub fn missing(state: &State, game: &str, game_dir: &Path) -> Result<Vec<InstalledMod>, InstallError> {
+    // Out on purpose, for a session without mods.
+    if state.is_vanilla(game)? {
+        return Ok(Vec::new());
+    }
     Ok(state
         .list(game)?
         .into_iter()
@@ -1292,6 +1303,122 @@ pub fn put_back(
     state.save(&m)?;
     settle(state, paths, game, game_dir)?;
     state.get(game, id)?.ok_or(InstallError::NotInstalled)
+}
+
+/// Takes every mod out of the game, loader included, for a session without
+/// them. They stay on in the list and keep their records, so that
+/// `leave_vanilla` brings back exactly who had what. What mods wrote by
+/// themselves stays: without the loader, nothing reads it. `plugins`: the
+/// game's `plugins.txt`, whose order survives the session.
+///
+/// All or nothing: on failure, the mods are back in the game.
+pub fn enter_vanilla(
+    state: &mut State,
+    paths: &Paths,
+    game: &str,
+    game_dir: &Path,
+    plugins: Option<&Path>,
+) -> Result<(), InstallError> {
+    // First: mods taken out by a session that crashes halfway must come back.
+    state.set_vanilla(game, true)?;
+    let result = take_all_down(state, paths, game, game_dir, plugins);
+    if result.is_err() {
+        leave_vanilla(state, paths, game, game_dir, plugins)?;
+    }
+    result
+}
+
+fn take_all_down(
+    state: &mut State,
+    paths: &Paths,
+    game: &str,
+    game_dir: &Path,
+    plugins: Option<&Path>,
+) -> Result<(), InstallError> {
+    if let Some(list) = plugins {
+        match fs::copy(list, kept_plugins(list)) {
+            Ok(_) => {}
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => {}
+            Err(e) => return Err(e.into()),
+        }
+    }
+    let store = paths.store();
+    let mut left = Vec::new();
+    let mut mods: Vec<InstalledMod> = state.list(game)?.into_iter().filter(|m| m.enabled).collect();
+    for m in &mut mods {
+        left.extend(take_down(&store, game_dir, m, false));
+        // Already undone: merged again on the way back.
+        m.deployment.settings.clear();
+        state.save(m)?;
+    }
+    // A folder shared with a mod taken out after its owner is empty by now.
+    for m in mods.iter().rev() {
+        deploy::undeploy(game_dir, &m.deployment, false);
+    }
+    match left.into_iter().next() {
+        Some(file) => Err(InstallError::StillInGame(file)),
+        None => Ok(()),
+    }
+}
+
+/// Puts back what `enter_vanilla` took out. A mod that can't come back
+/// doesn't hold the others: it is returned, and shows as missing from then
+/// on (`missing`, `put_back`).
+pub fn leave_vanilla(
+    state: &mut State,
+    paths: &Paths,
+    game: &str,
+    game_dir: &Path,
+    plugins: Option<&Path>,
+) -> Result<Vec<(String, InstallError)>, InstallError> {
+    let store = paths.store();
+    let mut failed = Vec::new();
+    for mut m in state.list(game)?.into_iter().filter(|m| m.enabled) {
+        let result = come_back(&store, game_dir, &mut m);
+        state.save(&m)?;
+        if let Err(error) = result {
+            failed.push((m.id, error));
+        }
+    }
+    if let Some(list) = plugins {
+        // Failed: the next sync adds the plugins back, at the end of the list.
+        let _ = fs::rename(kept_plugins(list), list);
+    }
+    state.set_vanilla(game, false)?;
+    Ok(failed)
+}
+
+/// Places a mod's recorded files again, those a mod over it covers aside.
+fn come_back(store: &Store, game_dir: &Path, m: &mut InstalledMod) -> Result<(), InstallError> {
+    let manifest = manifest_of(store, m)?;
+    let mut mine = placed_of(m, &manifest);
+    mine.extend(
+        placements_of(m, &manifest)
+            .into_iter()
+            .filter(|p| Path::new(&p.target).is_absolute()),
+    );
+    // What a session stopped halfway left in the game.
+    take_down(store, game_dir, m, false);
+    m.deployment.settings.clear();
+    let from = Source {
+        store,
+        manifest: &manifest,
+        edits: &m.edits,
+    };
+    let mut back = deploy::deploy(from, game_dir, &mine).map_err(|source| InstallError::Deploy {
+        name: m.name.clone(),
+        source,
+    })?;
+    // A folder a mod created can have outlived it, with what the mod wrote
+    // there: it remains the mod's to remove.
+    back.created_dirs = std::mem::take(&mut m.deployment.created_dirs);
+    m.deployment = back;
+    Ok(())
+}
+
+/// Where `plugins.txt` waits for the end of a session without mods.
+fn kept_plugins(list: &Path) -> PathBuf {
+    list.with_extension("txt.unalia-vanilla")
 }
 
 /// Goes back to a previous version of a mod, kept in the storage: nothing
@@ -1369,6 +1496,7 @@ pub fn forget(state: &mut State, paths: &Paths, game: &str) -> Result<usize, Ins
         purge(state, paths, game, &m.id)?;
     }
     state.set_pending(game, &[])?;
+    state.set_vanilla(game, false)?;
     state.forget_game_previous(game)?;
     paths.store().remove_packages(&game_segment(game))?;
     collect_garbage(state, paths)?;

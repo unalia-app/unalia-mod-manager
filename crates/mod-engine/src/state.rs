@@ -161,6 +161,10 @@ CREATE TABLE IF NOT EXISTS pending_ops (
     ops  TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS vanilla_games (
+    game TEXT PRIMARY KEY
+);
+
 CREATE TABLE IF NOT EXISTS settings (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL
@@ -456,6 +460,27 @@ impl State {
                 params![game, serde_json::to_string(ops)?],
             )?;
         }
+        Ok(())
+    }
+
+    /// Games whose mods are out for a session without them.
+    pub fn vanilla_games(&self) -> Result<Vec<String>, StateError> {
+        let mut stmt = self.conn.prepare("SELECT game FROM vanilla_games")?;
+        let rows = stmt.query_map([], |r| r.get(0))?;
+        Ok(rows.collect::<Result<_, _>>()?)
+    }
+
+    pub fn is_vanilla(&self, game: &str) -> Result<bool, StateError> {
+        Ok(self.vanilla_games()?.iter().any(|g| g == game))
+    }
+
+    pub fn set_vanilla(&mut self, game: &str, vanilla: bool) -> Result<(), StateError> {
+        let sql = if vanilla {
+            "INSERT OR REPLACE INTO vanilla_games VALUES (?1)"
+        } else {
+            "DELETE FROM vanilla_games WHERE game = ?1"
+        };
+        self.conn.execute(sql, params![game])?;
         Ok(())
     }
 

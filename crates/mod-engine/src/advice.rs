@@ -117,6 +117,7 @@ fn install(e: &InstallError) -> Advice {
             true,
             "Click Reset mods under Play to clear it, then install again: Unalia will manage it.",
         ),
+        InstallError::StillInGame(_) => advice(true, "Close what's using it, then try again."),
         InstallError::Io(_) => advice(true, DISK),
         _ => Advice::default(),
     }

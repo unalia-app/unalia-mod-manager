@@ -500,17 +500,18 @@ export type PendingOp = { name: string; ready: boolean } & (
 	| { type: "uninstall"; modId: string }
 );
 
-export type GameStatus = { appId: number; running: boolean; starting: boolean; pending: PendingOp[] };
+export type GameStatus = { appId: number; running: boolean; starting: boolean; vanilla: boolean; pending: PendingOp[] };
 
 export type PendingApplied = { appId: number; applied: number; failed: { modId: string; message: string }[] };
 
 export function gameStatus(appId: number): Promise<GameStatus> {
-	if (!isTauri()) return Promise.resolve({ appId, running: false, starting: false, pending: [] });
+	if (!isTauri()) return Promise.resolve({ appId, running: false, starting: false, vanilla: false, pending: [] });
 	return invoke("game_status", { appId });
 }
 
-export function playGame(appId: number): Promise<void> {
-	return invoke("play_game", { appId });
+/** `vanilla`: without any mod, they come back when the game closes. */
+export function playGame(appId: number, vanilla = false): Promise<void> {
+	return invoke("play_game", { appId, vanilla });
 }
 
 /** Stops waiting for a starting game (launch abandoned in its launcher). */

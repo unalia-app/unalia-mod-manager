@@ -5,13 +5,16 @@ import { Play, X } from "lucide-react";
 
 import { cancelStarting } from "@/lib/engine";
 import { play, useGameStatus } from "@/lib/game-status";
+import { useInstalled } from "@/lib/installs";
 
 /**
- * "Play": launches the game with its enabled mods. `compact`: the header
- * version, always at hand while scrolling.
+ * "Play": launches the game with its enabled mods, and "Play vanilla"
+ * without them once it has some. `compact`: the header version, always at
+ * hand while scrolling, with "Play" alone.
  */
 export function PlayButton({ appId, compact = false }: { appId: number; compact?: boolean }) {
 	const status = useGameStatus(appId);
+	const modded = useInstalled(appId)?.some((m) => m.enabled);
 	const size = compact ? "sm" : "lg";
 
 	if (status?.running) {
@@ -26,7 +29,7 @@ export function PlayButton({ appId, compact = false }: { appId: number; compact?
 					<span className="absolute inline-flex size-full animate-ping rounded-full bg-accent opacity-60" />
 					<span className="relative inline-flex size-2 rounded-full bg-accent" />
 				</span>
-				Playing
+				{status.vanilla ? "Playing vanilla" : "Playing"}
 			</div>
 		);
 	}
@@ -54,12 +57,24 @@ export function PlayButton({ appId, compact = false }: { appId: number; compact?
 		);
 	}
 	return (
-		<Button
-			size={size}
-			leftIcon={<Play className={cn("fill-current", compact ? "size-3.5" : "size-4")} />}
-			onClick={() => void play(appId)}
-		>
-			Play
-		</Button>
+		<div className="flex items-center gap-2">
+			{modded && !compact && (
+				<Button
+					size={size}
+					variant="outline"
+					title="Start the game without any mods. They come back when it closes."
+					onClick={() => void play(appId, true)}
+				>
+					Play vanilla
+				</Button>
+			)}
+			<Button
+				size={size}
+				leftIcon={<Play className={cn("fill-current", compact ? "size-3.5" : "size-4")} />}
+				onClick={() => void play(appId)}
+			>
+				Play
+			</Button>
+		</div>
 	);
 }

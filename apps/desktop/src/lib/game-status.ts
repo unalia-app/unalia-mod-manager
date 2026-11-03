@@ -57,9 +57,9 @@ export function usePendingOp(appId: number, modId: string): PendingOp | undefine
 	return useGameStatus(appId)?.pending.find((op) => op.modId === modId);
 }
 
-export async function play(appId: number) {
+export async function play(appId: number, vanilla = false) {
 	try {
-		await playGame(appId);
+		await playGame(appId, vanilla);
 	} catch (error) {
 		const { message, details } = splitError(error);
 		toast({ title: message, details: details ?? undefined, tone: "error" });
