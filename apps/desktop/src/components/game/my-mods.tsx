@@ -38,6 +38,7 @@ import { type ReactNode, useCallback, useEffect, useRef, useState } from "react"
 import { progressDetail, progressLabel } from "@/components/mod/install-button";
 import { ModNeeds } from "@/components/mod/mod-needs";
 import { uninstallManyWithUndo, uninstallWithUndo } from "@/components/mod/uninstall";
+import { AddFileButton } from "@/components/game/add-file";
 import { ImportButton, ShareButton } from "@/components/game/share-mods";
 import { Marquee } from "@/components/marquee";
 import { Notice } from "@/components/notice";
@@ -48,6 +49,7 @@ import {
 	type PausedDownload,
 	type SteamGame,
 	discardDownload,
+	isLocalFile,
 	nexusModUrl,
 	pausedDownloads,
 	splitError,
@@ -153,6 +155,7 @@ export function MyMods({ game, onDiscover }: { game: SteamGame; onDiscover: () =
 							</Button>
 							{/* A friend's list: the quickest way to play together. */}
 							<ImportButton game={game} mods={mods} variant="secondary" />
+							{game.profile?.nexus && <AddFileButton appId={appId} variant="secondary" />}
 						</div>
 					}
 				>
@@ -237,6 +240,7 @@ export function MyMods({ game, onDiscover }: { game: SteamGame; onDiscover: () =
 					>
 						{updates.length > 0 ? `Update all (${updates.length})` : "Update all"}
 					</Button>
+					{game.profile?.nexus && <AddFileButton appId={appId} />}
 					<ImportButton game={game} mods={mods} />
 					<ShareButton game={game} mods={mods} />
 				</div>
@@ -473,14 +477,15 @@ function ProgressRow({ appId, modId, active: a }: { appId: number; modId: string
 		<div className="flex animate-row-in items-center gap-3 px-4 py-3">
 			<button
 				type="button"
+				disabled={isLocalFile(modId)}
 				onClick={() => router.push(modHref(appId, modId))}
-				className="flex min-w-0 flex-1 cursor-pointer flex-col gap-1.5 text-left"
+				className="flex min-w-0 flex-1 cursor-pointer flex-col gap-1.5 text-left disabled:cursor-default"
 			>
 				<span className="flex items-baseline justify-between gap-3">
 					<span className="truncate text-sm font-medium text-fg">{name}</span>
-					<span className="shrink-0 font-tight text-[11px] text-fg-subtle">
-						{a.status === "website" ? "Waiting for Nexus Mods" : progressLabel(progress, value)}
-					</span>
+					{a.status !== "website" && (
+						<span className="shrink-0 font-tight text-[11px] text-fg-subtle">{progressLabel(progress, value)}</span>
+					)}
 				</span>
 				{a.status === "website" ? (
 					<span className="text-[11px] text-fg-subtle">
@@ -502,6 +507,7 @@ function ProgressRow({ appId, modId, active: a }: { appId: number; modId: string
 			</button>
 			{a.status === "website" && (
 				<>
+					<span className="shrink-0 font-tight text-[11px] text-fg-subtle">Waiting for Nexus Mods</span>
 					<Button size="sm" variant="outline" leftIcon={<ExternalLink className="size-3.5" />} onClick={() => void openExternal(a.url)}>
 						Open page
 					</Button>
@@ -597,7 +603,7 @@ function ModRow({
 		>
 			<button
 				type="button"
-				disabled={selection?.disabled}
+				disabled={selection ? selection.disabled : isLocalFile(m.id)}
 				aria-pressed={selection?.checked}
 				title={compact ? byline : undefined}
 				onClick={(e) => (selection ? selection.onPick(e.shiftKey) : router.push(modHref(appId, m.id, m.source)))}

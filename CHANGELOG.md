@@ -2,6 +2,12 @@
 
 All notable changes to Unalia Mod Manager. The format follows [Keep a Changelog](https://keepachangelog.com), and versions follow [Semantic Versioning](https://semver.org).
 
+## [Unreleased]
+
+### Added
+
+- Nexus games: install a mod from a file. Download it from its Nexus page and drop the `.zip`, `.7z` or `.rar` on the game, or use Add from file in My Mods. A file from a Nexus page stays linked to its mod and keeps its updates; any other archive is tracked under its own name.
+
 ## [0.1.8] - 2026-11-02
 
 ### Changed

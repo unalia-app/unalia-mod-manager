@@ -348,6 +348,23 @@ export function installMod(
 	return invoke("install_mod", { appId, modId, files: files ?? null, source: source ?? null, variant: variant ?? null });
 }
 
+/** What an archive of the player's will be installed as. */
+export type LocalFile = { modId: string; name: string };
+
+export function identifyFile(appId: number, path: string): Promise<LocalFile> {
+	return invoke("identify_file", { appId, path });
+}
+
+/** `variant`: picked folder of an archive with variants. */
+export function installFile(appId: number, modId: string, path: string, variant?: string): Promise<InstallOutcome> {
+	return invoke("install_file", { appId, modId, path, variant: variant ?? null });
+}
+
+/** A mod installed from an archive that isn't on any source: it has no page. */
+export function isLocalFile(modId: string): boolean {
+	return modId.startsWith("file-");
+}
+
 /** Stops a running or queued install (the game is not touched). */
 export function cancelInstall(appId: number, modId: string): Promise<boolean> {
 	return invoke("cancel_install", { appId, modId });

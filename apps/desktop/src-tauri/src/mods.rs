@@ -550,6 +550,90 @@ pub async fn install_mod(
     }
 }
 
+/// What an archive of the player's will be installed as. The UI follows
+/// the install under this id.
+#[tauri::command]
+pub async fn identify_file(
+    library: State<'_, Library>,
+    catalog: State<'_, Catalog>,
+    mods: State<'_, Mods>,
+    app_id: u32,
+    path: PathBuf,
+) -> Result<installer::LocalFile, String> {
+    let game = library.game(app_id).ok_or(UNKNOWN_GAME)?;
+    let installer = Installer {
+        source: &catalog.nexus,
+        catalog: None,
+        client: &catalog.client,
+        paths: &mods.paths,
+        cancel: None,
+    };
+    Ok(installer.identify_file(&game.profile, &path).await)
+}
+
+/// Installs an archive of the player's, in a Nexus game. Like any Nexus
+/// install, it waits for the game to close. Progress comes through the
+/// `install-progress` event.
+#[tauri::command]
+pub async fn install_file(
+    app: AppHandle,
+    library: State<'_, Library>,
+    mods: State<'_, Mods>,
+    app_id: u32,
+    mod_id: String,
+    path: PathBuf,
+    variant: Option<String>,
+) -> Result<Outcome<Vec<InstalledMod>>, String> {
+    let game = library.game(app_id).ok_or(UNKNOWN_GAME)?;
+    if game.profile.nexus.is_none() {
+        return Err("Mods for this game install from Discover.".into());
+    }
+    if mods.is_running(&game) {
+        return Err(close_first(&game));
+    }
+    let catalog = app.state::<Catalog>();
+    let cancel = mods.begin(app_id, &mod_id);
+    let installer = Installer {
+        source: &catalog.nexus,
+        catalog: None,
+        client: &catalog.client,
+        paths: &mods.paths,
+        cancel: Some(&cancel),
+    };
+    let key = game_key(app_id);
+    let target = Target {
+        game: &key,
+        game_dir: &game.dir,
+        community: &game.community,
+    };
+    let result = {
+        let _fetching = mods.fetching.lock().await;
+        let mut state = mods.state.lock().await;
+        let result = installer
+            .install_file(
+                &mut state,
+                &target,
+                &game.profile,
+                &catalog.github,
+                &path,
+                game.mods_before(),
+                variant.as_deref(),
+                progress_emitter(&app, app_id, &mod_id),
+            )
+            .await;
+        sync_plugins(&state, app_id, &game);
+        result
+    };
+    mods.end(app_id, &mod_id);
+    settle_download(&mods, app_id, &mod_id, result.as_ref().err());
+    match result {
+        Ok(done) => Ok(Outcome::Done { value: done.mods }),
+        Err(InstallError::Cancelled) => Ok(Outcome::Cancelled),
+        Err(InstallError::ChooseVariant(variants)) => Ok(Outcome::ChooseVariant { variants }),
+        Err(error) => Err(error_message(&error)),
+    }
+}
+
 /// Downloads and extracts a queued install in the background. A failure
 /// here is no big deal: the install tries again when the game closes and
 /// reports the error then.

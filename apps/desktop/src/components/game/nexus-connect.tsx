@@ -14,7 +14,9 @@ export function NexusConnect() {
 		<div className="mb-6 flex max-w-2xl animate-row-in flex-wrap items-center gap-x-4 gap-y-2 rounded-xl border border-dashed border-line px-4 py-3">
 			<p className="min-w-0 flex-1 text-sm text-fg-muted">
 				Downloads from Nexus Mods are paused until Nexus approves Unalia's login.{" "}
-				<span className="text-fg-subtle">You can still browse mods, and frameworks like RED4ext install as usual.</span>
+				<span className="text-fg-subtle">
+					To install a mod, download it from its page and drop the file here. Frameworks like RED4ext install as usual.
+				</span>
 			</p>
 		</div>
 	);

@@ -1,4 +1,4 @@
-import type { InstalledMod } from "@/lib/engine";
+import { type InstalledMod, isLocalFile } from "@/lib/engine";
 
 /**
  * Shared mod list: a code to paste, with no server. A snapshot of the mods
@@ -17,10 +17,11 @@ const PREFIX = "unalia-mods:";
 
 /**
  * Turned on, asked for by the player: what a friend has to install. In the
- * game's order: installed in the same order, a patch stays over its mod.
+ * game's order: installed in the same order, a patch stays over its mod. An
+ * archive that isn't on any source stays out: a friend couldn't get it.
  */
 export function modsToShare(installed: InstalledMod[]): SharedMod[] {
-	return toShare(installed.filter((m) => m.enabled && m.explicit && m.loaderRoot === null));
+	return toShare(installed.filter((m) => m.enabled && m.explicit && m.loaderRoot === null && !isLocalFile(m.id)));
 }
 
 /** Turned on and not asked for: what came with those mods. */

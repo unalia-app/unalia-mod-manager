@@ -8,6 +8,8 @@ import {
 	type NexusModFile,
 	cancelInstall,
 	checkUpdates,
+	identifyFile,
+	installFile,
 	installMod,
 	installedMods,
 	onInstallProgress,
@@ -209,6 +211,8 @@ export async function refreshInstalled(appId: number) {
 
 // Source picked for each install: a retry (or the file picker) keeps it.
 const sources = new Map<string, string>();
+// Archive picked by the player: a retry (or the variant picker) keeps it.
+const archives = new Map<string, string>();
 
 /**
  * Starts the install (without waiting): the state follows in the store.
@@ -231,7 +235,11 @@ export function install(
 		s.active.set(k, { status: "queued", name: name ?? current?.name });
 	});
 	inFlight.add(k);
-	return installMod(appId, modId, files, sources.get(k), variant)
+	const archive = archives.get(k);
+	const started = archive
+		? installFile(appId, modId, archive, variant)
+		: installMod(appId, modId, files, sources.get(k), variant);
+	return started
 		.finally(() => inFlight.delete(k))
 		.then(
 			(outcome) =>
@@ -265,6 +273,7 @@ export function install(
 					}
 					s.active.delete(k);
 					sources.delete(k);
+					archives.delete(k);
 				}),
 			(error: unknown) =>
 				update((s) => {
@@ -273,6 +282,13 @@ export function install(
 					s.failure = { appId, modId, name, message, details };
 				}),
 		);
+}
+
+/** Installs an archive of the player's: the state follows like any install. */
+export async function installArchive(appId: number, path: string): Promise<void> {
+	const { modId, name } = await identifyFile(appId, path);
+	archives.set(key(appId, modId), path);
+	await install(appId, modId, name);
 }
 
 /**

@@ -1360,3 +1360,155 @@ async fn adult_mods_stay_out_unless_asked_for_and_are_flagged() {
     shown.assert_async().await;
     assert!(page.items[0].adult);
 }
+
+impl World {
+    async fn install_file(&mut self, path: &Path) -> Result<NexusInstall, InstallError> {
+        let installer = Installer {
+            source: &self.nexus,
+            catalog: None,
+            client: &self.client,
+            paths: &self.paths,
+            cancel: None,
+        };
+        let target = Target {
+            game: GAME,
+            game_dir: &self.game,
+            community: COMMUNITY,
+        };
+        installer
+            .install_file(
+                &mut self.state,
+                &target,
+                &self.profile,
+                &self.github,
+                path,
+                None,
+                None,
+                |_| {},
+            )
+            .await
+    }
+
+    /// An archive in the player's downloads, outside Unalia's folders.
+    fn downloaded(&self, name: &str, files: &[(&str, &[u8])]) -> PathBuf {
+        let dir = self.paths.store.with_file_name("My Downloads");
+        fs::create_dir_all(&dir).unwrap();
+        let path = dir.join(name);
+        fs::write(&path, zip_bytes(files)).unwrap();
+        path
+    }
+}
+
+#[tokio::test]
+async fn a_file_from_a_nexus_page_installs_as_that_mod() {
+    let mut w = World::new().await;
+    w.publish(COOL_HUD, "Cool HUD", "1.2.0", &[], &cool_hud_files()).await;
+    let path = w.downloaded("Cool HUD-5000-1-2-1790000000.zip", &cool_hud_files());
+
+    let done = w.install_file(&path).await.unwrap();
+
+    let hud = done.mods.iter().find(|m| m.id == "nexus-5000").unwrap();
+    assert_eq!(hud.name, "Cool HUD");
+    assert_eq!(hud.source, "");
+    assert_eq!(hud.version, "1.2.0");
+    assert_eq!(hud.files, [COOL_HUD * 10]);
+    assert!(hud.explicit);
+    // `.reds`: redscript came with it. The player's file is still there.
+    assert!(done.mods.iter().any(|m| m.name == "redscript"));
+    assert!(path.is_file());
+}
+
+#[tokio::test]
+async fn a_file_with_todays_nexus_name_is_recognized_too() {
+    let mut w = World::new().await;
+    w.publish(COOL_HUD, "Cool HUD", "1.2.0", &[], &cool_hud_files()).await;
+    let path = w.downloaded("Cool HUD 5000 1.2.0 2026-09-21T14-13Z 8TxGunSsn.zip", &cool_hud_files());
+
+    let done = w.install_file(&path).await.unwrap();
+
+    assert!(done.mods.iter().any(|m| m.id == "nexus-5000"));
+}
+
+#[tokio::test]
+async fn a_nexus_name_on_another_file_is_not_taken_for_that_mod() {
+    let mut w = World::new().await;
+    w.publish(COOL_HUD, "Cool HUD", "1.2.0", &[], &cool_hud_files()).await;
+    let path = w.downloaded(
+        "Cool HUD-5000-1-2-1790000000.zip",
+        &[("archive/pc/mod/other.archive", b"something else entirely")],
+    );
+
+    let done = w.install_file(&path).await.unwrap();
+
+    assert_eq!(done.mods[0].id, "file-cool-hud");
+    assert_eq!(done.mods[0].name, "Cool HUD");
+}
+
+#[tokio::test]
+async fn a_file_from_a_page_joins_what_the_mod_already_has() {
+    let mut w = World::new().await;
+    let optional: Files = vec![("archive/pc/mod/extra.archive", b"extra")];
+    w.publish_with(
+        COOL_HUD,
+        "Cool HUD",
+        "1.2.0",
+        &[],
+        &cool_hud_files(),
+        Some((50001, "Extra", "1.2.0", optional.clone())),
+    )
+    .await;
+    let main = w.downloaded("Cool HUD-5000-1-2-1790000000.zip", &cool_hud_files());
+    let extra = w.downloaded("Extra-5000-1-2-1790000100.zip", &optional);
+
+    w.install_file(&main).await.unwrap();
+    let done = w.install_file(&extra).await.unwrap();
+
+    let hud = done.mods.iter().find(|m| m.id == "nexus-5000").unwrap();
+    assert_eq!(hud.files, [COOL_HUD * 10, 50001]);
+    assert!(w.game.join("r6/scripts/CoolHud/hud.reds").is_file());
+    assert!(w.game.join("archive/pc/mod/extra.archive").is_file());
+}
+
+#[tokio::test]
+async fn a_renamed_or_foreign_file_is_tracked_under_its_own_name() {
+    let mut w = World::new().await;
+    let before = snapshot(&w.game);
+    let path = w.downloaded("My_Tweak (1).zip", &[("archive/pc/mod/tweak.archive", b"tweak")]);
+
+    let done = w.install_file(&path).await.unwrap();
+
+    let tweak = done.mods.iter().find(|m| m.id == "file-my-tweak").unwrap();
+    assert_eq!(tweak.name, "My Tweak");
+    assert_eq!(tweak.source, "file");
+    assert!(tweak.files.is_empty());
+    assert!(tweak.explicit);
+    assert!(w.game.join("archive/pc/mod/tweak.archive").is_file());
+    assert!(path.is_file());
+
+    installer::uninstall(&mut w.state, &w.paths, GAME, &w.game, "file-my-tweak").unwrap();
+    assert_eq!(snapshot(&w.game), before);
+}
+
+#[tokio::test]
+async fn a_new_copy_of_a_file_replaces_the_old_one() {
+    let mut w = World::new().await;
+    let old = w.downloaded("Tweak.zip", &[("archive/pc/mod/tweak.archive", b"old")]);
+    w.install_file(&old).await.unwrap();
+    let new = w.downloaded("Tweak.zip", &[("archive/pc/mod/tweak.archive", b"new")]);
+
+    let done = w.install_file(&new).await.unwrap();
+
+    assert_eq!(done.mods.iter().filter(|m| m.id == "file-tweak").count(), 1);
+    assert_eq!(fs::read(w.game.join("archive/pc/mod/tweak.archive")).unwrap(), b"new");
+}
+
+#[tokio::test]
+async fn a_file_with_nothing_to_place_is_refused() {
+    let mut w = World::new().await;
+    let path = w.downloaded("Trainer.zip", &[("Trainer.exe", b"exe")]);
+
+    let error = w.install_file(&path).await.unwrap_err();
+
+    assert!(matches!(error, InstallError::NotAMod { kind: NotAMod::Program, .. }));
+    assert!(w.state.list(GAME).unwrap().is_empty());
+}

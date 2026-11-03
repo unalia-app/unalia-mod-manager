@@ -8,6 +8,7 @@ import { type CSSProperties, type ReactNode, type RefObject, useEffect, useRef, 
 import { Ambience } from "@/components/ambience";
 import { AppHeader } from "@/components/app-header";
 import { GameCover } from "@/components/game-cover";
+import { useFileDrop } from "@/components/game/add-file";
 import { AntiCheatBanner } from "@/components/game/anti-cheat-banner";
 import { Discover, useOnHexium } from "@/components/game/discover";
 import { GameUpdatedBanner } from "@/components/game/game-updated-banner";
@@ -68,6 +69,9 @@ export function GameScreen() {
 		setTab(next);
 	};
 
+	// A file dropped anywhere on the game: My mods shows its install.
+	const dropping = useFileDrop(appId, !!game?.moddable && !!game.profile?.nexus, () => openTab("mine"));
+
 	useEffect(() => {
 		setGame(undefined);
 		setTab(lastTabs.get(appId) ?? "discover");
@@ -86,6 +90,12 @@ export function GameScreen() {
 			style={accent ? ({ "--accent": accent } as CSSProperties) : undefined}
 		>
 			<Ambience appId={game?.appId ?? null} />
+
+			{dropping && game && (
+				<div className="pointer-events-none fixed inset-4 z-[70] flex items-center justify-center rounded-2xl border-2 border-dashed border-accent bg-bg/80">
+					<p className="text-lg font-medium text-fg">Drop to install in {game.name}</p>
+				</div>
+			)}
 
 			<AppHeader
 				actions={

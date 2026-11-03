@@ -74,6 +74,21 @@ pub struct NexusInstall {
     pub missing: Vec<Requirement>,
 }
 
+/// A mod whose files are stored, ready to be placed.
+pub(super) struct Stored<'a> {
+    pub adapter: Adapter,
+    pub frameworks: Vec<Framework>,
+    pub existing: Vec<InstalledMod>,
+    pub item: Fetched,
+    /// The mod the player asked for. A framework asked for by its Nexus id
+    /// comes from GitHub, under another key: it stays a dependency.
+    pub requested: String,
+    pub chosen: Vec<u32>,
+    pub requirements: Vec<Requirement>,
+    pub before: Option<&'a str>,
+    pub variant: Option<&'a str>,
+}
+
 impl Installer<'_, Nexus> {
     /// Installs a Nexus mod and the frameworks it needs.
     #[allow(clippy::too_many_arguments)]
@@ -251,14 +266,56 @@ impl Installer<'_, Nexus> {
             }
         };
 
-        // Download the mod, then the missing frameworks (and the ones those
-        // frameworks need in turn).
-        let main_id = whole.id.clone();
+        // Download the mod, then place it with what it needs.
         let chosen: Vec<u32> = parts.iter().filter_map(|p| p.file_id).collect();
-        let mut fetched = vec![
-            self.fetch_parts(target, &adapter, parts, whole, &mut on_progress)
-                .await?,
-        ];
+        let item = self
+            .fetch_parts(target, &adapter, parts, whole, &mut on_progress)
+            .await?;
+        self.place_mod(
+            state,
+            target,
+            profile,
+            github,
+            Stored {
+                adapter,
+                frameworks,
+                existing,
+                item,
+                requested: mod_key(mod_id),
+                chosen,
+                requirements,
+                before,
+                variant,
+            },
+            on_progress,
+        )
+        .await
+    }
+
+    /// Places a stored mod, after the frameworks it needs: the missing ones
+    /// are downloaded first (and the ones those frameworks need in turn).
+    pub(super) async fn place_mod(
+        &self,
+        state: &mut State,
+        target: &Target<'_>,
+        profile: &GameProfile,
+        github: &GitHub,
+        stored: Stored<'_>,
+        mut on_progress: impl FnMut(Progress),
+    ) -> Result<NexusInstall, InstallError> {
+        let Stored {
+            adapter,
+            frameworks,
+            existing,
+            item,
+            requested,
+            chosen,
+            requirements,
+            before,
+            variant,
+        } = stored;
+        let main_id = item.package.id.clone();
+        let mut fetched = vec![item];
         // One folder per variant in the archive: the picked one, else the
         // one installed before, else the user picks (the archive stays
         // cached for that).
@@ -307,7 +364,6 @@ impl Installer<'_, Nexus> {
         self.check_cancel()?;
         // Place: frameworks first (the last discovered are the deepest),
         // the requested mod last.
-        let requested = mod_key(mod_id);
         let total = fetched.len();
         let store = self.paths.store();
         let mut held = holders(&existing);
@@ -580,7 +636,7 @@ impl Installer<'_, Nexus> {
         })
     }
 
-    async fn fetch(
+    pub(super) async fn fetch(
         &self,
         target: &Target<'_>,
         adapter: &Adapter,
@@ -661,7 +717,7 @@ async fn framework_release(
 
 /// Version of a Nexus file. Without a number, the mod's, except for an old
 /// file: its date, which can't be confused with the current version.
-fn file_version(info: &ModInfo, file: &ModFile, before: Option<&str>) -> String {
+pub(super) fn file_version(info: &ModInfo, file: &ModFile, before: Option<&str>) -> String {
     if !file.version.is_empty() {
         file.version.clone()
     } else if before.is_some() && info.main_file() != Some(file) {
@@ -672,14 +728,14 @@ fn file_version(info: &ModInfo, file: &ModFile, before: Option<&str>) -> String 
 }
 
 /// Adapter of a Nexus game, from its profile.
-enum Adapter {
+pub(super) enum Adapter {
     Bethesda(Bethesda),
     RedEngine(RedEngine),
     Unreal(Unreal),
 }
 
 impl Adapter {
-    fn for_game(profile: &GameProfile, game_dir: &Path) -> Result<Self, InstallError> {
+    pub(super) fn for_game(profile: &GameProfile, game_dir: &Path) -> Result<Self, InstallError> {
         match profile.loader.as_str() {
             "unreal" => {
                 let project = find_project(game_dir).ok_or(InstallError::NoGameFiles)?;
@@ -702,14 +758,14 @@ impl Adapter {
         }
     }
 
-    fn project(&self) -> Option<&str> {
+    pub(super) fn project(&self) -> Option<&str> {
         match self {
             Self::Unreal(loader) => Some(&loader.project),
             Self::Bethesda(_) | Self::RedEngine(_) => None,
         }
     }
 
-    fn binaries(&self) -> Option<&str> {
+    pub(super) fn binaries(&self) -> Option<&str> {
         match self {
             Self::Unreal(loader) => Some(&loader.binaries),
             Self::Bethesda(_) | Self::RedEngine(_) => None,
@@ -829,7 +885,7 @@ pub async fn available_updates_nexus(
 /// keeps them, instead of replacing the mod. Another version of the same
 /// file still replaces it. The main file comes first, its version is the
 /// mod's.
-fn linked_files(info: &ModInfo, previous: Option<&InstalledMod>, linked: u32) -> Vec<u32> {
+pub(super) fn linked_files(info: &ModInfo, previous: Option<&InstalledMod>, linked: u32) -> Vec<u32> {
     let category = |id: u32| info.files.iter().find(|f| f.file_id == id).map(|f| f.category.as_str());
     let add_on = |id: u32| matches!(category(id), Some("OPTIONAL" | "MISCELLANEOUS"));
     let joins = add_on(linked);

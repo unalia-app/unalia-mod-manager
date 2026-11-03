@@ -883,6 +883,8 @@ pub fn run() {
             catalog::hexium_communities,
             mods::installed_mods,
             mods::install_mod,
+            mods::identify_file,
+            mods::install_file,
             mods::cancel_install,
             mods::paused_downloads,
             mods::discard_download,

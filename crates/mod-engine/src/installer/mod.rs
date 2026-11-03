@@ -5,9 +5,11 @@
 //! during this install is removed, the replaced versions are put back, and
 //! nothing is recorded.
 
+mod local;
 mod nexus;
 mod variants;
 
+pub use local::LocalFile;
 pub use nexus::{NexusFile, NexusInstall, available_updates_nexus};
 
 use std::collections::hash_map::Entry;
