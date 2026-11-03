@@ -1,6 +1,6 @@
 # Release: a pushed `vX.Y.Z` tag builds the Windows installer and publishes
-# the GitHub release. Nothing runs on other pushes (no test CI for now,
-# tests run locally).
+# the GitHub release. No test CI for now: tests run locally, and `audit.yml`
+# only checks the dependencies.
 #
 # Beta for the testers: a `vX.Y.Z-beta.N` tag, with that same version in the
 # three files below. It's published as a pre-release, so /releases/latest,

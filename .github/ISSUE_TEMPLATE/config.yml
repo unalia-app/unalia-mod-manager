@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Questions and help
+    url: https://mods.unalia.app/discord
+    about: Ask on the Discord.
+  - name: Security problem
+    url: https://github.com/unalia-app/unalia-mod-manager/blob/main/SECURITY.md
+    about: Never in a public issue. See how to report it.

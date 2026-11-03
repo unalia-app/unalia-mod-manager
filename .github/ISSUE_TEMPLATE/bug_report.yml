@@ -1,0 +1,36 @@
+name: Bug report
+description: Something doesn't work as it should.
+labels: ["bug"]
+body:
+  - type: input
+    id: game
+    attributes:
+      label: Game
+      description: The game you were modding, and where it comes from (Steam, GOG, Epic…).
+      placeholder: Hollow Knight Silksong, Steam
+    validations:
+      required: true
+  - type: input
+    id: mods
+    attributes:
+      label: Mods involved
+      description: Name or link of the mods, if the problem is about specific mods.
+  - type: textarea
+    id: steps
+    attributes:
+      label: What happened
+      description: What you did, step by step, what you expected, and what you got instead.
+      placeholder: |
+        1. Open the game's page
+        2. Install the mod
+        3. The install stops with an error
+    validations:
+      required: true
+  - type: textarea
+    id: report
+    attributes:
+      label: Report
+      description: In the app, go to Settings > Support, click "Copy report" and paste it here. It holds the app version, the Windows version and the logs. Read it first and remove anything you don't want to share.
+      render: text
+    validations:
+      required: true

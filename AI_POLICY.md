@@ -27,7 +27,7 @@ The app never uses AI to decide where files go or what to install. A mod descrip
 
 ## Issues and discussions
 
-Write issues, reviews and comments in your own words. Generated bug reports that don't match what you saw, or invented reproduction steps, waste everyone's time and will be closed. Using a tool to translate or fix your English is fine.
+Write issues, reviews and comments in your own words. Generated bug or security reports that don't match what you saw, or invented reproduction steps, waste everyone's time and will be closed. Using a tool to translate or fix your English is fine.
 
 ## Licensing
 

@@ -47,7 +47,7 @@ Code that touches players' files (`crates/mod-engine/src/loaders/`, `deploy.rs`,
 
 ## Using AI tools
 
-Allowed, as long as you read, understand and test what you submit, and say so in the pull request when a tool wrote a significant part. Don't add AI tools as commit co-authors. Details: [AI_POLICY.md](AI_POLICY.md).
+Allowed, as long as you read, understand and test what you submit, and say so in the pull request when a tool wrote a significant part. Don't add AI tools as commit co-authors. Details: [AI_POLICY.md](AI_POLICY.md). Agents read [AGENTS.md](AGENTS.md).
 
 ## Adding a game profile
 

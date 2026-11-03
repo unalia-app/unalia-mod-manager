@@ -1,0 +1,20 @@
+name: Game or feature request
+description: A game to support, or something the app should do.
+labels: ["enhancement"]
+body:
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What are you asking for?
+      options:
+        - A game
+        - A feature
+    validations:
+      required: true
+  - type: textarea
+    id: request
+    attributes:
+      label: Your request
+      description: The game and where its mods live (Thunderstore, Nexus Mods, Steam Workshop…), or the feature and the problem it solves for you.
+    validations:
+      required: true
