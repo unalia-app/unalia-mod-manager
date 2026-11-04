@@ -276,7 +276,8 @@ impl Unreal {
 
         // 5. UE4SS mod: the closest folder that holds `Scripts/main.lua`
         //    (Lua) or `dlls/*.dll` (C++). At the package root: a folder named
-        //    after the mod.
+        //    after the mod. An add-on brings only other scripts for a mod
+        //    that has its main one: its folder gives that mod's name.
         for depth in (0..=dirs.len()).rev() {
             let base = dirs[..depth].join("/").to_ascii_lowercase();
             let prefix = if base.is_empty() { String::new() } else { format!("{base}/") };
@@ -288,7 +289,15 @@ impl Unreal {
                         && f.strip_prefix(&dlls).is_some_and(|rest| !rest.contains('/'))
                 })
             };
-            if all.contains(&main) || cpp() {
+            let add_on = || {
+                let scripts = format!("{prefix}scripts/");
+                depth > 0
+                    && all.iter().any(|f| {
+                        f.ends_with(".lua")
+                            && f.strip_prefix(&scripts).is_some_and(|rest| !rest.contains('/'))
+                    })
+            };
+            if all.contains(&main) || cpp() || add_on() {
                 let mod_folder = if depth > 0 { dirs[depth - 1] } else { folder };
                 return Some(format!(
                     "{win64}/ue4ss/Mods/{mod_folder}/{}",
@@ -430,6 +439,25 @@ mod tests {
             .collect();
         v.sort();
         v
+    }
+
+    #[test]
+    fn a_lua_add_on_joins_the_folder_of_its_mod() {
+        assert_eq!(
+            place(&["PBZMapMarkers/README_teleport.txt", "PBZMapMarkers/Scripts/tp.lua"]),
+            pairs(&[
+                (
+                    "PBZMapMarkers/README_teleport.txt",
+                    "PhantomBladeZero/Binaries/Win64/ue4ss/Mods/PBZMapMarkers/README_teleport.txt"
+                ),
+                (
+                    "PBZMapMarkers/Scripts/tp.lua",
+                    "PhantomBladeZero/Binaries/Win64/ue4ss/Mods/PBZMapMarkers/Scripts/tp.lua"
+                ),
+            ])
+        );
+        // Without a folder, nothing says which mod it belongs to.
+        assert!(place(&["Scripts/tp.lua"]).is_empty());
     }
 
     #[test]
