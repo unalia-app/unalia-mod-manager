@@ -893,6 +893,7 @@ pub fn run() {
             mods::restore_mod,
             mods::revert_mod,
             mods::missing_mods,
+            mods::loader_problems,
             mods::put_back_mods,
             mods::forgotten_games,
             mods::forget_game,

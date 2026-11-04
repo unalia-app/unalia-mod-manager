@@ -12,6 +12,7 @@ import { useFileDrop } from "@/components/game/add-file";
 import { AntiCheatBanner } from "@/components/game/anti-cheat-banner";
 import { Discover, useOnHexium } from "@/components/game/discover";
 import { GameUpdatedBanner } from "@/components/game/game-updated-banner";
+import { LoaderProblemBanner } from "@/components/game/loader-problem-banner";
 import { GameVersion } from "@/components/game/game-version";
 import { MissingModsBanner } from "@/components/game/missing-mods-banner";
 import { GameSwitcher } from "@/components/game/game-switcher";
@@ -153,6 +154,7 @@ export function GameScreen() {
 						<AntiCheatBanner game={game} />
 						<PendingBanner appId={game.appId} />
 						<MissingModsBanner game={game} />
+						<LoaderProblemBanner game={game} />
 						<GameUpdatedBanner game={game} />
 
 						<div className="mt-10 animate-fade-up [animation-delay:120ms]">

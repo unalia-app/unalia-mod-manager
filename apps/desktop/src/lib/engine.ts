@@ -406,6 +406,14 @@ export function missingMods(appId: number): Promise<string[]> {
 	return invoke("missing_mods", { appId });
 }
 
+/** A loader that didn't start in the last session, and the enabled mods that needed it. */
+export type LoaderProblem = { loader: string; mods: string[] };
+
+export function loaderProblems(appId: number): Promise<LoaderProblem[]> {
+	if (!isTauri()) return Promise.resolve([]);
+	return invoke("loader_problems", { appId });
+}
+
 /** Places the deleted mods again from the storage, downloading nothing again. Returns their count. */
 export function putBackMods(appId: number): Promise<number> {
 	return invoke("put_back_mods", { appId });

@@ -11,6 +11,7 @@ use std::time::{Duration, Instant};
 
 use mod_engine::download::Cancel;
 use mod_engine::foreign::{self, Foreign};
+use mod_engine::health::{self, LoaderProblem};
 use mod_engine::installer::{
     self, InstallError, Installer, NexusFile, NexusInstall, Paths, Progress, Target, UpdateCheck,
 };
@@ -1223,6 +1224,27 @@ pub async fn missing_mods(
     let state = mods.state.lock().await;
     let missing = installer::missing(&state, &game_key(app_id), &game.dir).map_err(|e| error_message(&e))?;
     Ok(missing.into_iter().map(|m| m.name).collect())
+}
+
+/// Loaders that didn't start in the last session. Nothing while the game runs:
+/// their logs aren't finished.
+#[tauri::command]
+pub async fn loader_problems(
+    library: State<'_, Library>,
+    mods: State<'_, Mods>,
+    app_id: u32,
+) -> Result<Vec<LoaderProblem>, String> {
+    let game = library.game(app_id).ok_or(UNKNOWN_GAME)?;
+    if mods.is_running(app_id, &game) {
+        return Ok(Vec::new());
+    }
+    let installed = mods
+        .state
+        .lock()
+        .await
+        .list(&game_key(app_id))
+        .map_err(crate::support::logged)?;
+    Ok(health::loader_problems(&installed, &game.dir))
 }
 
 /// Places the mods deleted from the game again from the storage, downloading

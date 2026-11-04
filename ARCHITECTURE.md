@@ -59,6 +59,7 @@ scripts/                Demo library, license file, updater manifest
 | **launch** | Launches the game (through Steam or its executable), watches its process, and queues changes while it runs: they are applied when it closes. |
 | **foreign** | Finds mod files left in a game by other tools (by hand, Vortex…), so "Reset mods" can send them to the Recycle Bin. |
 | **artwork** | Game images from Steam's local cache, and the accent color extracted from the cover (OKLCH, contrast checked). |
+| **health** | Reads the loaders' logs after a session, to tell the player when a loader didn't start and which mods it took down. |
 | **advice** | Turns an error chain into one human sentence: what happened, then what to do. |
 
 ## Security
