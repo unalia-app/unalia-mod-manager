@@ -862,12 +862,15 @@ pub async fn available_updates_nexus(
             let Some(update) = version.and_then(|version| newer(m, version)) else {
                 continue;
             };
-            // The page's version is the main file's. Installed without it,
-            // a mod follows its own file: that is what an update installs.
+            // The page's version is the main file's, and an author can have
+            // several. A mod follows its own file: that is what an update
+            // installs, so while that file is still the last one, its version
+            // decides.
             let own = match m.files.first() {
                 Some(first) => nexus.mod_info(domain, id).await.ok().and_then(|info| {
                     let file = info.successor(*first, None)?;
-                    (file.category != "MAIN").then(|| file_version(&info, file, None))
+                    (file.file_id == *first || file.category != "MAIN")
+                        .then(|| file_version(&info, file, None))
                 }),
                 None => None,
             };

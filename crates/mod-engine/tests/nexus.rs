@@ -732,6 +732,43 @@ async fn a_mod_without_its_main_file_is_offered_no_update_it_would_not_install()
 }
 
 #[tokio::test]
+async fn a_second_main_file_is_no_update_of_the_first() {
+    const SKIP: u32 = 8000;
+    let mut w = World::new().await;
+    w.publish(SKIP, "Skip Intro", "1.4.0", &[], &[("r6/scripts/Skip/skip.reds", b"skip")])
+        .await;
+    w.install(SKIP, NexusFile::Link(&link(SKIP))).await.unwrap();
+    // The author adds another main file: the page shows its version.
+    w.graphql(
+        vec![
+            Matcher::Regex(r"nodes \{ modId version status \}".into()),
+            mod_id_matcher(SKIP),
+        ],
+        json!({ "legacyModsByDomain": { "nodes": [{ "modId": SKIP, "version": "1.5.0" }] } }),
+    )
+    .await;
+    w.graphql(
+        vec![
+            Matcher::Regex("modFiles".into()),
+            Matcher::Regex(format!(r#""mod":"{SKIP}""#)),
+        ],
+        json!({ "modFiles": [
+            { "fileId": SKIP * 10, "name": "Skip Intro", "version": "1.4.0", "category": "MAIN",
+              "primary": 1, "sizeInBytes": "10", "date": 1_790_000_000 },
+            { "fileId": SKIP * 10 + 1, "name": "Instant Menu add-on", "version": "1.5.0",
+              "category": "MAIN", "primary": 0, "sizeInBytes": "10", "date": 1_790_000_100 }
+        ] }),
+    )
+    .await;
+
+    let installed = w.state.list(GAME).unwrap();
+    let updates = available_updates_nexus(&w.nexus, &w.github, &w.profile, &installed, None)
+        .await
+        .updates;
+    assert!(updates.is_empty(), "{updates:?}");
+}
+
+#[tokio::test]
 async fn a_mod_remembers_what_it_needs_until_it_is_installed() {
     let mut w = World::new().await;
     w.publish(
@@ -855,6 +892,19 @@ async fn updates_come_from_github_for_frameworks_and_nexus_for_mods() {
             mod_id_matcher(COOL_HUD),
         ],
         json!({ "legacyModsByDomain": { "nodes": [{ "modId": COOL_HUD, "version": "1.3.0" }] } }),
+    )
+    .await;
+    w.graphql(
+        vec![
+            Matcher::Regex("modFiles".into()),
+            Matcher::Regex(format!(r#""mod":"{COOL_HUD}""#)),
+        ],
+        json!({ "modFiles": [
+            { "fileId": COOL_HUD * 10 + 1, "name": "Cool HUD", "version": "1.3.0", "category": "MAIN",
+              "primary": 1, "sizeInBytes": "10", "date": 1_791_000_000 },
+            { "fileId": COOL_HUD * 10, "name": "Cool HUD", "version": "1.2.0", "category": "OLD_VERSION",
+              "primary": 0, "sizeInBytes": "10", "date": 1_790_000_000 }
+        ] }),
     )
     .await;
 
