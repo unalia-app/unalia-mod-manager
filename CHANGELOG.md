@@ -2,7 +2,7 @@
 
 All notable changes to Unalia Mod Manager. The format follows [Keep a Changelog](https://keepachangelog.com), and versions follow [Semantic Versioning](https://semver.org).
 
-## [Unreleased]
+## [0.1.9] - 2026-11-04
 
 ### Added
 
