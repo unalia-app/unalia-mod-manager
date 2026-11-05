@@ -4,6 +4,11 @@ All notable changes to Unalia Mod Manager. The format follows [Keep a Changelog]
 
 ## [Unreleased]
 
+### Changed
+
+- The Discord button moves from the bottom left to the header, next to Help & Feedback.
+- What's new: the Discord button now invites you to become a beta tester.
+
 ### Fixed
 
 - Phantom Blade Zero: a PBZModLoader mod that comes as a plain `main.js` or a folder, like Free Teleport for PBZModLoader or PhantomHUD, now installs in the loader's mods folder.

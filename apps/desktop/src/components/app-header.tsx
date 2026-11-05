@@ -1,12 +1,14 @@
 "use client";
 
-import { Badge, cn } from "@modalia/ui";
+import { Badge, DiscordIcon, cn } from "@modalia/ui";
 import { MessageSquarePlus, Settings } from "lucide-react";
 import Link from "next/link";
 import { type ReactNode, type RefObject, useEffect, useState } from "react";
 
 import { WindowControls } from "@/components/window-controls";
 import { openFeedback } from "@/lib/feedback";
+import { DISCORD_URL } from "@/lib/links";
+import { openExternal } from "@/lib/open";
 import { usePlatform } from "@/lib/platform";
 
 /**
@@ -81,6 +83,15 @@ export function AppHeader({
 			    below makes it taller than the buttons). */}
 			<div className="ml-auto flex -translate-y-[6px] items-center gap-2">
 				{actions}
+				<button
+					type="button"
+					onClick={() => void openExternal(DISCORD_URL)}
+					aria-label="Discord"
+					title="Discord"
+					className="flex size-8 cursor-pointer items-center justify-center rounded-md text-fg-subtle transition-colors hover:bg-white/10 hover:text-fg"
+				>
+					<DiscordIcon className="size-4" />
+				</button>
 				<button
 					type="button"
 					onClick={openFeedback}

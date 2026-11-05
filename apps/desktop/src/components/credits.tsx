@@ -1,15 +1,15 @@
 "use client";
 
-import { DiscordIcon, GitHubIcon, cn } from "@modalia/ui";
+import { GitHubIcon, cn } from "@modalia/ui";
 
-import { DISCORD_URL, REPO_URL } from "@/lib/links";
+import { REPO_URL } from "@/lib/links";
 import { openExternal } from "@/lib/open";
 
 const LINK =
 	"flex cursor-pointer items-center rounded-full text-fg-faint transition-colors hover:text-fg-muted focus-visible:text-fg-muted";
 
 /**
- * Bottom left of every page, discreet: the code, the Discord, the author.
+ * Bottom left of every page, discreet: the code, the author.
  * The intro (z-60) covers it at launch.
  */
 export function Credits({ className }: { className?: string }) {
@@ -23,9 +23,6 @@ export function Credits({ className }: { className?: string }) {
 		>
 			<button type="button" className={LINK} aria-label="Source code on GitHub" onClick={() => void openExternal(REPO_URL)}>
 				<GitHubIcon className="size-3.5" />
-			</button>
-			<button type="button" className={LINK} aria-label="Discord" onClick={() => void openExternal(DISCORD_URL)}>
-				<DiscordIcon className="size-3.5" />
 			</button>
 			<span aria-hidden className="h-3 w-px bg-line" />
 			<button type="button" className={cn(LINK, "font-tight text-[11px]")} onClick={() => void openExternal(REPO_URL)}>
