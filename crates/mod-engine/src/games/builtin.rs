@@ -38,6 +38,7 @@ struct RawProfile {
     versions: Vec<GameVersion>,
     plugins: Option<String>,
     modded: Option<ModdedLaunch>,
+    script_mods: Option<String>,
 }
 
 pub fn profiles() -> Vec<GameProfile> {
@@ -69,6 +70,7 @@ pub fn profiles() -> Vec<GameProfile> {
                 versions: raw.versions,
                 plugins: raw.plugins,
                 modded: raw.modded,
+                script_mods: raw.script_mods,
             }
         })
         .collect()

@@ -188,6 +188,7 @@ fn profile(game: Game, communities: &HashMap<String, Community>) -> Option<GameP
         versions: Vec::new(),
         plugins: None,
         modded: None,
+        script_mods: None,
         name: game.meta.display_name,
         community,
         id: game.label,

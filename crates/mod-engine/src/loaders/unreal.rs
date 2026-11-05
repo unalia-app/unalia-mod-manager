@@ -19,7 +19,9 @@
 //! - a ReShade preset (`<Name> ReShade.ini`) goes to `<binaries>/`, where
 //!   ReShade's menu lists it; ReShade itself comes from its website;
 //! - the engine's settings files (`Engine.ini`…) are merged into the
-//!   player's (`user_settings`), never placed in the game.
+//!   player's (`user_settings`), never placed in the game;
+//! - a folder with `main.js` is a script mod, placed in the folder the game's
+//!   profile gives for them (`script_mods`), if it has one.
 //!
 //! `<binaries>` is the folder of the game's executable (`find_binaries`):
 //! `<Project>/Binaries/Win64`, except for games that keep it elsewhere.
@@ -169,6 +171,9 @@ pub struct Unreal {
     /// The player's settings folder (`user_settings`). None: settings
     /// files are not installed.
     pub settings: Option<String>,
+    /// Folder of a script loader's mods (game profile), e.g.
+    /// `ProjectPBZ/PBZModLoader/mods`. None: `main.js` means nothing.
+    pub script_mods: Option<String>,
 }
 
 impl Loader for Unreal {
@@ -182,7 +187,7 @@ impl Loader for Unreal {
     }
 
     fn place(&self, package_id: &str, _kind: &PackageKind, files: &[String]) -> Vec<Placement> {
-        let skip = wrapper_depth(files, &self.project, &self.binaries);
+        let skip = wrapper_depth(files, &self.project, &self.binaries, self.script_mods.is_some());
         let stripped: Vec<(&String, Vec<&str>)> = files
             .iter()
             .map(|f| (f, f.split('/').skip(skip).collect()))
@@ -335,7 +340,18 @@ impl Unreal {
         if PAK_FILES.iter().any(|e| lower.ends_with(e)) {
             return Some(format!("{project}/Content/Paks/~mods/{name}"));
         }
-        None
+
+        // 9. Script mod: the closest folder that holds `main.js`. At the
+        //    package root: a folder named after the mod.
+        let mods = self.script_mods.as_ref()?;
+        (0..=dirs.len()).rev().find_map(|depth| {
+            let base = dirs[..depth].join("/").to_ascii_lowercase();
+            let main = if base.is_empty() { "main.js".to_owned() } else { format!("{base}/main.js") };
+            all.contains(&main).then(|| {
+                let mod_folder = if depth > 0 { dirs[depth - 1] } else { folder };
+                format!("{mods}/{mod_folder}/{}", parts[depth..].join("/"))
+            })
+        })
     }
 }
 
@@ -343,7 +359,7 @@ impl Unreal {
 /// as long as the whole package sits in a single folder that means nothing
 /// to the game. The executable's folder counts when it sits outside the
 /// project (`platform/steam/…`): such an archive mirrors the game.
-fn wrapper_depth(files: &[String], project: &str, binaries: &str) -> usize {
+fn wrapper_depth(files: &[String], project: &str, binaries: &str, script_mods: bool) -> usize {
     let binaries_root = binaries.split('/').next().unwrap_or_default();
     let meaningful = |segment: &str| {
         segment.eq_ignore_ascii_case(project)
@@ -380,6 +396,10 @@ fn wrapper_depth(files: &[String], project: &str, binaries: &str) -> usize {
                 && (parts[1].eq_ignore_ascii_case("scripts")
                     || parts[1].eq_ignore_ascii_case("dlls"))
             {
+                return depth;
+            }
+            // `Mod/main.js`: `Mod` is the script mod's name, keep it.
+            if script_mods && parts.len() == 2 && parts[1].eq_ignore_ascii_case("main.js") {
                 return depth;
             }
         }
@@ -423,6 +443,7 @@ mod tests {
             project: P.into(),
             binaries: format!("{P}/Binaries/Win64"),
             settings: Some(SETTINGS.into()),
+            script_mods: None,
         }
         .place("Cool Mod", &PackageKind::Mod, &files)
         .into_iter()
@@ -439,6 +460,58 @@ mod tests {
             .collect();
         v.sort();
         v
+    }
+
+    #[test]
+    fn script_mods_go_to_the_folder_of_their_loader() {
+        const MODS: &str = "ProjectPBZ/PBZModLoader/mods";
+        let place = |files: &[&str]| {
+            let files: Vec<String> = files.iter().map(|f| f.to_string()).collect();
+            let mut out: Vec<String> = Unreal {
+                project: "ProjectPBZ".into(),
+                binaries: "platform/steam".into(),
+                settings: None,
+                script_mods: Some(MODS.into()),
+            }
+            .place("Cool Mod", &PackageKind::Mod, &files)
+            .into_iter()
+            .map(|p| p.target)
+            .collect();
+            out.sort();
+            out
+        };
+        // At the package root: a folder named after the mod.
+        assert_eq!(place(&["main.js"]), [format!("{MODS}/Cool Mod/main.js")]);
+        // In its own folder, which keeps its name.
+        assert_eq!(
+            place(&["PBZAlertCue/main.js", "PBZAlertCue/cue.wav"]),
+            [format!("{MODS}/PBZAlertCue/cue.wav"), format!("{MODS}/PBZAlertCue/main.js")]
+        );
+        // Inside a version folder, next to a readme for the player.
+        assert_eq!(
+            place(&[
+                "PhantomHUD-0.2.5/PhantomHUD/assets/ink.png",
+                "PhantomHUD-0.2.5/PhantomHUD/main.js",
+                "PhantomHUD-0.2.5/README.txt",
+            ]),
+            [format!("{MODS}/PhantomHUD/assets/ink.png"), format!("{MODS}/PhantomHUD/main.js")]
+        );
+        // Next to a package, each goes to its own place.
+        assert_eq!(
+            place(&["main.js", "Cool_P.pak"]),
+            ["ProjectPBZ/Content/Paks/~mods/Cool_P.pak".to_owned(), format!("{MODS}/Cool Mod/main.js")]
+        );
+        // An archive that mirrors the game stays as it is.
+        assert_eq!(
+            place(&["ProjectPBZ/Content/JavaScript/Menu/Mods/Cool/main.js"]),
+            ["ProjectPBZ/Content/JavaScript/Menu/Mods/Cool/main.js"]
+        );
+    }
+
+    #[test]
+    fn main_js_means_nothing_without_a_script_loader() {
+        assert!(place(&["main.js"]).is_empty());
+        assert!(place(&["Cool/main.js", "Cool/cue.wav"]).is_empty());
     }
 
     #[test]
@@ -676,6 +749,7 @@ mod tests {
             project: "ProjectPBZ".into(),
             binaries: "platform/steam".into(),
             settings: None,
+            script_mods: None,
         }
         .place("Cool Mod", &PackageKind::Mod, &files)
         .into_iter()
@@ -710,6 +784,7 @@ mod tests {
                 project: "ProjectPBZ".into(),
                 binaries: "platform/steam".into(),
                 settings: None,
+                script_mods: None,
             }
             .place("Cool Mod", &PackageKind::Mod, &files)
             .into_iter()

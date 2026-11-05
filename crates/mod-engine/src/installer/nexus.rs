@@ -742,6 +742,10 @@ impl Adapter {
                 Ok(Self::Unreal(Unreal {
                     binaries: find_binaries(game_dir, &project),
                     settings: user_settings(&project),
+                    script_mods: profile
+                        .script_mods
+                        .as_ref()
+                        .map(|path| path.replace("{project}", &project)),
                     project,
                 }))
             }

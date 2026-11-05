@@ -83,6 +83,10 @@ pub struct GameProfile {
     /// Mods that only load when the game starts with extra arguments.
     #[serde(skip)]
     pub modded: Option<ModdedLaunch>,
+    /// Unreal games: folder of a script loader's mods, each in its own folder
+    /// with a `main.js`. Can contain `{project}`.
+    #[serde(skip)]
+    pub script_mods: Option<String>,
 }
 
 /// Mods that only load when the game starts with extra arguments (game

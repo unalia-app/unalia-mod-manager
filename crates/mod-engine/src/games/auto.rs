@@ -82,6 +82,7 @@ pub fn unreal_profile(found: &FoundGame, game_dir: &Path) -> Option<GameProfile>
         versions: Vec::new(),
         plugins: None,
         modded: None,
+        script_mods: None,
     })
 }
 

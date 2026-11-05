@@ -12,6 +12,8 @@ steam_app_ids = [4115450]
 # The launcher and the game have the same name.
 exe_names = ["PBZ.exe"]
 loader = "unreal"
+# PBZModLoader (Nexus 113): loads the `main.js` of each folder here.
+script_mods = "{project}/PBZModLoader/mods"
 
 [nexus]
 domain = "phantombladezero"

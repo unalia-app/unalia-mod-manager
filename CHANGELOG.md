@@ -2,6 +2,12 @@
 
 All notable changes to Unalia Mod Manager. The format follows [Keep a Changelog](https://keepachangelog.com), and versions follow [Semantic Versioning](https://semver.org).
 
+## [Unreleased]
+
+### Fixed
+
+- Phantom Blade Zero: a PBZModLoader mod that comes as a plain `main.js` or a folder, like Free Teleport for PBZModLoader or PhantomHUD, now installs in the loader's mods folder.
+
 ## [0.1.10] - 2026-11-05
 
 ### Changed

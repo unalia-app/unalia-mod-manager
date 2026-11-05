@@ -287,6 +287,29 @@ async fn a_lua_mod_brings_ue4ss_next_to_the_real_executable() {
     );
 }
 
+#[tokio::test]
+async fn a_script_mod_goes_to_the_folder_of_pbzmodloader() {
+    let mut w = World::new().await;
+    w.publish(8100, "Free Teleport", &[("main.js", b"// teleport")]).await;
+    w.publish(
+        8101,
+        "Alert Cue",
+        &[("PBZAlertCue/main.js", b"// cue"), ("PBZAlertCue/cue.wav", b"wav")],
+    )
+    .await;
+
+    w.install(8100).await.unwrap();
+    w.install(8101).await.unwrap();
+
+    let mods = w.game.join(PROJECT).join("PBZModLoader/mods");
+    assert!(mods.join("Free Teleport/main.js").is_file());
+    assert!(mods.join("PBZAlertCue/main.js").is_file());
+    assert!(mods.join("PBZAlertCue/cue.wav").is_file());
+    assert!(!w.game.join("main.js").exists());
+    // A script mod doesn't need UE4SS.
+    assert!(!w.game.join(BINARIES).join("dwmapi.dll").exists());
+}
+
 /// The real UE4SS build for the game, from GitHub: its layout is still the
 /// one the install expects. Outside the normal suite (network):
 /// `cargo test -p mod-engine --test unreal -- --ignored`.
