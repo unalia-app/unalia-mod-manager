@@ -869,8 +869,11 @@ pub async fn available_updates_nexus(
             let own = match m.files.first() {
                 Some(first) => nexus.mod_info(domain, id).await.ok().and_then(|info| {
                     let file = info.successor(*first, None)?;
-                    (file.file_id == *first || file.category != "MAIN")
-                        .then(|| file_version(&info, file, None))
+                    let version = file_version(&info, file, None);
+                    (file.file_id == *first
+                        || file.category != "MAIN"
+                        || is_update(&m.version, &version, false))
+                    .then_some(version)
                 }),
                 None => None,
             };

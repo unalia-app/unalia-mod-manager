@@ -769,6 +769,46 @@ async fn a_second_main_file_is_no_update_of_the_first() {
 }
 
 #[tokio::test]
+async fn an_update_shows_the_version_of_its_own_file() {
+    const SKIP: u32 = 8001;
+    let mut w = World::new().await;
+    w.publish(SKIP, "Skip Intro", "1.4.0", &[], &[("r6/scripts/Skip/skip.reds", b"skip")])
+        .await;
+    w.install(SKIP, NexusFile::Link(&link(SKIP))).await.unwrap();
+    // A new version of the file, while the page shows another main file's.
+    w.graphql(
+        vec![
+            Matcher::Regex(r"nodes \{ modId version status \}".into()),
+            mod_id_matcher(SKIP),
+        ],
+        json!({ "legacyModsByDomain": { "nodes": [{ "modId": SKIP, "version": "1.5.3" }] } }),
+    )
+    .await;
+    w.graphql(
+        vec![
+            Matcher::Regex("modFiles".into()),
+            Matcher::Regex(format!(r#""mod":"{SKIP}""#)),
+        ],
+        json!({ "modFiles": [
+            { "fileId": SKIP * 10 + 1, "name": "Skip Intro", "version": "1.4.1", "category": "MAIN",
+              "primary": 1, "sizeInBytes": "10", "date": 1_791_000_000 },
+            { "fileId": SKIP * 10 + 2, "name": "Instant Menu add-on", "version": "1.5.3",
+              "category": "MAIN", "primary": 0, "sizeInBytes": "10", "date": 1_791_000_100 },
+            { "fileId": SKIP * 10, "name": "Skip Intro", "version": "1.4.0", "category": "OLD_VERSION",
+              "primary": 0, "sizeInBytes": "10", "date": 1_790_000_000 }
+        ] }),
+    )
+    .await;
+
+    let installed = w.state.list(GAME).unwrap();
+    let updates = available_updates_nexus(&w.nexus, &w.github, &w.profile, &installed, None)
+        .await
+        .updates;
+    let latest: Vec<_> = updates.iter().map(|u| u.latest.as_str()).collect();
+    assert_eq!(latest, ["1.4.1"]);
+}
+
+#[tokio::test]
 async fn a_mod_remembers_what_it_needs_until_it_is_installed() {
     let mut w = World::new().await;
     w.publish(

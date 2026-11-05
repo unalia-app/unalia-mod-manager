@@ -2,12 +2,17 @@
 
 All notable changes to Unalia Mod Manager. The format follows [Keep a Changelog](https://keepachangelog.com), and versions follow [Semantic Versioning](https://semver.org).
 
-## [Unreleased]
+## [0.1.10] - 2026-11-05
+
+### Changed
+
+- My Mods: while Nexus downloads are paused, Update on a Nexus mod opens the Files tab of its page: download the file and drop it on the game. Update all leaves these mods out.
 
 ### Fixed
 
 - Phantom Blade Zero: a Lua add-on for a UE4SS mod installs in the folder of that mod, like the Teleport add-on of Map Collectible Markers.
 - Nexus Mods: a mod is no longer offered an update that changes nothing when its author adds a second main file, as with Skip Intro on Phantom Blade Zero.
+- Nexus Mods: an update shows the version of the mod's own file, not the one on the page when the author has several main files.
 
 ## [0.1.9] - 2026-11-04
 

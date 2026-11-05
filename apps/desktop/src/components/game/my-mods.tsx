@@ -46,6 +46,7 @@ import { toast } from "@/components/toaster";
 import { useAdultBlur } from "@/lib/adult-content";
 import {
 	type InstalledMod,
+	type NexusAccount,
 	type PausedDownload,
 	type SteamGame,
 	discardDownload,
@@ -57,6 +58,7 @@ import {
 import { bytes, relativeDate } from "@/lib/format";
 import { useGameStatus, usePendingOp } from "@/lib/game-status";
 import { modHref } from "@/lib/games-store";
+import { useNexusAccount } from "@/lib/nexus";
 import { copyLink, openExternal } from "@/lib/open";
 import {
 	type ActiveInstall,
@@ -116,6 +118,13 @@ export function MyMods({ game, onDiscover }: { game: SteamGame; onDiscover: () =
 	const appId = game.appId;
 	const mods = useInstalled(appId);
 	const updates = useUpdates(appId) ?? [];
+	const nexusDomain = game.profile?.nexus?.domain ?? null;
+	const account = useNexusAccount();
+	// What Unalia can't download itself waits for a file from the mod's page.
+	const updatable = updates.filter((u) => {
+		const mod = mods?.find((m) => m.id === u.modId);
+		return !mod || !fromWebsite(mod, nexusDomain, account);
+	});
 	const saved = lastViews.get(appId);
 	const [text, setText] = useState(saved?.text ?? "");
 	const [sort, setSort] = useState<MyModsSort>(saved?.sort ?? "name");
@@ -234,11 +243,17 @@ export function MyMods({ game, onDiscover }: { game: SteamGame; onDiscover: () =
 						size="sm"
 						variant="outline"
 						leftIcon={<ArrowUp className="size-3.5" />}
-						disabled={updates.length === 0}
-						title={updates.length === 0 ? "Every mod is up to date" : undefined}
-						onClick={() => updateAll(appId, updates)}
+						disabled={updatable.length === 0}
+						title={
+							updates.length === 0
+								? "Every mod is up to date"
+								: updatable.length === 0
+									? MANUAL_UPDATE
+									: undefined
+						}
+						onClick={() => updateAll(appId, updatable)}
 					>
-						{updates.length > 0 ? `Update all (${updates.length})` : "Update all"}
+						{updatable.length > 0 ? `Update all (${updatable.length})` : "Update all"}
 					</Button>
 					{game.profile?.nexus && <AddFileButton appId={appId} />}
 					<ImportButton game={game} mods={mods} />
@@ -280,7 +295,7 @@ export function MyMods({ game, onDiscover }: { game: SteamGame; onDiscover: () =
 							<ModRow
 								mod={m}
 								appId={appId}
-								nexusDomain={game.profile?.nexus?.domain ?? null}
+								nexusDomain={nexusDomain}
 								compact={compact}
 								selection={
 									selecting
@@ -535,6 +550,13 @@ function ProgressRow({ appId, modId, active: a }: { appId: number; modId: string
 	);
 }
 
+const MANUAL_UPDATE = "Downloads from Nexus Mods are paused: get the file from the mod's page, then drop it on the game";
+
+/** A Nexus mod without a login: its update comes as a file from its page. Frameworks come from GitHub. */
+function fromWebsite(mod: InstalledMod, nexusDomain: string | null, account: NexusAccount | null | undefined): boolean {
+	return !!nexusDomain && account === null && mod.loaderRoot === null && /^nexus-\d+$/.test(mod.id);
+}
+
 function ModRow({
 	mod: m,
 	appId,
@@ -558,6 +580,11 @@ function ModRow({
 	const removing = pending?.type === "uninstall";
 	const enabled = pending?.type === "setEnabled" ? pending.enabled : m.enabled;
 	const update = useModUpdate(appId, m.id);
+	const manualUpdate = fromWebsite(m, nexusDomain, useNexusAccount());
+	const runUpdate = () => {
+		if (manualUpdate && nexusDomain) void openExternal(nexusModUrl(nexusDomain, m.id, "files"));
+		else void install(appId, m.id, m.name);
+	};
 	const deprecated = useDeprecated(appId, m.id);
 	const active = useActiveInstall(appId, m.id);
 	const updating = active?.status === "queued" || active?.status === "running";
@@ -645,14 +672,20 @@ function ModRow({
 							<button
 								type="button"
 								aria-label={`Update ${m.name}`}
-								title={`Update to ${versionLabel(update.latest)}`}
-								onClick={() => void install(appId, m.id, m.name)}
+								title={manualUpdate ? MANUAL_UPDATE : `Update to ${versionLabel(update.latest)}`}
+								onClick={runUpdate}
 								className="cursor-pointer rounded-md p-1.5 text-accent transition-colors hover:bg-white/10"
 							>
 								<ArrowUp className="size-4" />
 							</button>
 						) : (
-							<Button size="sm" variant="outline" onClick={() => void install(appId, m.id, m.name)}>
+							<Button
+								size="sm"
+								variant="outline"
+								leftIcon={manualUpdate ? <ExternalLink className="size-3.5" /> : undefined}
+								title={manualUpdate ? MANUAL_UPDATE : undefined}
+								onClick={runUpdate}
+							>
 								Update
 							</Button>
 						))
