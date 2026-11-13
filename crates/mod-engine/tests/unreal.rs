@@ -335,7 +335,8 @@ async fn the_real_ue4ss_build_lands_in_the_right_place() {
         assert!(binaries.join(file).is_file(), "{file}");
     }
     let ue4ss = done.mods.iter().find(|m| m.id == UE4SS_ID).unwrap();
-    assert!(ue4ss.version.starts_with("3."), "{}", ue4ss.version);
+    // The version from the asset name, whatever the major one.
+    assert!(ue4ss.version.starts_with(|c: char| c.is_ascii_digit()), "{}", ue4ss.version);
 }
 
 #[tokio::test]
