@@ -12,7 +12,9 @@ mod variants;
 
 pub use local::LocalFile;
 pub use nexus::{NexusFile, NexusInstall, available_updates_nexus};
-pub use profiles::{DEFAULT_PROFILE, create_profile, delete_profile, profiles, rename_profile, switch_profile};
+pub use profiles::{
+    DEFAULT_PROFILE, create_profile, delete_profile, profiles, rename_profile, resume_switches, switch_profile,
+};
 
 use std::collections::hash_map::Entry;
 use std::collections::{BTreeSet, HashMap, HashSet};
@@ -1535,6 +1537,7 @@ pub fn forget(state: &mut State, paths: &Paths, game: &str) -> Result<usize, Ins
     state.set_pending(game, &[])?;
     state.set_vanilla(game, false)?;
     state.set_mod_profiles(game, &[])?;
+    state.set_profile_switch(game, None)?;
     state.forget_game_previous(game)?;
     paths.store().remove_packages(&game_segment(game))?;
     collect_garbage(state, paths)?;

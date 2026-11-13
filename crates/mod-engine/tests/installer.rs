@@ -490,6 +490,12 @@ fn present(w: &World, game: &str) -> Vec<String> {
     w.state.list(game).unwrap().into_iter().filter(|m| !m.parked).map(|m| m.id).collect()
 }
 
+/// Each mod: on, parked, its files in the game.
+fn records(state: &State, game: &str) -> Vec<(String, bool, bool, Vec<String>)> {
+    let mods = state.list(game).unwrap().into_iter();
+    mods.map(|m| (m.id, m.enabled, m.parked, m.deployment.files)).collect()
+}
+
 #[tokio::test]
 async fn each_profile_has_its_own_mods_loader_included() {
     let mut w = World::new().await;
@@ -589,12 +595,8 @@ async fn a_failed_switch_leaves_the_game_and_the_profiles_as_they_were() {
     installer::switch_profile(&mut w.state, &w.paths, game, &w.game, "Default").unwrap();
     installer::set_enabled(&mut w.state, &w.paths, game, &w.game, PREPATCHER, false).unwrap();
 
-    let records = |w: &World| {
-        let mods = w.state.list(game).unwrap().into_iter().map(|m| (m.id, m.enabled, m.parked, m.deployment.files));
-        mods.collect::<Vec<_>>()
-    };
     let game_before = snapshot(&w.game);
-    let records_before = records(&w);
+    let records_before = records(&w.state, game);
     let profiles_before = installer::profiles(&w.state, game).unwrap();
 
     // The prepatcher's package is gone from the storage: Knight is already
@@ -610,13 +612,73 @@ async fn a_failed_switch_leaves_the_game_and_the_profiles_as_they_were() {
 
     // Knight back in the game, nothing parked, Default still in use.
     assert_eq!(snapshot(&w.game), game_before);
-    assert_eq!(records(&w), records_before);
+    assert_eq!(records(&w.state, game), records_before);
     assert_eq!(installer::profiles(&w.state, game).unwrap(), profiles_before);
 
     // Once the storage is whole again, the same switch goes through.
     fs::rename(&aside, &manifest).unwrap();
     installer::switch_profile(&mut w.state, &w.paths, game, &w.game, "Co-op").unwrap();
     assert_eq!(snapshot(&w.game), coop);
+}
+
+#[tokio::test]
+async fn a_switch_cut_short_by_a_closed_app_ends_at_next_start() {
+    let mut w = World::new().await;
+    w.publish_knight().await;
+    w.install(KNIGHT).await.0.unwrap();
+    let game = "steam:1030300";
+    // Same profiles as above: Co-op has the prepatcher without Knight,
+    // Default Knight without the prepatcher.
+    installer::create_profile(&mut w.state, &w.paths, game, &w.game, "Co-op", true).unwrap();
+    installer::set_enabled(&mut w.state, &w.paths, game, &w.game, KNIGHT, false).unwrap();
+    let coop = snapshot(&w.game);
+    let coop_records = records(&w.state, game);
+    installer::switch_profile(&mut w.state, &w.paths, game, &w.game, "Default").unwrap();
+    installer::set_enabled(&mut w.state, &w.paths, game, &w.game, PREPATCHER, false).unwrap();
+    let default = snapshot(&w.game);
+    let profiles_before = installer::profiles(&w.state, game).unwrap();
+
+    // The switch to Co-op as it starts: noted, then Knight off, then the
+    // app closed before the prepatcher comes on.
+    let cut_short = |w: &mut World| {
+        let list = installer::profiles(&w.state, game).unwrap();
+        w.state.set_mod_profiles(game, &list).unwrap();
+        w.state.set_profile_switch(game, Some(("Co-op", &w.game))).unwrap();
+        installer::set_enabled(&mut w.state, &w.paths, game, &w.game, KNIGHT, false).unwrap();
+    };
+    cut_short(&mut w);
+    // Meanwhile Default reads as it was left, not half way.
+    assert_eq!(installer::profiles(&w.state, game).unwrap(), profiles_before);
+
+    assert!(installer::resume_switches(&mut w.state, &w.paths).unwrap().is_empty());
+    assert_eq!(snapshot(&w.game), coop);
+    assert_eq!(records(&w.state, game), coop_records);
+    let list = installer::profiles(&w.state, game).unwrap();
+    assert!(list.iter().find(|p| p.name == "Co-op").unwrap().active);
+    assert!(w.state.profile_switches().unwrap().is_empty());
+    // Default kept Knight on, the prepatcher off.
+    installer::switch_profile(&mut w.state, &w.paths, game, &w.game, "Default").unwrap();
+    assert_eq!(snapshot(&w.game), default);
+    assert_eq!(installer::profiles(&w.state, game).unwrap(), profiles_before);
+
+    // The prepatcher can't come on: back to Default as it was left.
+    let package = w.state.get(game, PREPATCHER).unwrap().unwrap().package;
+    let manifest = w.paths.store.join("packages").join(format!("{package}.json"));
+    let aside = manifest.with_extension("json.aside");
+    cut_short(&mut w);
+    fs::rename(&manifest, &aside).unwrap();
+    let failed = installer::resume_switches(&mut w.state, &w.paths).unwrap();
+    assert!(matches!(failed.as_slice(), [(g, InstallError::Deploy { .. })] if g == game));
+    assert_eq!(snapshot(&w.game), default);
+    assert_eq!(installer::profiles(&w.state, game).unwrap(), profiles_before);
+    assert!(w.state.profile_switches().unwrap().is_empty());
+
+    // Noted and never ended: the next switch ends it first.
+    fs::rename(&aside, &manifest).unwrap();
+    cut_short(&mut w);
+    installer::switch_profile(&mut w.state, &w.paths, game, &w.game, "Default").unwrap();
+    assert_eq!(snapshot(&w.game), default);
+    assert_eq!(installer::profiles(&w.state, game).unwrap(), profiles_before);
 }
 
 #[tokio::test]

@@ -32,9 +32,12 @@ pub fn profiles(state: &State, game: &str) -> Result<Vec<ModProfile>, InstallErr
             created_at: 0,
         });
     }
+    // In the middle of a switch, the mods are half way: the profile left
+    // is as it was recorded when the switch started.
+    let switching = state.is_switching(game)?;
     let mods = state.list(game)?;
     for p in &mut list {
-        if p.active {
+        if p.active && !switching {
             let present = mods.iter().filter(|m| !m.parked);
             p.mods = present.clone().map(|m| m.id.clone()).collect();
             p.off = present.filter(|m| !m.enabled).map(|m| m.id.clone()).collect();
@@ -76,7 +79,9 @@ pub fn create_profile(
 }
 
 /// Puts the mods of profile `name` in the game, as it left them, and parks
-/// the others. All or nothing: on failure, the game is back as it was.
+/// the others. All or nothing: on failure, the game is back as it was. The
+/// switch is noted before it starts: the app closed in the middle of it,
+/// `resume_switches` ends it.
 pub fn switch_profile(
     state: &mut State,
     paths: &Paths,
@@ -89,34 +94,58 @@ pub fn switch_profile(
     if state.is_vanilla(game)? {
         return Err(InstallError::Vanilla);
     }
-    let mut list = profiles(state, game)?;
+    // One left half way first: the profile in use is not known before.
+    if let Some((_, target, dir)) = state.profile_switches()?.into_iter().find(|(g, ..)| g == game) {
+        finish(state, paths, game, &dir, &target)?;
+    }
+    let list = profiles(state, game)?;
     let target = list.iter().find(|p| p.name == name).ok_or(InstallError::NoProfile)?;
     if target.active {
         return Ok(list);
     }
-    let members: HashSet<&str> = target.mods.iter().map(String::as_str).collect();
-    let off: HashSet<&str> = target.off.iter().map(String::as_str).collect();
-    let wanted = |m: &InstalledMod| members.contains(m.id.as_str()) && !off.contains(m.id.as_str());
+    // The profile left is kept as it is now, before anything moves.
+    state.set_mod_profiles(game, &list)?;
+    state.set_profile_switch(game, Some((name, game_dir)))?;
+    finish(state, paths, game, game_dir, name)?;
+    profiles(state, game)
+}
 
-    let mut changes: Vec<(String, bool, bool)> = state
-        .list(game)?
-        .into_iter()
-        .filter(|m| m.enabled != wanted(m))
-        .map(|m| (m.id.clone(), !m.enabled, m.is_loader()))
-        .collect();
-    // Off first, the loader after its mods: the files they free go to the
-    // mods coming on. Then the loader first, before the mods it loads.
-    changes.sort_by_key(|&(_, enabled, loader)| (enabled, loader != enabled));
-
-    for (index, (id, enabled, _)) in changes.iter().enumerate() {
-        if let Err(error) = turn(state, paths, game, game_dir, id, *enabled) {
-            for (id, enabled, _) in changes[..index].iter().rev() {
-                let _ = turn(state, paths, game, game_dir, id, !enabled);
-            }
-            return Err(error);
+/// Ends the switches the app was closed in the middle of: to the profile
+/// asked if it can, otherwise back to the one left. Returns the games
+/// whose switch failed, with why: they stay noted, to try at next start.
+pub fn resume_switches(state: &mut State, paths: &Paths) -> Result<Vec<(String, InstallError)>, InstallError> {
+    let mut failed = Vec::new();
+    for (game, target, game_dir) in state.profile_switches()? {
+        if let Err(error) = finish(state, paths, &game, &game_dir, &target) {
+            failed.push((game, error));
         }
     }
+    Ok(failed)
+}
 
+/// Brings the game to profile `name`, from the profiles as recorded when
+/// the switch was noted. On failure, back to the profile left; the note
+/// stays only if that fails too.
+fn finish(state: &mut State, paths: &Paths, game: &str, game_dir: &Path, name: &str) -> Result<(), InstallError> {
+    let mut list = state.mod_profiles(game)?;
+    let target = list.iter().find(|p| p.name == name).ok_or(InstallError::NoProfile);
+    let result = target.and_then(|target| apply(state, paths, game, game_dir, target));
+    if let Err(error) = result {
+        let back = match list.iter().find(|p| p.active) {
+            Some(left) => apply(state, paths, game, game_dir, left),
+            None => Ok(()),
+        };
+        if back.is_ok() {
+            state.set_profile_switch(game, None)?;
+        }
+        return Err(error);
+    }
+
+    let members: HashSet<&str> = list
+        .iter()
+        .filter(|p| p.name == name)
+        .flat_map(|p| p.mods.iter().map(String::as_str))
+        .collect();
     let mods: Vec<InstalledMod> = state
         .list(game)?
         .into_iter()
@@ -130,7 +159,30 @@ pub fn switch_profile(
         p.active = p.name == name;
     }
     state.set_mod_profiles(game, &list)?;
-    profiles(state, game)
+    state.set_profile_switch(game, None)?;
+    Ok(())
+}
+
+/// Turns on the mods of `profile` it has on, and off all the others. Only
+/// what differs moves: run again after a stop, it goes on where it was.
+fn apply(state: &mut State, paths: &Paths, game: &str, game_dir: &Path, profile: &ModProfile) -> Result<(), InstallError> {
+    let members: HashSet<&str> = profile.mods.iter().map(String::as_str).collect();
+    let off: HashSet<&str> = profile.off.iter().map(String::as_str).collect();
+    let wanted = |m: &InstalledMod| members.contains(m.id.as_str()) && !off.contains(m.id.as_str());
+
+    let mut changes: Vec<(String, bool, bool)> = state
+        .list(game)?
+        .into_iter()
+        .filter(|m| m.enabled != wanted(m))
+        .map(|m| (m.id.clone(), !m.enabled, m.is_loader()))
+        .collect();
+    // Off first, the loader after its mods: the files they free go to the
+    // mods coming on. Then the loader first, before the mods it loads.
+    changes.sort_by_key(|&(_, enabled, loader)| (enabled, loader != enabled));
+    for (id, enabled, _) in &changes {
+        turn(state, paths, game, game_dir, id, *enabled)?;
+    }
+    Ok(())
 }
 
 pub fn rename_profile(state: &mut State, game: &str, from: &str, to: &str) -> Result<Vec<ModProfile>, InstallError> {

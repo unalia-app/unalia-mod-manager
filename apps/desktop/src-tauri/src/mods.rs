@@ -1189,7 +1189,8 @@ pub async fn revert_mod(
     Ok(reverted)
 }
 
-/// At startup: moves the old storage to the hash-based storage (only once,
+/// At startup: ends a profile switch left half way, moves the old storage
+/// to the hash-based storage (only once,
 /// downloading nothing again), then cleans up. Commands that touch mods
 /// wait for it to finish.
 pub fn tidy_storage(app: &AppHandle) {
@@ -1199,6 +1200,10 @@ pub fn tidy_storage(app: &AppHandle) {
         let _fetching = mods.fetching.lock().await;
         let mut state = mods.state.lock().await;
         let result = tokio::task::block_in_place(|| {
+            // A profile switch the app was closed in the middle of.
+            for (game, error) in installer::resume_switches(&mut state, &mods.paths)? {
+                log::warn!("couldn't end the profile switch of {game}: {error}");
+            }
             let migrated = installer::migrate_store(&mut state, &mods.paths)?;
             let freed = installer::collect_garbage(&state, &mods.paths)?;
             Ok::<_, installer::InstallError>((migrated, freed))

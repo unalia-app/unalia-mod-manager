@@ -7,7 +7,7 @@
 //! downloads nothing again.
 
 use std::collections::{BTreeMap, HashSet};
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use rusqlite::{Connection, OptionalExtension, params};
 use serde::Serialize;
@@ -183,6 +183,12 @@ CREATE TABLE IF NOT EXISTS mod_profiles (
     active     INTEGER NOT NULL,
     created_at INTEGER NOT NULL,
     PRIMARY KEY (game, name)
+);
+
+CREATE TABLE IF NOT EXISTS profile_switches (
+    game     TEXT PRIMARY KEY,
+    target   TEXT NOT NULL,
+    game_dir TEXT NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS manual_games (
@@ -562,6 +568,35 @@ impl State {
             )?;
         }
         tx.commit()?;
+        Ok(())
+    }
+
+    /// The profile switches under way, `(game, target, game_dir)`: left
+    /// there, the app was closed before they ended.
+    pub fn profile_switches(&self) -> Result<Vec<(String, String, PathBuf)>, StateError> {
+        let mut stmt = self.conn.prepare("SELECT game, target, game_dir FROM profile_switches")?;
+        let rows = stmt.query_map([], |r| {
+            Ok((r.get(0)?, r.get(1)?, PathBuf::from(r.get::<_, String>(2)?)))
+        })?;
+        Ok(rows.collect::<Result<_, _>>()?)
+    }
+
+    pub fn is_switching(&self, game: &str) -> Result<bool, StateError> {
+        Ok(self.profile_switches()?.iter().any(|(g, ..)| g == game))
+    }
+
+    /// Notes a switch of the game to profile `target` before it starts,
+    /// or its end (`None`).
+    pub fn set_profile_switch(&mut self, game: &str, target: Option<(&str, &Path)>) -> Result<(), StateError> {
+        match target {
+            Some((target, game_dir)) => self.conn.execute(
+                "INSERT OR REPLACE INTO profile_switches VALUES (?1, ?2, ?3)",
+                params![game, target, game_dir.to_string_lossy()],
+            )?,
+            None => self
+                .conn
+                .execute("DELETE FROM profile_switches WHERE game = ?1", params![game])?,
+        };
         Ok(())
     }
 
