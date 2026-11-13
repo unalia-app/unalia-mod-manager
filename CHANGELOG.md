@@ -6,6 +6,8 @@ All notable changes to Unalia Mod Manager. The format follows [Keep a Changelog]
 
 ## [0.1.12] - 2026-11-13
 
+Thanks to Captiongomer for the ideas and bug reports behind this update.
+
 ### Added
 
 - My Mods: profiles. Give a game several lists of mods, like one for co-op and one for your full load order, and switch between them in one click. The mods of the other profiles are set aside, out of the game and out of the list, loader included: an empty profile plays the game as it shipped. Nothing is downloaded again.
