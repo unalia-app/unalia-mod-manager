@@ -32,6 +32,10 @@ pub struct InstalledMod {
     /// Loader package: its root folder in the archive (e.g. `BepInExPack`).
     pub loader_root: Option<String>,
     pub enabled: bool,
+    /// Out of the profile in use (`installer::profiles`): hidden, its files
+    /// out of the game, kept for the profiles that have it.
+    #[serde(skip)]
+    pub parked: bool,
     /// Requested by the user (else: installed as a dependency).
     pub explicit: bool,
     pub sha256: String,
@@ -139,6 +143,7 @@ CREATE TABLE IF NOT EXISTS installed_mods (
     priority     INTEGER NOT NULL DEFAULT 0,
     needs        TEXT NOT NULL DEFAULT '[]',
     adult        INTEGER NOT NULL DEFAULT 0,
+    parked       INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (game, id)
 );
 
@@ -170,6 +175,16 @@ CREATE TABLE IF NOT EXISTS settings (
     value TEXT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS mod_profiles (
+    game       TEXT NOT NULL,
+    name       TEXT NOT NULL,
+    mods       TEXT NOT NULL,
+    off        TEXT NOT NULL,
+    active     INTEGER NOT NULL,
+    created_at INTEGER NOT NULL,
+    PRIMARY KEY (game, name)
+);
+
 CREATE TABLE IF NOT EXISTS manual_games (
     app_id     INTEGER PRIMARY KEY,
     profile_id TEXT NOT NULL,
@@ -177,6 +192,22 @@ CREATE TABLE IF NOT EXISTS manual_games (
     added_at   INTEGER NOT NULL
 );
 ";
+
+/// Its own list of mods, one of several kept for a game. Only one is
+/// active: the mods not parked, and their switches, are its live state.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ModProfile {
+    pub name: String,
+    /// Its mods, loader included, as of the last time it was left. Out of
+    /// date for the active profile: the mods not parked are its truth.
+    pub mods: Vec<String>,
+    /// Those of its mods turned off.
+    pub off: Vec<String>,
+    pub active: bool,
+    /// Seconds since the Unix epoch.
+    pub created_at: i64,
+}
 
 /// Manually added game (outside a launcher), recognized from the catalog.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -269,9 +300,9 @@ impl State {
                 "INSERT OR REPLACE INTO installed_mods
                  (game, id, name, author, version, icon_url, loader_root, enabled, explicit,
                   sha256, installed_at, store_dir, deployment, placements, files, package, edits,
-                  source, priority, needs, adult)
+                  source, priority, needs, adult, parked)
                  VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15,
-                         ?16, ?17, ?18, ?19, ?20, ?21)",
+                         ?16, ?17, ?18, ?19, ?20, ?21, ?22)",
                 params![
                     m.game,
                     m.id,
@@ -294,6 +325,7 @@ impl State {
                     m.priority,
                     serde_json::to_string(&m.needs)?,
                     m.adult,
+                    m.parked,
                 ],
             )?;
         }
@@ -484,6 +516,55 @@ impl State {
         Ok(())
     }
 
+    /// The game's mod profiles, by creation. Empty until a second one is made.
+    pub fn mod_profiles(&self, game: &str) -> Result<Vec<ModProfile>, StateError> {
+        let mut stmt = self.conn.prepare(
+            "SELECT name, mods, off, active, created_at FROM mod_profiles
+             WHERE game = ?1 ORDER BY created_at, name COLLATE NOCASE",
+        )?;
+        let rows = stmt.query_map(params![game], |r| {
+            Ok((
+                ModProfile {
+                    name: r.get(0)?,
+                    mods: Vec::new(),
+                    off: Vec::new(),
+                    active: r.get(3)?,
+                    created_at: r.get(4)?,
+                },
+                r.get::<_, String>(1)?,
+                r.get::<_, String>(2)?,
+            ))
+        })?;
+        rows.map(|r| {
+            let (mut p, mods, off) = r?;
+            p.mods = serde_json::from_str(&mods)?;
+            p.off = serde_json::from_str(&off)?;
+            Ok(p)
+        })
+        .collect()
+    }
+
+    /// Records the game's profiles as given: all or nothing.
+    pub fn set_mod_profiles(&mut self, game: &str, profiles: &[ModProfile]) -> Result<(), StateError> {
+        let tx = self.conn.transaction()?;
+        tx.execute("DELETE FROM mod_profiles WHERE game = ?1", params![game])?;
+        for p in profiles {
+            tx.execute(
+                "INSERT INTO mod_profiles VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                params![
+                    game,
+                    p.name,
+                    serde_json::to_string(&p.mods)?,
+                    serde_json::to_string(&p.off)?,
+                    p.active,
+                    p.created_at
+                ],
+            )?;
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
     pub fn manual_games(&self) -> Result<Vec<ManualGame>, StateError> {
         let mut stmt = self.conn.prepare(
             "SELECT app_id, profile_id, path, added_at FROM manual_games ORDER BY added_at",
@@ -586,6 +667,7 @@ fn migrate(conn: &Connection) -> rusqlite::Result<()> {
         ("priority", "INTEGER", "0"),
         ("needs", "TEXT", "'[]'"),
         ("adult", "INTEGER", "0"),
+        ("parked", "INTEGER", "0"),
     ] {
         let present = conn
             .prepare("SELECT 1 FROM pragma_table_info('installed_mods') WHERE name = ?1")?
@@ -611,6 +693,7 @@ fn row(r: &rusqlite::Row<'_>) -> rusqlite::Result<Row> {
             adult: r.get("adult")?,
             loader_root: r.get("loader_root")?,
             enabled: r.get("enabled")?,
+            parked: r.get("parked")?,
             explicit: r.get("explicit")?,
             sha256: r.get("sha256")?,
             installed_at: r.get("installed_at")?,

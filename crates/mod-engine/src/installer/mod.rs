@@ -7,10 +7,12 @@
 
 mod local;
 mod nexus;
+mod profiles;
 mod variants;
 
 pub use local::LocalFile;
 pub use nexus::{NexusFile, NexusInstall, available_updates_nexus};
+pub use profiles::{DEFAULT_PROFILE, create_profile, delete_profile, profiles, rename_profile, switch_profile};
 
 use std::collections::hash_map::Entry;
 use std::collections::{BTreeSet, HashMap, HashSet};
@@ -205,6 +207,16 @@ pub enum InstallError {
     NexusWebsite { file_id: u32 },
     #[error("the install was cancelled")]
     Cancelled,
+    #[error("a profile named {0} already exists")]
+    ProfileExists(String),
+    #[error("profile names have 1 to {} characters", profiles::MAX_NAME)]
+    ProfileName,
+    #[error("this profile no longer exists")]
+    NoProfile,
+    #[error("the profile in use can't be deleted: switch to another one first")]
+    ProfileInUse,
+    #[error("the game's mods are out for a session without them: close the game first")]
+    Vanilla,
 }
 
 /// A package ready to download, whatever its source.
@@ -673,6 +685,7 @@ fn deploy_package(
         adult: package.adult,
         loader_root,
         enabled: true,
+        parked: false,
         explicit: false,
         sha256: manifest.sha256,
         installed_at: now(),
@@ -1014,17 +1027,13 @@ fn path_segment(version: &str) -> String {
     }
 }
 
-/// What the resolver needs to know about the mods already in the game.
+/// What the resolver needs to know about the mods already in the game. A
+/// parked mod is not: installed again, it comes into the profile in use.
 fn installed_of(existing: &[InstalledMod]) -> Installed {
+    let present = || existing.iter().filter(|m| !m.parked);
     Installed {
-        versions: existing
-            .iter()
-            .map(|m| (m.id.clone(), m.version.clone()))
-            .collect(),
-        loader: existing
-            .iter()
-            .find(|m| m.is_loader())
-            .map(|m| m.id.clone()),
+        versions: present().map(|m| (m.id.clone(), m.version.clone())).collect(),
+        loader: present().find(|m| m.is_loader()).map(|m| m.id.clone()),
     }
 }
 
@@ -1196,10 +1205,23 @@ pub fn set_enabled(
     id: &str,
     enabled: bool,
 ) -> Result<InstalledMod, InstallError> {
-    let mut m = state.get(game, id)?.ok_or(InstallError::NotInstalled)?;
+    let m = state.get(game, id)?.ok_or(InstallError::NotInstalled)?;
     if m.is_loader() {
         return Err(InstallError::LoaderToggle);
     }
+    toggle(state, paths, game, game_dir, m, enabled)
+}
+
+/// `set_enabled`, the loader included: profiles take it out too.
+fn toggle(
+    state: &mut State,
+    paths: &Paths,
+    game: &str,
+    game_dir: &Path,
+    mut m: InstalledMod,
+    enabled: bool,
+) -> Result<InstalledMod, InstallError> {
+    let id = m.id.clone();
     if m.enabled == enabled {
         return Ok(m);
     }
@@ -1213,12 +1235,15 @@ pub fn set_enabled(
     m.enabled = enabled;
     state.save(&m)?;
     settle(state, paths, game, game_dir)?;
-    state.get(game, id)?.ok_or(InstallError::NotInstalled)
+    state.get(game, &id)?.ok_or(InstallError::NotInstalled)
 }
 
 /// Uninstalls a mod. The loader only goes last, with everything BepInEx
 /// wrote in its folders: the game gets its original state back. The
 /// storage is kept to allow undo (`restore`), then freed by `purge`.
+///
+/// A mod another profile has only leaves the profile in use: it is parked,
+/// and `restore` brings it back the same way.
 pub fn uninstall(
     state: &mut State,
     paths: &Paths,
@@ -1227,12 +1252,24 @@ pub fn uninstall(
     id: &str,
 ) -> Result<InstalledMod, InstallError> {
     let mut m = state.get(game, id)?.ok_or(InstallError::NotInstalled)?;
-    if m.is_loader() && state.list(game)?.iter().any(|other| other.id != m.id) {
+    let mods = state.list(game)?;
+    if m.is_loader() && mods.iter().any(|other| other.id != m.id && !other.parked) {
         return Err(InstallError::LoaderInUse);
     }
-    let purge_dirs = m.is_loader();
+    // The loader also stays for the parked mods: their profiles need it.
+    let park = profiles::kept_elsewhere(state, game, id)? || (m.is_loader() && mods.iter().any(|o| o.parked));
+    let purge_dirs = m.is_loader() && !park;
     take_down(&paths.store(), game_dir, &mut m, purge_dirs);
-    state.remove(game, id)?;
+    if park {
+        state.save(&InstalledMod {
+            enabled: false,
+            parked: true,
+            deployment: Deployment::default(),
+            ..m.clone()
+        })?;
+    } else {
+        state.remove(game, id)?;
+    }
     settle(state, paths, game, game_dir)?;
     Ok(m)
 }
@@ -1497,6 +1534,7 @@ pub fn forget(state: &mut State, paths: &Paths, game: &str) -> Result<usize, Ins
     }
     state.set_pending(game, &[])?;
     state.set_vanilla(game, false)?;
+    state.set_mod_profiles(game, &[])?;
     state.forget_game_previous(game)?;
     paths.store().remove_packages(&game_segment(game))?;
     collect_garbage(state, paths)?;

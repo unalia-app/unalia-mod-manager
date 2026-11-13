@@ -340,7 +340,7 @@ impl Installer<'_, Nexus> {
         queue.extend(needed_frameworks(&frameworks, &fetched[0].placements));
         while let Some(framework) = queue.pop() {
             let present = framework.installed_in(target.game_dir)
-                || existing.iter().any(|m| m.id == framework.key());
+                || existing.iter().any(|m| m.id == framework.key() && !m.parked);
             if present || !planned.insert(framework.key()) {
                 continue;
             }

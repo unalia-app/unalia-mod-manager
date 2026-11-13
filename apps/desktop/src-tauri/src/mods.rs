@@ -18,7 +18,7 @@ use mod_engine::installer::{
 use mod_engine::launch::{self, LaunchTarget, PendingOp, ProcessWatcher};
 use mod_engine::sources::SourceError;
 use mod_engine::sources::nexus::{self as nexus_source, Account, NxmLink, Requirement};
-use mod_engine::state::{InstalledMod, ManualGame, State as ModState};
+use mod_engine::state::{InstalledMod, ManualGame, ModProfile, State as ModState};
 use serde::{Deserialize, Serialize};
 use tauri::async_runtime::Mutex;
 use tauri::{AppHandle, Emitter, Manager, State};
@@ -434,6 +434,8 @@ pub async fn installed_mods(
         .await
         .list(&game_key(app_id))
         .map_err(crate::support::logged)?;
+    // Out of the profile in use: hidden, as if not installed.
+    list.retain(|m| !m.parked);
     installer::mark_covered(&mut list);
     installer::drop_installed_needs(&mut list);
     if let Some(game) = library.game(app_id) {
@@ -452,13 +454,15 @@ pub async fn check_updates(
     app_id: u32,
 ) -> Result<UpdateCheck, String> {
     let game = library.game(app_id).ok_or(UNKNOWN_GAME)?;
-    // The database is not held during network calls.
-    let installed = mods
+    // The database is not held during network calls. Parked mods wait for
+    // their profile: updating one would bring it into this one.
+    let mut installed = mods
         .state
         .lock()
         .await
         .list(&game_key(app_id))
         .map_err(crate::support::logged)?;
+    installed.retain(|m| !m.parked);
     if game.profile.nexus.is_some() {
         return Ok(installer::available_updates_nexus(
             &catalog.nexus,
@@ -1208,6 +1212,73 @@ pub fn tidy_storage(app: &AppHandle) {
             Err(error) => log::warn!("couldn't tidy the storage: {error}"),
         }
     });
+}
+
+// ------------------------------------------------- profiles
+
+const CLOSE_TO_SWITCH: &str = "Close the game to switch profiles: its mods are in use.";
+
+#[tauri::command]
+pub async fn mod_profiles(mods: State<'_, Mods>, app_id: u32) -> Result<Vec<ModProfile>, String> {
+    let state = mods.state.lock().await;
+    installer::profiles(&state, &game_key(app_id)).map_err(|e| error_message(&e))
+}
+
+/// Makes a profile and switches to it. `copy`: with the mods on now.
+#[tauri::command]
+pub async fn create_mod_profile(
+    library: State<'_, Library>,
+    mods: State<'_, Mods>,
+    app_id: u32,
+    name: String,
+    copy: bool,
+) -> Result<Vec<ModProfile>, String> {
+    let game = library.game(app_id).ok_or(UNKNOWN_GAME)?;
+    if mods.is_running(app_id, &game) {
+        return Err(CLOSE_TO_SWITCH.into());
+    }
+    let mut state = mods.state.lock().await;
+    let list = installer::create_profile(&mut state, &mods.paths, &game_key(app_id), &game.dir, &name, copy)
+        .map_err(|e| error_message(&e))?;
+    sync_plugins(&state, app_id, &game);
+    Ok(list)
+}
+
+#[tauri::command]
+pub async fn switch_mod_profile(
+    library: State<'_, Library>,
+    mods: State<'_, Mods>,
+    app_id: u32,
+    name: String,
+) -> Result<Vec<ModProfile>, String> {
+    let game = library.game(app_id).ok_or(UNKNOWN_GAME)?;
+    if mods.is_running(app_id, &game) {
+        return Err(CLOSE_TO_SWITCH.into());
+    }
+    let mut state = mods.state.lock().await;
+    let list = installer::switch_profile(&mut state, &mods.paths, &game_key(app_id), &game.dir, &name)
+        .map_err(|e| error_message(&e))?;
+    sync_plugins(&state, app_id, &game);
+    Ok(list)
+}
+
+#[tauri::command]
+pub async fn rename_mod_profile(
+    mods: State<'_, Mods>,
+    app_id: u32,
+    from: String,
+    to: String,
+) -> Result<Vec<ModProfile>, String> {
+    let mut state = mods.state.lock().await;
+    installer::rename_profile(&mut state, &game_key(app_id), &from, &to).map_err(|e| error_message(&e))
+}
+
+/// Forgets a profile, and uninstalls the mods only it had.
+#[tauri::command]
+pub async fn delete_mod_profile(mods: State<'_, Mods>, app_id: u32, name: String) -> Result<Vec<ModProfile>, String> {
+    let _fetching = mods.fetching.lock().await;
+    let mut state = mods.state.lock().await;
+    installer::delete_profile(&mut state, &mods.paths, &game_key(app_id), &name).map_err(|e| error_message(&e))
 }
 
 // ------------------------------------------------- game reinstalled or gone

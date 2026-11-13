@@ -485,6 +485,185 @@ async fn a_vanilla_session_keeps_the_order_of_plugins_txt() {
     assert!(!list.with_extension("txt.unalia-vanilla").exists());
 }
 
+/// Mods out of the profile in use: parked, not listed.
+fn present(w: &World, game: &str) -> Vec<String> {
+    w.state.list(game).unwrap().into_iter().filter(|m| !m.parked).map(|m| m.id).collect()
+}
+
+#[tokio::test]
+async fn each_profile_has_its_own_mods_loader_included() {
+    let mut w = World::new().await;
+    w.publish_knight().await;
+    let original = snapshot(&w.game);
+    w.install(KNIGHT).await.0.unwrap();
+    let game = "steam:1030300";
+    let modded = snapshot(&w.game);
+    let knight_dll = plugin(&w.game, KNIGHT, "Knight.dll");
+
+    // One profile until a second is made, with every mod.
+    let list = installer::profiles(&w.state, game).unwrap();
+    assert_eq!(list.len(), 1);
+    assert_eq!(list[0].name, installer::DEFAULT_PROFILE);
+    assert!(list[0].active);
+    assert_eq!(list[0].mods.len(), 3);
+
+    // An empty profile: the game as it shipped, the loader out too.
+    let list = installer::create_profile(&mut w.state, &w.paths, game, &w.game, " Co-op ", false).unwrap();
+    assert_eq!(list.iter().map(|p| (p.name.as_str(), p.active)).collect::<Vec<_>>(), [("Default", false), ("Co-op", true)]);
+    assert_eq!(snapshot(&w.game), original);
+    assert!(present(&w, game).is_empty());
+
+    // Installed in a profile, a parked mod comes back into it alone, with
+    // its loader.
+    w.install(PREPATCHER).await.0.unwrap();
+    assert_eq!(present(&w, game), [LOADER, PREPATCHER]);
+    assert!(!knight_dll.exists());
+
+    installer::switch_profile(&mut w.state, &w.paths, game, &w.game, "Default").unwrap();
+    assert_eq!(snapshot(&w.game), modded);
+    assert_eq!(present(&w, game).len(), 3);
+
+    // A mod turned off stays off in its profile.
+    installer::switch_profile(&mut w.state, &w.paths, game, &w.game, "Co-op").unwrap();
+    installer::set_enabled(&mut w.state, &w.paths, game, &w.game, PREPATCHER, false).unwrap();
+    installer::switch_profile(&mut w.state, &w.paths, game, &w.game, "Default").unwrap();
+    installer::switch_profile(&mut w.state, &w.paths, game, &w.game, "Co-op").unwrap();
+    let prepatcher = w.state.get(game, PREPATCHER).unwrap().unwrap();
+    assert!(!prepatcher.enabled && !prepatcher.parked);
+    assert!(!knight_dll.exists());
+
+    // A copy changes nothing in the game.
+    installer::switch_profile(&mut w.state, &w.paths, game, &w.game, "Default").unwrap();
+    installer::create_profile(&mut w.state, &w.paths, game, &w.game, "Copy", true).unwrap();
+    assert_eq!(snapshot(&w.game), modded);
+}
+
+#[tokio::test]
+async fn removing_a_mod_in_a_profile_keeps_it_for_the_others() {
+    let mut w = World::new().await;
+    w.publish_knight().await;
+    w.install(KNIGHT).await.0.unwrap();
+    let game = "steam:1030300";
+    let modded = snapshot(&w.game);
+    let knight_dll = plugin(&w.game, KNIGHT, "Knight.dll");
+    installer::create_profile(&mut w.state, &w.paths, game, &w.game, "Copy", true).unwrap();
+
+    // Default still has it: it only leaves this profile.
+    let removed = installer::uninstall(&mut w.state, &w.paths, game, &w.game, KNIGHT).unwrap();
+    assert!(!knight_dll.exists());
+    assert!(w.state.get(game, KNIGHT).unwrap().unwrap().parked);
+    // "Undo" brings it back here.
+    installer::restore(&mut w.state, &w.paths, &w.game, removed).unwrap();
+    assert!(knight_dll.is_file());
+    assert!(!w.state.get(game, KNIGHT).unwrap().unwrap().parked);
+
+    installer::uninstall(&mut w.state, &w.paths, game, &w.game, KNIGHT).unwrap();
+    installer::switch_profile(&mut w.state, &w.paths, game, &w.game, "Default").unwrap();
+    assert_eq!(snapshot(&w.game), modded);
+
+    // Removed from its last profile: uninstalled for good.
+    installer::uninstall(&mut w.state, &w.paths, game, &w.game, KNIGHT).unwrap();
+    assert!(w.state.get(game, KNIGHT).unwrap().is_none());
+
+    // A deleted profile takes the mods only it had with it: Copy keeps the
+    // loader, only Default has the prepatcher.
+    installer::switch_profile(&mut w.state, &w.paths, game, &w.game, "Copy").unwrap();
+    installer::uninstall(&mut w.state, &w.paths, game, &w.game, PREPATCHER).unwrap();
+    installer::create_profile(&mut w.state, &w.paths, game, &w.game, "Empty", false).unwrap();
+    installer::delete_profile(&mut w.state, &w.paths, game, "Default").unwrap();
+    let left: Vec<String> = w.state.list(game).unwrap().into_iter().map(|m| m.id).collect();
+    assert_eq!(left, [LOADER]);
+}
+
+#[tokio::test]
+async fn a_failed_switch_leaves_the_game_and_the_profiles_as_they_were() {
+    let mut w = World::new().await;
+    w.publish_knight().await;
+    w.install(KNIGHT).await.0.unwrap();
+    let game = "steam:1030300";
+    // Co-op: the prepatcher without Knight. Default: Knight without the
+    // prepatcher. The switch turns a mod off, then another on.
+    installer::create_profile(&mut w.state, &w.paths, game, &w.game, "Co-op", true).unwrap();
+    installer::set_enabled(&mut w.state, &w.paths, game, &w.game, KNIGHT, false).unwrap();
+    let coop = snapshot(&w.game);
+    installer::switch_profile(&mut w.state, &w.paths, game, &w.game, "Default").unwrap();
+    installer::set_enabled(&mut w.state, &w.paths, game, &w.game, PREPATCHER, false).unwrap();
+
+    let records = |w: &World| {
+        let mods = w.state.list(game).unwrap().into_iter().map(|m| (m.id, m.enabled, m.parked, m.deployment.files));
+        mods.collect::<Vec<_>>()
+    };
+    let game_before = snapshot(&w.game);
+    let records_before = records(&w);
+    let profiles_before = installer::profiles(&w.state, game).unwrap();
+
+    // The prepatcher's package is gone from the storage: Knight is already
+    // off when the prepatcher can't come on.
+    let package = w.state.get(game, PREPATCHER).unwrap().unwrap().package;
+    let manifest = w.paths.store.join("packages").join(format!("{package}.json"));
+    let aside = manifest.with_extension("json.aside");
+    fs::rename(&manifest, &aside).unwrap();
+    assert!(matches!(
+        installer::switch_profile(&mut w.state, &w.paths, game, &w.game, "Co-op"),
+        Err(InstallError::Deploy { .. })
+    ));
+
+    // Knight back in the game, nothing parked, Default still in use.
+    assert_eq!(snapshot(&w.game), game_before);
+    assert_eq!(records(&w), records_before);
+    assert_eq!(installer::profiles(&w.state, game).unwrap(), profiles_before);
+
+    // Once the storage is whole again, the same switch goes through.
+    fs::rename(&aside, &manifest).unwrap();
+    installer::switch_profile(&mut w.state, &w.paths, game, &w.game, "Co-op").unwrap();
+    assert_eq!(snapshot(&w.game), coop);
+}
+
+#[tokio::test]
+async fn profiles_keep_their_names_apart_and_the_active_one() {
+    let mut w = World::new().await;
+    w.publish_knight().await;
+    w.install(KNIGHT).await.0.unwrap();
+    let game = "steam:1030300";
+    installer::create_profile(&mut w.state, &w.paths, game, &w.game, "Co-op", true).unwrap();
+
+    let create = |w: &mut World, name: &str| installer::create_profile(&mut w.state, &w.paths, game, &w.game, name, true);
+    assert!(matches!(create(&mut w, "co-OP"), Err(InstallError::ProfileExists(_))));
+    assert!(matches!(create(&mut w, "  "), Err(InstallError::ProfileName)));
+    assert!(matches!(create(&mut w, &"x".repeat(41)), Err(InstallError::ProfileName)));
+    assert!(matches!(
+        installer::delete_profile(&mut w.state, &w.paths, game, "Co-op"),
+        Err(InstallError::ProfileInUse)
+    ));
+    assert!(matches!(
+        installer::switch_profile(&mut w.state, &w.paths, game, &w.game, "Solo"),
+        Err(InstallError::NoProfile)
+    ));
+
+    let list = installer::rename_profile(&mut w.state, game, "Default", "Solo").unwrap();
+    assert_eq!(list[0].name, "Solo");
+    // Its own name, in other letters, is free.
+    installer::rename_profile(&mut w.state, game, "Co-op", "CO-OP").unwrap();
+    let list = installer::delete_profile(&mut w.state, &w.paths, game, "Solo").unwrap();
+    assert_eq!(list.len(), 1);
+    assert!(list[0].active);
+    // Every mod was also in the profile left: none uninstalled.
+    assert_eq!(present(&w, game).len(), 3);
+
+    // Mods out for a session without them: no switching.
+    installer::create_profile(&mut w.state, &w.paths, game, &w.game, "Other", true).unwrap();
+    installer::enter_vanilla(&mut w.state, &w.paths, game, &w.game, None).unwrap();
+    assert!(matches!(
+        installer::switch_profile(&mut w.state, &w.paths, game, &w.game, "CO-OP"),
+        Err(InstallError::Vanilla)
+    ));
+    installer::leave_vanilla(&mut w.state, &w.paths, game, &w.game, None).unwrap();
+
+    // A forgotten game takes its profiles with it.
+    installer::forget(&mut w.state, &w.paths, game).unwrap();
+    assert!(w.state.mod_profiles(game).unwrap().is_empty());
+}
+
 #[tokio::test]
 async fn forgetting_an_uninstalled_game_frees_its_storage() {
     let mut w = World::new().await;
@@ -940,6 +1119,7 @@ async fn the_old_storage_moves_to_packages_without_downloading() {
             adult: false,
             loader_root: None,
             enabled: true,
+            parked: false,
             explicit: true,
             sha256: "abc".into(),
             installed_at: 0,

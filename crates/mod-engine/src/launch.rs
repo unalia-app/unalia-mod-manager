@@ -392,6 +392,7 @@ mod tests {
             adult: false,
             loader_root: None,
             enabled,
+            parked: false,
             explicit: true,
             sha256: String::new(),
             installed_at: 0,

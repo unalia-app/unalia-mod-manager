@@ -335,6 +335,7 @@ fn store_paths_can_be_rebased_after_a_move() {
         adult: false,
         loader_root: None,
         enabled: true,
+        parked: false,
         explicit: true,
         sha256: String::new(),
         installed_at: 0,

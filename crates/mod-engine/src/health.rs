@@ -192,6 +192,7 @@ Was unable to find AOB for 'GUObjectArray' via Lua script
             adult: false,
             loader_root: None,
             enabled: true,
+            parked: false,
             explicit: true,
             sha256: String::new(),
             installed_at: 0,

@@ -39,6 +39,7 @@ import { progressDetail, progressLabel } from "@/components/mod/install-button";
 import { ModNeeds } from "@/components/mod/mod-needs";
 import { uninstallManyWithUndo, uninstallWithUndo } from "@/components/mod/uninstall";
 import { AddFileButton } from "@/components/game/add-file";
+import { ProfilePicker } from "@/components/game/mod-profiles";
 import { ImportButton, ShareButton } from "@/components/game/share-mods";
 import { Marquee } from "@/components/marquee";
 import { Notice } from "@/components/notice";
@@ -153,6 +154,8 @@ export function MyMods({ game, onDiscover }: { game: SteamGame; onDiscover: () =
 		return (
 			<div className="max-w-5xl">
 				<InProgress appId={appId} />
+				{/* An empty profile: the way back to the others. */}
+				<ProfilePicker appId={appId} onlyIfSeveral className="mb-3" />
 				<div className="glass max-w-xl">
 				<Notice
 					icon={<Layers className="size-5 text-fg-muted" />}
@@ -261,6 +264,7 @@ export function MyMods({ game, onDiscover }: { game: SteamGame; onDiscover: () =
 				</div>
 			</div>
 			<div className="mb-3 flex items-center gap-3">
+				<ProfilePicker appId={appId} />
 				<SearchField
 					value={text}
 					onChange={(e) => setText(e.target.value)}

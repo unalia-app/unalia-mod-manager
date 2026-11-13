@@ -387,6 +387,34 @@ export function setModEnabled(appId: number, modId: string, enabled: boolean): P
 	return invoke("set_mod_enabled", { appId, modId, enabled });
 }
 
+/**
+ * Its own list of mods (`off`: those turned off), one of several kept for a
+ * game. The mods of the others are set aside: out of the game and of
+ * `installedMods`.
+ */
+export type ModProfile = { name: string; mods: string[]; off: string[]; active: boolean; createdAt: number };
+
+export function modProfiles(appId: number): Promise<ModProfile[]> {
+	return invoke("mod_profiles", { appId });
+}
+
+/** Makes a profile and switches to it. `copy`: with the mods on now, else none. */
+export function createModProfile(appId: number, name: string, copy: boolean): Promise<ModProfile[]> {
+	return invoke("create_mod_profile", { appId, name, copy });
+}
+
+export function switchModProfile(appId: number, name: string): Promise<ModProfile[]> {
+	return invoke("switch_mod_profile", { appId, name });
+}
+
+export function renameModProfile(appId: number, from: string, to: string): Promise<ModProfile[]> {
+	return invoke("rename_mod_profile", { appId, from, to });
+}
+
+export function deleteModProfile(appId: number, name: string): Promise<ModProfile[]> {
+	return invoke("delete_mod_profile", { appId, name });
+}
+
 export function uninstallMod(appId: number, modId: string): Promise<Outcome<null>> {
 	return invoke("uninstall_mod", { appId, modId });
 }
