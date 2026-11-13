@@ -2,7 +2,7 @@ import { invoke, isTauri } from "@tauri-apps/api/core";
 import { type UnlistenFn, listen } from "@tauri-apps/api/event";
 
 // Mirror of the types serialized by the engine (serde, camelCase).
-export type Engine = "unity" | "unreal" | "unknown";
+export type Engine = "unity" | "unreal" | "reengine" | "unknown";
 
 /** What Modalia knows about the game: Thunderstore schema or hand-written profile (games block). */
 export type GameProfile = {
@@ -91,6 +91,7 @@ export function isModdable(game: SteamGame): boolean {
 export const ENGINE_LABEL: Record<Engine, string> = {
 	unity: "Unity",
 	unreal: "Unreal",
+	reengine: "RE Engine",
 	unknown: "Unknown engine",
 };
 
@@ -102,6 +103,7 @@ const LOADER_LABEL: Record<string, string> = {
 	godotml: "GodotML",
 	bethesda: "Creation Engine",
 	redengine: "REDengine",
+	reengine: "REFramework",
 	unreal: "Paks & UE4SS",
 	bepisloader: "BepisLoader",
 	umm: "Unity Mod Manager",

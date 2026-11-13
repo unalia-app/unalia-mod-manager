@@ -1,0 +1,42 @@
+# Template for automatically recognized RE Engine games (Capcom): a game
+# with `re_chunk_000.pak` at its root whose name exists on Nexus Mods,
+# without a hand-written profile in `games/`. The rest is derived from the
+# game (`crates/mod-engine/src/games/auto.rs`).
+#
+# Games where REFramework loads `.pak` mods from `pak_mods/` (RE Engine
+# with a type database 81 or later), by Nexus domain. In the others, a
+# `.pak` mod only loads under a Capcom patch name among the game's own
+# patches, which Unalia doesn't do: their loose-file version installs.
+pak_mods = [
+    "monsterhunterwilds",
+    "monsterhunterstories3",
+    "pragmata",
+    "residentevilrequiem",
+]
+
+# REFramework: Lua scripts, plugins, and the loaders of loose files
+# (`natives/`) and of `pak_mods/`. One `dinput8.dll` for every game, which
+# finds the game it runs in. Its author publishes it on GitHub after each
+# change ("nightly"), the builds the game updates need.
+[reframework]
+name = "REFramework"
+github = "praydog/REFramework-nightly"
+asset = "REFramework.zip"
+marker = "dinput8.dll"
+needed_by_prefix = ["reframework/", "natives/", "pak_mods/"]
+
+# REFramework's page on Nexus, by game (domain): a mod that declares it as a
+# requirement gets it from GitHub, without a click on Nexus.
+[reframework_pages]
+devilmaycry5 = 2760
+dragonsdogma2 = 8
+monsterhunterrise = 26
+monsterhunterwilds = 93
+onimushawayofthesword = 54
+pragmata = 40
+residentevil22019 = 1097
+residentevil32020 = 882
+residentevil42023 = 12
+residentevilrequiem = 13
+residentevilvillage = 60
+streetfighter6 = 73

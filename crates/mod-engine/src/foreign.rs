@@ -54,6 +54,8 @@ fn spots(list: &[(&str, &[&str])], prefix: &str) -> Vec<Spot> {
 /// Placed by Doorstop (BepInEx) next to its `winhttp.dll`.
 const DOORSTOP: &[&str] = &["doorstop_config.ini", ".doorstop_version"];
 const CET: &[&str] = &["bin/x64/plugins/cyber_engine_tweaks"];
+/// REFramework's folder, which proves its `dinput8.dll` and loose files.
+const REFRAMEWORK: &[&str] = &["reframework"];
 /// Next to the game's executable (`unreal::find_binaries`).
 const UE4SS: &[&str] = &["ue4ss", "UE4SS.dll"];
 
@@ -99,6 +101,15 @@ fn footprint(loader: &str, game_dir: &Path) -> Vec<Spot> {
                 ("r6/tweaks", &[]),
                 ("r6/cache/modded", &[]),
                 ("red4ext", &[]),
+            ],
+            "",
+        ),
+        "reengine" => spots(
+            &[
+                ("reframework", &[]),
+                ("dinput8.dll", REFRAMEWORK),
+                ("natives", REFRAMEWORK),
+                ("pak_mods", &[]),
             ],
             "",
         ),

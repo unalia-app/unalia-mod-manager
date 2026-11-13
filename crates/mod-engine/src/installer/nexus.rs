@@ -38,6 +38,7 @@ use crate::games::GameProfile;
 use crate::loaders::bethesda::{self, Bethesda};
 use crate::loaders::framework::{Framework, needed_frameworks};
 use crate::loaders::redengine::RedEngine;
+use crate::loaders::reengine::ReEngine;
 use crate::loaders::unreal::{
     Unreal, find_binaries, find_project, is_reshade_preset, reshade_installed, user_settings,
 };
@@ -731,6 +732,7 @@ pub(super) fn file_version(info: &ModInfo, file: &ModFile, before: Option<&str>)
 pub(super) enum Adapter {
     Bethesda(Bethesda),
     RedEngine(RedEngine),
+    ReEngine(ReEngine),
     Unreal(Unreal),
 }
 
@@ -750,6 +752,12 @@ impl Adapter {
                 }))
             }
             "bethesda" => Ok(Self::Bethesda(Bethesda)),
+            "reengine" => Ok(Self::ReEngine(ReEngine {
+                paks: profile
+                    .nexus
+                    .as_ref()
+                    .is_some_and(|n| crate::games::auto::loads_pak_mods(&n.domain)),
+            })),
             _ => Ok(Self::RedEngine(RedEngine)),
         }
     }
@@ -758,6 +766,7 @@ impl Adapter {
         match self {
             Self::Bethesda(loader) => loader,
             Self::RedEngine(loader) => loader,
+            Self::ReEngine(loader) => loader,
             Self::Unreal(loader) => loader,
         }
     }
@@ -765,14 +774,14 @@ impl Adapter {
     pub(super) fn project(&self) -> Option<&str> {
         match self {
             Self::Unreal(loader) => Some(&loader.project),
-            Self::Bethesda(_) | Self::RedEngine(_) => None,
+            Self::Bethesda(_) | Self::RedEngine(_) | Self::ReEngine(_) => None,
         }
     }
 
     pub(super) fn binaries(&self) -> Option<&str> {
         match self {
             Self::Unreal(loader) => Some(&loader.binaries),
-            Self::Bethesda(_) | Self::RedEngine(_) => None,
+            Self::Bethesda(_) | Self::RedEngine(_) | Self::ReEngine(_) => None,
         }
     }
 
@@ -784,6 +793,10 @@ impl Adapter {
             Ok(placements)
         } else if matches!(self, Self::Bethesda(_)) && bethesda::has_fomod(files) {
             Err(InstallError::Fomod(name.to_owned()))
+        } else if matches!(self, Self::ReEngine(ReEngine { paks: false }))
+            && files.iter().any(|f| f.to_ascii_lowercase().ends_with(".pak"))
+        {
+            Err(InstallError::PatchPak(name.to_owned()))
         } else if let Some(kind) = NotAMod::of(files) {
             Err(InstallError::NotAMod {
                 name: name.to_owned(),

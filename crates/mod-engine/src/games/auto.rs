@@ -3,9 +3,9 @@
 //! adapter, and whose name exists on Nexus Mods. Its profile is derived
 //! from the disk and from Nexus, with nothing written by hand.
 //!
-//! Today: Unreal Engine (project folder found by `find_project`). The name
-//! must match exactly (case, ™ and ® aside): we don't guess. A hand-written
-//! profile still wins.
+//! Today: Unreal Engine (project folder found by `find_project`) and RE
+//! Engine (`re_chunk_000.pak` at the root). The name must match exactly
+//! (case, ™ and ® aside): we don't guess. A hand-written profile still wins.
 //!
 //! Nexus answers are kept on disk (`NexusGames`): the game scan doesn't
 //! repeat the request every time.
@@ -18,6 +18,7 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 
 use super::{GameProfile, NexusGame};
+use crate::detect::{Engine, detect_engine};
 use crate::loaders::framework::Framework;
 use crate::loaders::rules::InstallRules;
 use crate::loaders::unreal::find_project;
@@ -51,6 +52,72 @@ pub fn domain_of(profile_id: &str) -> Option<&str> {
 #[serde(deny_unknown_fields)]
 struct Template {
     frameworks: Vec<Framework>,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ReEngineTemplate {
+    pak_mods: Vec<String>,
+    reframework: Framework,
+    reframework_pages: HashMap<String, u32>,
+}
+
+fn re_engine_template() -> ReEngineTemplate {
+    // Embedded and tested: an error here is a Modalia bug.
+    toml::from_str(include_str!("../../../../games/auto/re-engine.toml")).expect("invalid RE Engine template")
+}
+
+/// Profile of a game found on Nexus, from its engine. `None` for an engine
+/// without an adapter.
+pub fn profile(found: &FoundGame, game_dir: &Path) -> Option<GameProfile> {
+    match detect_engine(game_dir) {
+        Engine::Unreal => unreal_profile(found, game_dir),
+        Engine::ReEngine => re_engine_profile(found, game_dir),
+        Engine::Unity | Engine::Unknown => None,
+    }
+}
+
+/// Profile of an RE Engine game found on Nexus, with REFramework. `None`
+/// if the folder isn't an RE Engine game.
+pub fn re_engine_profile(found: &FoundGame, game_dir: &Path) -> Option<GameProfile> {
+    if detect_engine(game_dir) != Engine::ReEngine {
+        return None;
+    }
+    let template = re_engine_template();
+    let reframework = Framework {
+        nexus_id: template.reframework_pages.get(&found.domain).copied(),
+        ..template.reframework
+    };
+    Some(GameProfile {
+        id: format!("{PREFIX}{}", found.domain),
+        name: found.name.clone(),
+        community: format!("nexus:{}", found.domain),
+        steam_app_ids: Vec::new(),
+        loader: "reengine".into(),
+        supported: true,
+        exe_names: root_exes(game_dir),
+        data_folder_name: None,
+        cover_url: None,
+        hero_url: None,
+        nexus: Some(NexusGame {
+            domain: found.domain.clone(),
+            game_id: found.game_id,
+        }),
+        install_rules: InstallRules::default(),
+        frameworks: vec![reframework],
+        mirrors: Vec::new(),
+        launchers: Vec::new(),
+        versions: Vec::new(),
+        plugins: None,
+        modded: None,
+        script_mods: None,
+    })
+}
+
+/// Does REFramework load `.pak` mods from `pak_mods/` in this RE Engine
+/// game (Nexus domain)?
+pub fn loads_pak_mods(domain: &str) -> bool {
+    re_engine_template().pak_mods.iter().any(|d| d == domain)
 }
 
 /// Profile of an Unreal game found on Nexus. `None` if the folder doesn't
@@ -89,6 +156,16 @@ pub fn unreal_profile(found: &FoundGame, game_dir: &Path) -> Option<GameProfile>
 /// Executables of an Unreal game: the root one (which launches the game),
 /// then the project's.
 fn unreal_exes(game_dir: &Path, project: &str) -> Vec<String> {
+    let mut exes = root_exes(game_dir);
+    let shipping = format!("{project}/Binaries/Win64/{project}-Win64-Shipping.exe");
+    if game_dir.join(&shipping).is_file() {
+        exes.push(shipping);
+    }
+    exes
+}
+
+/// Executables at the game root, except installers and crash reporters.
+fn root_exes(game_dir: &Path) -> Vec<String> {
     const NOT_THE_GAME: [&str; 4] = ["unins", "crash", "setup", "redist"];
     let mut exes: Vec<String> = fs::read_dir(game_dir)
         .into_iter()
@@ -102,10 +179,6 @@ fn unreal_exes(game_dir: &Path, project: &str) -> Vec<String> {
         })
         .collect();
     exes.sort();
-    let shipping = format!("{project}/Binaries/Win64/{project}-Win64-Shipping.exe");
-    if game_dir.join(&shipping).is_file() {
-        exes.push(shipping);
-    }
     exes
 }
 
@@ -117,9 +190,9 @@ pub fn candidate_names(game_dir: &Path) -> Vec<String> {
         .map(|n| n.to_string_lossy().into_owned())
         .into_iter()
         .collect();
-    if let Some(project) = find_project(game_dir) {
-        for exe in unreal_exes(game_dir, &project) {
-            if let Some(stem) = exe.strip_suffix(".exe").filter(|s| !s.contains('/')) {
+    if find_project(game_dir).is_some() || detect_engine(game_dir) == Engine::ReEngine {
+        for exe in root_exes(game_dir) {
+            if let Some(stem) = exe.strip_suffix(".exe") {
                 names.push(stem.to_owned());
             }
         }
@@ -292,5 +365,36 @@ mod tests {
 
         // No Unreal project: no profile.
         assert!(unreal_profile(&hogwarts(), dir.path()).is_none());
+    }
+
+    #[test]
+    fn an_re_engine_game_gets_a_nexus_profile_with_reframework() {
+        let dir = tempfile::tempdir().unwrap();
+        let game = dir.path().join("MonsterHunterWilds");
+        fs::create_dir_all(&game).unwrap();
+        for file in ["MonsterHunterWilds.exe", "CrashReport.exe", "re_chunk_000.pak"] {
+            fs::write(game.join(file), "").unwrap();
+        }
+        let wilds = FoundGame {
+            name: "Monster Hunter Wilds".into(),
+            domain: "monsterhunterwilds".into(),
+            game_id: 6993,
+        };
+
+        let found = profile(&wilds, &game).unwrap();
+        assert_eq!(found.id, "auto-monsterhunterwilds");
+        assert_eq!(found.loader, "reengine");
+        assert_eq!(found.exe_names, ["MonsterHunterWilds.exe"]);
+        let reframework = &found.frameworks[0];
+        assert_eq!(reframework.marker, "dinput8.dll");
+        // Its Nexus page in this game: a declared requirement installs it.
+        assert_eq!(reframework.key(), "nexus-93");
+        assert!(loads_pak_mods("monsterhunterwilds") && !loads_pak_mods("residentevil42023"));
+        assert_eq!(candidate_names(&game), ["MonsterHunterWilds"]);
+
+        // Not RE Engine: no profile.
+        fs::remove_file(game.join("re_chunk_000.pak")).unwrap();
+        assert!(re_engine_profile(&wilds, &game).is_none());
+        assert!(profile(&wilds, &game).is_none());
     }
 }

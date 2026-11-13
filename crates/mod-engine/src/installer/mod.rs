@@ -172,6 +172,9 @@ pub enum InstallError {
     /// FOMOD installer: options to pick, not offered yet.
     #[error("{0} comes with an installer that asks you to pick options, which Unalia doesn't support yet")]
     Fomod(String),
+    /// RE Engine game where a `.pak` only loads under a Capcom patch name.
+    #[error("{0} is a .pak that this game only loads under the name of one of its own patches, which Unalia doesn't do")]
+    PatchPak(String),
     #[error("{0} has no file to install")]
     NoFile(String),
     #[error("Unalia can't find the game's files: is it fully installed?")]
@@ -1304,6 +1307,40 @@ pub fn sync_plugins(state: &State, game: &str, game_dir: &Path, list: &Path) -> 
             .collect()
     };
     Ok(crate::loaders::bethesda::sync_plugins(game_dir, list, &deployed)?)
+}
+
+/// RE Engine games: REFramework's loose file loader is on while an enabled
+/// mod has files in `natives/`. Unalia only turns it on when it is off,
+/// and puts back what was there once no mod needs it; turned off by the
+/// player in between, it stays off. Returns `true` if it changed.
+pub fn sync_loose_files(state: &mut State, game: &str, game_dir: &Path) -> Result<bool, InstallError> {
+    use crate::loaders::reengine;
+
+    // What was there before Unalia turned it on (empty: nothing).
+    let key = format!("loose_files:{game}");
+    let needed = !state.is_vanilla(game)?
+        && state
+            .list(game)?
+            .iter()
+            .filter(|m| m.enabled)
+            .any(|m| m.deployment.files.iter().any(|f| reengine::is_loose(f)));
+    let current = reengine::loose_files(game_dir)?;
+    let on = current.as_deref() == Some("true");
+    match state.setting(&key)? {
+        None if needed && !on => {
+            reengine::set_loose_files(game_dir, Some("true"))?;
+            state.set_setting(&key, Some(current.as_deref().unwrap_or_default()))?;
+            Ok(true)
+        }
+        Some(previous) if !needed => {
+            if on {
+                reengine::set_loose_files(game_dir, Some(previous.as_str()).filter(|p| !p.is_empty()))?;
+            }
+            state.set_setting(&key, None)?;
+            Ok(on)
+        }
+        _ => Ok(false),
+    }
 }
 
 /// Enabled mods with at least one file gone from the game: game

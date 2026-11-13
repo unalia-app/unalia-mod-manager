@@ -159,7 +159,7 @@ fn target(parts: &[&str], all: &HashSet<String>, folder: &str) -> Option<String>
 }
 
 /// Safe, readable folder name taken from the mod name.
-fn folder_name(name: &str) -> String {
+pub(crate) fn folder_name(name: &str) -> String {
     let cleaned: String = name
         .chars()
         .map(|c| {

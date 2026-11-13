@@ -642,7 +642,7 @@ pub async fn install_file(
                 progress_emitter(&app, app_id, &mod_id),
             )
             .await;
-        sync_plugins(&state, app_id, &game);
+        sync_game_files(&mut state, app_id, &game);
         result
     };
     mods.end(app_id, &mod_id);
@@ -950,9 +950,17 @@ fn close_first(game: &KnownGame) -> String {
     )
 }
 
-/// Bethesda games: `plugins.txt` follows the placed mods. A failure doesn't
+/// The files that follow the placed mods: `plugins.txt` for Bethesda games,
+/// REFramework's loose file loader for RE Engine games. A failure doesn't
 /// undo the change: it is logged, the next one tries again.
-fn sync_plugins(state: &ModState, app_id: u32, game: &KnownGame) {
+fn sync_game_files(state: &mut ModState, app_id: u32, game: &KnownGame) {
+    if game.profile.loader == "reengine" {
+        match installer::sync_loose_files(state, &game_key(app_id), &game.dir) {
+            Ok(true) => log::info!("loose files loader switched in {}", game.dir.display()),
+            Ok(false) => {}
+            Err(error) => log::warn!("couldn't switch the loose files loader: {error}"),
+        }
+    }
     let Some(list) = game.profile.plugins_file() else {
         return;
     };
@@ -1006,7 +1014,7 @@ async fn run_nexus_install(
                 progress_emitter(app, app_id, mod_id),
             )
             .await;
-        sync_plugins(&state, app_id, game);
+        sync_game_files(&mut state, app_id, game);
         result
     };
     mods.end(app_id, mod_id);
@@ -1092,7 +1100,7 @@ pub async fn set_mod_enabled(
     let mut state = mods.state.lock().await;
     let value = installer::set_enabled(&mut state, &mods.paths, &game_key(app_id), &game.dir, &mod_id, enabled)
         .map_err(|e| error_message(&e))?;
-    sync_plugins(&state, app_id, &game);
+    sync_game_files(&mut state, app_id, &game);
     Ok(Outcome::Done { value })
 }
 
@@ -1113,7 +1121,7 @@ pub async fn uninstall_mod(
     let mut state = mods.state.lock().await;
     let removed = installer::uninstall(&mut state, &mods.paths, &key, &game.dir, &mod_id)
         .map_err(|e| error_message(&e))?;
-    sync_plugins(&state, app_id, &game);
+    sync_game_files(&mut state, app_id, &game);
     let at = Instant::now();
     mods.removed
         .lock()
@@ -1164,7 +1172,7 @@ pub async fn restore_mod(
         .ok_or("This mod can't be restored anymore.")?;
     let mut state = mods.state.lock().await;
     let restored = installer::restore(&mut state, &mods.paths, &game.dir, removed).map_err(|e| error_message(&e))?;
-    sync_plugins(&state, app_id, &game);
+    sync_game_files(&mut state, app_id, &game);
     Ok(restored)
 }
 
@@ -1185,7 +1193,7 @@ pub async fn revert_mod(
     let mut state = mods.state.lock().await;
     let reverted = installer::revert(&mut state, &mods.paths, &game_key(app_id), &game.dir, &mod_id, &package)
         .map_err(|e| error_message(&e))?;
-    sync_plugins(&state, app_id, &game);
+    sync_game_files(&mut state, app_id, &game);
     Ok(reverted)
 }
 
@@ -1245,7 +1253,7 @@ pub async fn create_mod_profile(
     let mut state = mods.state.lock().await;
     let list = installer::create_profile(&mut state, &mods.paths, &game_key(app_id), &game.dir, &name, copy)
         .map_err(|e| error_message(&e))?;
-    sync_plugins(&state, app_id, &game);
+    sync_game_files(&mut state, app_id, &game);
     Ok(list)
 }
 
@@ -1263,7 +1271,7 @@ pub async fn switch_mod_profile(
     let mut state = mods.state.lock().await;
     let list = installer::switch_profile(&mut state, &mods.paths, &game_key(app_id), &game.dir, &name)
         .map_err(|e| error_message(&e))?;
-    sync_plugins(&state, app_id, &game);
+    sync_game_files(&mut state, app_id, &game);
     Ok(list)
 }
 
@@ -1341,7 +1349,7 @@ pub async fn put_back_mods(
     for m in &missing {
         installer::put_back(&mut state, &mods.paths, &key, &game.dir, &m.id).map_err(|e| error_message(&e))?;
     }
-    sync_plugins(&state, app_id, &game);
+    sync_game_files(&mut state, app_id, &game);
     log::info!("put back {} mods in {key}", missing.len());
     Ok(missing.len())
 }
@@ -1517,7 +1525,7 @@ pub async fn reset_game(
         foreign::to_recycle_bin,
     )
     .map_err(|e| error_message(&e))?;
-    sync_plugins(&state, app_id, &game);
+    sync_game_files(&mut state, app_id, &game);
     // No more "Undo" for the mods removed just before.
     mods.removed.lock().unwrap().retain(|(game, _), _| *game != key);
     log::info!(
@@ -1551,8 +1559,8 @@ pub async fn play_game(
     }
     // A plugin removed by hand since: the list is brought back in line.
     let args = {
-        let state = mods.state.lock().await;
-        sync_plugins(&state, app_id, &game);
+        let mut state = mods.state.lock().await;
+        sync_game_files(&mut state, app_id, &game);
         let installed = state.list(&game_key(app_id)).map_err(crate::support::logged)?;
         if vanilla {
             Vec::new()
@@ -1668,7 +1676,7 @@ async fn end_vanilla(app: &AppHandle, app_id: u32, game: &KnownGame) {
         }
     };
     mods.vanilla.lock().unwrap().remove(&key);
-    sync_plugins(&state, app_id, game);
+    sync_game_files(&mut state, app_id, game);
     drop(state);
     let failed = failed
         .into_iter()
@@ -1896,7 +1904,7 @@ async fn apply_pending(app: &AppHandle, app_id: u32, game: &KnownGame) {
             }),
         }
     }
-    sync_plugins(&*mods.state.lock().await, app_id, game);
+    sync_game_files(&mut *mods.state.lock().await, app_id, game);
     let _ = app.emit(
         "pending-applied",
         AppliedEvent {

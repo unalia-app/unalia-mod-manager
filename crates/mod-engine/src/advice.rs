@@ -108,6 +108,10 @@ fn install(e: &InstallError) -> Advice {
             },
         ),
         InstallError::Fomod(_) => advice(true, "Pick another file of this mod if it has one, or check back soon."),
+        InstallError::PatchPak(_) => advice(
+            true,
+            "Pick its loose-file version if the mod has one (a natives folder): Unalia installs that one.",
+        ),
         InstallError::NoGameFiles => advice(
             true,
             "In Steam, verify the game's files (Properties > Installed Files), then try again.",

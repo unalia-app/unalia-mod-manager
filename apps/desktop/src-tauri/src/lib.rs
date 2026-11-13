@@ -166,17 +166,18 @@ async fn list_games(
         })
         .collect();
 
-    // Unreal games without a profile: recognized from their name on Nexus.
+    // Unreal and RE Engine games without a profile: recognized from their
+    // name on Nexus.
     let unknown: Vec<usize> = entries
         .iter()
         .enumerate()
-        .filter(|(_, e)| e.profile.is_none() && e.game.engine == Engine::Unreal)
+        .filter(|(_, e)| e.profile.is_none() && matches!(e.game.engine, Engine::Unreal | Engine::ReEngine))
         .map(|(i, _)| i)
         .collect();
     let names: Vec<String> = unknown.iter().map(|&i| entries[i].game.name.clone()).collect();
     for (i, found) in unknown.into_iter().zip(catalog.find_nexus_games(&names).await) {
         let entry = &mut entries[i];
-        if let Some(profile) = found.and_then(|f| auto::unreal_profile(&f, &entry.game.install_dir)) {
+        if let Some(profile) = found.and_then(|f| auto::profile(&f, &entry.game.install_dir)) {
             entry.moddable = true;
             entry.profile = Some(profile);
         }
@@ -356,10 +357,10 @@ async fn add_manual_game(
     Ok(app_id)
 }
 
-/// Unreal game without a profile, in `dir` or one of its folders (people
-/// often pick the parent folder), found on Nexus from the name of its
-/// folder or executable. Failure: the name looked up, if it really was an
-/// Unreal game.
+/// Unreal or RE Engine game without a profile, in `dir` or one of its
+/// folders (people often pick the parent folder), found on Nexus from the
+/// name of its folder or executable. Failure: the name looked up, if it
+/// really was such a game.
 async fn find_auto_game(catalog: &Catalog, dir: &Path) -> Result<(GameProfile, PathBuf), Option<String>> {
     let mut dirs = vec![dir.to_path_buf()];
     dirs.extend(
@@ -370,7 +371,10 @@ async fn find_auto_game(catalog: &Catalog, dir: &Path) -> Result<(GameProfile, P
             .filter(|e| e.file_type().is_ok_and(|t| t.is_dir()))
             .map(|e| e.path()),
     );
-    let Some(game_dir) = dirs.into_iter().find(|d| detect_engine(d) == Engine::Unreal) else {
+    let Some(game_dir) = dirs
+        .into_iter()
+        .find(|d| matches!(detect_engine(d), Engine::Unreal | Engine::ReEngine))
+    else {
         return Err(None);
     };
     let names = auto::candidate_names(&game_dir);
@@ -378,7 +382,7 @@ async fn find_auto_game(catalog: &Catalog, dir: &Path) -> Result<(GameProfile, P
     found
         .into_iter()
         .flatten()
-        .find_map(|f| auto::unreal_profile(&f, &game_dir))
+        .find_map(|f| auto::profile(&f, &game_dir))
         .map(|profile| (profile, game_dir.clone()))
         .ok_or_else(|| names.first().cloned())
 }

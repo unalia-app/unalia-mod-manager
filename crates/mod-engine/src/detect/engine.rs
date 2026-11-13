@@ -13,6 +13,8 @@ use serde::Serialize;
 pub enum Engine {
     Unity,
     Unreal,
+    /// Capcom's engine (Monster Hunter Wilds, Resident Evil…).
+    ReEngine,
     Unknown,
 }
 
@@ -22,6 +24,8 @@ pub fn detect_engine(game_dir: &Path) -> Engine {
         Engine::Unity
     } else if is_unreal(&root) {
         Engine::Unreal
+    } else if is_re_engine(&root) {
+        Engine::ReEngine
     } else {
         Engine::Unknown
     }
@@ -73,6 +77,12 @@ fn is_unreal(root: &[Entry]) -> bool {
                 .iter()
                 .any(|f| !f.is_dir && f.name.ends_with(".pak"))
         })
+}
+
+/// `re_chunk_000.pak` at the root: the first archive of every RE Engine
+/// game, its patches next to it.
+fn is_re_engine(root: &[Entry]) -> bool {
+    root.iter().any(|e| !e.is_dir && e.name == "re_chunk_000.pak")
 }
 
 /// The game's anti-cheat, from its files: at the root, or next to an Unreal
@@ -189,6 +199,14 @@ mod tests {
     fn data_folder_without_unity_markers_is_unknown() {
         let dir = game(&["Game.exe", "Game_Data/saves/slot1.sav"]);
         assert_eq!(detect_engine(dir.path()), Engine::Unknown);
+    }
+
+    #[test]
+    fn re_engine_has_its_first_archive_at_the_root() {
+        let wilds = game(&["MonsterHunterWilds.exe", "RE_CHUNK_000.PAK", "re_chunk_000.pak.sub_000.pak"]);
+        assert_eq!(detect_engine(wilds.path()), Engine::ReEngine);
+        let elsewhere = game(&["Game.exe", "data/re_chunk_000.pak"]);
+        assert_eq!(detect_engine(elsewhere.path()), Engine::Unknown);
     }
 
     #[test]

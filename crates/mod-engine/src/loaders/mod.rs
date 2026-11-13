@@ -7,6 +7,7 @@ pub mod bepinex;
 pub mod bethesda;
 pub mod framework;
 pub mod redengine;
+pub mod reengine;
 pub mod rules;
 pub mod unreal;
 

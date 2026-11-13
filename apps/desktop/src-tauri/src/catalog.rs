@@ -97,7 +97,7 @@ impl Catalog {
     pub fn auto_profile(&self, profile_id: &str, game_dir: &Path) -> Option<GameProfile> {
         let domain = auto::domain_of(profile_id)?;
         let found = self.nexus_games.lock().unwrap().by_domain(domain).cloned()?;
-        auto::unreal_profile(&found, game_dir)
+        auto::profile(&found, game_dir)
     }
 
     /// Thunderstore or Hexium, by its id (`InstalledMod::source`, the

@@ -15,7 +15,7 @@ const PROFILES: [&str; 4] = [
 ];
 
 /// Loaders of the hand-written profiles that Modalia knows how to install.
-pub const BUILTIN_LOADERS: [&str; 3] = ["bethesda", "redengine", "unreal"];
+pub const BUILTIN_LOADERS: [&str; 4] = ["bethesda", "redengine", "reengine", "unreal"];
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]

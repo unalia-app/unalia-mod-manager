@@ -7,6 +7,7 @@ All notable changes to Unalia Mod Manager. The format follows [Keep a Changelog]
 ### Added
 
 - My Mods: profiles. Give a game several lists of mods, like one for co-op and one for your full load order, and switch between them in one click. The mods of the other profiles are set aside, out of the game and out of the list, loader included: an empty profile plays the game as it shipped. Nothing is downloaded again.
+- Capcom's RE Engine games (Monster Hunter Wilds, Resident Evil Requiem, Resident Evil 4, Dragon's Dogma 2, Street Fighter 6…) are recognized and their Nexus Mods install in one click: Lua scripts, loose files (`natives`) and, in Monster Hunter Wilds, Resident Evil Requiem and Pragmata, `.pak` mods. REFramework installs by itself from its author's GitHub, with its loose file loader turned on while a mod needs it.
 
 ## [0.1.11] - 2026-11-05
 
