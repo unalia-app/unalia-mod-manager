@@ -14,6 +14,15 @@ pak_mods = [
     "residentevilrequiem",
 ]
 
+# Nexus name of a game when its store name differs. The remakes keep the
+# original's name on Steam, and on Nexus that name is the original game: an
+# RE Engine game with that name can only be the remake.
+[nexus_names]
+"Resident Evil 2" = "Resident Evil 2 (2019)"
+"Resident Evil 3" = "Resident Evil 3 (2020)"
+"Resident Evil 4" = "Resident Evil 4 (2023)"
+"Resident Evil 7 Biohazard" = "Resident Evil 7"
+
 # REFramework: Lua scripts, plugins, and the loaders of loose files
 # (`natives/`) and of `pak_mods/`. One `dinput8.dll` for every game, which
 # finds the game it runs in. Its author publishes it on GitHub after each

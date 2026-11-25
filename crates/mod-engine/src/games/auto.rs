@@ -58,6 +58,7 @@ struct Template {
 #[serde(deny_unknown_fields)]
 struct ReEngineTemplate {
     pak_mods: Vec<String>,
+    nexus_names: HashMap<String, String>,
     reframework: Framework,
     reframework_pages: HashMap<String, u32>,
 }
@@ -65,6 +66,24 @@ struct ReEngineTemplate {
 fn re_engine_template() -> ReEngineTemplate {
     // Embedded and tested: an error here is a Modalia bug.
     toml::from_str(include_str!("../../../../games/auto/re-engine.toml")).expect("invalid RE Engine template")
+}
+
+/// Name to look up on Nexus for a game of this engine: the store name,
+/// unless Nexus gives it to an older game (`nexus_names` of the RE Engine
+/// template: Resident Evil 4 is the 2005 game, the remake is Resident Evil
+/// 4 (2023)).
+pub fn nexus_name(name: &str, engine: Engine) -> String {
+    if engine == Engine::ReEngine {
+        let wanted = normalize(name);
+        if let Some(renamed) = re_engine_template()
+            .nexus_names
+            .into_iter()
+            .find_map(|(store, nexus)| (normalize(&store) == wanted).then_some(nexus))
+        {
+            return renamed;
+        }
+    }
+    name.to_owned()
 }
 
 /// Profile of a game found on Nexus, from its engine. `None` for an engine
@@ -190,12 +209,16 @@ pub fn candidate_names(game_dir: &Path) -> Vec<String> {
         .map(|n| n.to_string_lossy().into_owned())
         .into_iter()
         .collect();
-    if find_project(game_dir).is_some() || detect_engine(game_dir) == Engine::ReEngine {
+    let engine = detect_engine(game_dir);
+    if find_project(game_dir).is_some() || engine == Engine::ReEngine {
         for exe in root_exes(game_dir) {
             if let Some(stem) = exe.strip_suffix(".exe") {
                 names.push(stem.to_owned());
             }
         }
+    }
+    for name in &mut names {
+        *name = nexus_name(name, engine);
     }
     let mut seen = Vec::new();
     names.retain(|n| {
@@ -396,5 +419,35 @@ mod tests {
         fs::remove_file(game.join("re_chunk_000.pak")).unwrap();
         assert!(re_engine_profile(&wilds, &game).is_none());
         assert!(profile(&wilds, &game).is_none());
+    }
+
+    #[test]
+    fn a_remake_named_like_the_original_is_looked_up_as_the_remake() {
+        // On Nexus, "Resident Evil 4" is the 2005 game.
+        assert_eq!(
+            nexus_name("RESIDENT EVIL 4", Engine::ReEngine),
+            "Resident Evil 4 (2023)"
+        );
+        assert_eq!(
+            nexus_name("Resident Evil 2", Engine::ReEngine),
+            "Resident Evil 2 (2019)"
+        );
+        assert_eq!(
+            nexus_name("Monster Hunter Wilds", Engine::ReEngine),
+            "Monster Hunter Wilds"
+        );
+        // Only RE Engine runs the remakes.
+        assert_eq!(
+            nexus_name("Resident Evil 4", Engine::Unreal),
+            "Resident Evil 4"
+        );
+
+        let dir = tempfile::tempdir().unwrap();
+        let game = dir.path().join("Resident Evil 4");
+        fs::create_dir_all(&game).unwrap();
+        for file in ["re4.exe", "re_chunk_000.pak"] {
+            fs::write(game.join(file), "").unwrap();
+        }
+        assert_eq!(candidate_names(&game), ["Resident Evil 4 (2023)", "re4"]);
     }
 }

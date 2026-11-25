@@ -174,7 +174,10 @@ async fn list_games(
         .filter(|(_, e)| e.profile.is_none() && matches!(e.game.engine, Engine::Unreal | Engine::ReEngine))
         .map(|(i, _)| i)
         .collect();
-    let names: Vec<String> = unknown.iter().map(|&i| entries[i].game.name.clone()).collect();
+    let names: Vec<String> = unknown
+        .iter()
+        .map(|&i| auto::nexus_name(&entries[i].game.name, entries[i].game.engine))
+        .collect();
     for (i, found) in unknown.into_iter().zip(catalog.find_nexus_games(&names).await) {
         let entry = &mut entries[i];
         if let Some(profile) = found.and_then(|f| auto::profile(&f, &entry.game.install_dir)) {
