@@ -2,6 +2,7 @@ mod app_update;
 mod catalog;
 mod mods;
 mod support;
+mod vault;
 
 use std::collections::{HashMap, HashSet};
 use std::fs;

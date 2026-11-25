@@ -331,7 +331,7 @@ async fn the_real_reframework_lands_at_the_game_root() {
     let mut w = World::wilds().await;
     w.publish(1001, "Ver.R Body", &[], &[("natives/STM/Art/body.mesh.2109148288", b"mesh")])
         .await;
-    let github = GitHub::new(mod_engine::http_client());
+    let github = GitHub::new(mod_engine::http_client("test"));
     let link = NxmLink::parse("nxm://monsterhunterwilds/mods/1001/files/10010?key=k&expires=1").unwrap();
     let installer = Installer {
         source: &w.nexus,

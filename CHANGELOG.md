@@ -7,6 +7,7 @@ All notable changes to Unalia Mod Manager. The format follows [Keep a Changelog]
 ### Fixed
 
 - Resident Evil 2, 3 and 4: the remakes were taken for the original games of the same name, with their Nexus Mods page. They now open on the remake's page. Resident Evil 7 Biohazard is recognized too.
+- Nexus Mods, Thunderstore and the other services received a wrong version number from Unalia. They now get the real one.
 
 ## [0.1.12] - 2026-11-13
 

@@ -1,7 +1,8 @@
 //! **Nexus Mods** source (nexusmods.com).
 //!
 //! - Search, mod page, files and requirements: public GraphQL v2 API.
-//! - Account and download links: REST v1 API, with the user's API key.
+//! - Account and download links: REST v1 API, with the user's OAuth
+//!   login (`nexus_oauth`).
 //!
 //! Nexus keeps direct downloads through the API for Premium accounts. A
 //! free account clicks "Mod Manager Download" on the site, which opens an
@@ -16,6 +17,7 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
+use super::nexus_oauth::Session;
 use super::{
     Dependency, Mod, ModCategory, ModSource, ModSummary, ModVersion, Page, SearchQuery, Sort,
     SourceError,
@@ -330,21 +332,45 @@ impl Requirement {
 
 /// Sent with every request, as the API acceptable use policy asks: the same
 /// name from one version to the next, and the current version.
-const APPLICATION_NAME: &str = "Unalia Mod Manager";
+pub(super) const APPLICATION_NAME: &str = "Unalia Mod Manager";
+
+/// Who asks for the downloads.
+#[derive(Clone)]
+enum Credentials {
+    /// Development only: Nexus doesn't allow personal keys in apps.
+    Key(String),
+    OAuth(Arc<Session>),
+}
+
+impl std::fmt::Debug for Credentials {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(match self {
+            Self::Key(_) => "Key",
+            Self::OAuth(_) => "OAuth",
+        })
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct Nexus {
     client: Client,
     graphql_url: String,
     api_url: String,
-    api_key: Arc<RwLock<Option<String>>>,
+    credentials: Arc<RwLock<Option<Credentials>>>,
+    /// Version of the app, not of the engine.
+    app_version: String,
     /// HTTPS-only download links, outside tests.
     require_https: bool,
 }
 
 impl Nexus {
-    pub fn new(client: Client) -> Self {
-        Self::with_urls(client, GRAPHQL_URL, API_URL)
+    pub fn new(client: Client, app_version: &str) -> Self {
+        Self::with_urls(client, GRAPHQL_URL, API_URL).with_app_version(app_version)
+    }
+
+    pub fn with_app_version(mut self, app_version: &str) -> Self {
+        self.app_version = app_version.to_owned();
+        self
     }
 
     /// For tests: fake servers.
@@ -353,21 +379,43 @@ impl Nexus {
             client,
             graphql_url: graphql_url.to_owned(),
             api_url: api_url.trim_end_matches('/').to_owned(),
-            api_key: Arc::default(),
+            credentials: Arc::default(),
+            app_version: "test".to_owned(),
             require_https: api_url.starts_with("https://"),
         }
     }
 
     pub fn set_api_key(&self, key: Option<String>) {
-        *self.api_key.write().unwrap() = key.filter(|k| !k.trim().is_empty());
+        *self.credentials.write().unwrap() = key
+            .filter(|k| !k.trim().is_empty())
+            .map(Credentials::Key);
+    }
+
+    /// `None`: logged out.
+    pub fn set_session(&self, session: Option<Arc<Session>>) {
+        *self.credentials.write().unwrap() = session.map(Credentials::OAuth);
+    }
+
+    pub fn session(&self) -> Option<Arc<Session>> {
+        match &*self.credentials.read().unwrap() {
+            Some(Credentials::OAuth(session)) => Some(Arc::clone(session)),
+            _ => None,
+        }
     }
 
     pub fn connected(&self) -> bool {
-        self.api_key.read().unwrap().is_some()
+        self.credentials.read().unwrap().is_some()
     }
 
-    /// Account tied to the API key (also checks the key).
+    /// The logged-in account (also checks the login).
     pub async fn account(&self) -> Result<Account, SourceError> {
+        if let Some(session) = self.session() {
+            let account = session.account().await;
+            if matches!(account, Err(SourceError::Unauthorized { .. })) {
+                self.end(&session);
+            }
+            return account;
+        }
         let user: User = self.rest("/users/validate.json").await?;
         Ok(Account {
             name: user.name,
@@ -618,7 +666,7 @@ impl Nexus {
             .client
             .post(&self.graphql_url)
             .header("Application-Name", APPLICATION_NAME)
-            .header("Application-Version", env!("CARGO_PKG_VERSION"))
+            .header("Application-Version", &self.app_version)
             .json(&json!({ "query": query, "variables": variables }))
             .send()
             .await
@@ -636,24 +684,48 @@ impl Nexus {
         })
     }
 
+    /// Forgets a login that Nexus ended, unless the user logged in again
+    /// meanwhile.
+    fn end(&self, ended: &Arc<Session>) {
+        let mut credentials = self.credentials.write().unwrap();
+        if matches!(&*credentials, Some(Credentials::OAuth(session)) if Arc::ptr_eq(session, ended)) {
+            *credentials = None;
+        }
+    }
+
     async fn rest<T: DeserializeOwned>(&self, path: &str) -> Result<T, SourceError> {
-        let key = self
-            .api_key
+        let credentials = self
+            .credentials
             .read()
             .unwrap()
             .clone()
             .ok_or(SourceError::NotConnected { source_name: NAME })?;
-        let response = self
-            .client
-            .get(format!("{}{path}", self.api_url))
-            .header("apikey", key)
+        let request = self.client.get(format!("{}{path}", self.api_url));
+        let request = match &credentials {
+            Credentials::Key(key) => request.header("apikey", key),
+            Credentials::OAuth(session) => match session.access_token().await {
+                Ok(token) => request.bearer_auth(token),
+                Err(error) => {
+                    if matches!(error, SourceError::Unauthorized { .. }) {
+                        self.end(session);
+                    }
+                    return Err(error);
+                }
+            },
+        };
+        let response = request
             .header("Application-Name", APPLICATION_NAME)
-            .header("Application-Version", env!("CARGO_PKG_VERSION"))
+            .header("Application-Version", &self.app_version)
             .send()
             .await
             .map_err(network)?;
         match response.status() {
-            StatusCode::UNAUTHORIZED => Err(SourceError::Unauthorized { source_name: NAME }),
+            StatusCode::UNAUTHORIZED => {
+                if let Credentials::OAuth(session) = &credentials {
+                    session.expire().await;
+                }
+                Err(SourceError::Unauthorized { source_name: NAME })
+            }
             StatusCode::FORBIDDEN => Err(SourceError::WebsiteOnly { source_name: NAME }),
             StatusCode::NOT_FOUND => Err(SourceError::NotFound { source_name: NAME }),
             StatusCode::TOO_MANY_REQUESTS => Err(SourceError::Unexpected {

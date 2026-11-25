@@ -23,13 +23,12 @@ pub mod store;
 pub use reqwest::Client as HttpClient;
 
 /// HTTP client shared by the blocks that talk to the sources. It identifies
-/// itself, as the public APIs ask.
-pub fn http_client() -> HttpClient {
+/// itself, as the public APIs ask. `app_version`: the app's, the engine has
+/// its own.
+pub fn http_client(app_version: &str) -> HttpClient {
     reqwest::Client::builder()
-        .user_agent(concat!(
-            "UnaliaModManager/",
-            env!("CARGO_PKG_VERSION"),
-            " (+https://github.com/unalia-app/unalia-mod-manager)"
+        .user_agent(format!(
+            "UnaliaModManager/{app_version} (+https://github.com/unalia-app/unalia-mod-manager)"
         ))
         // No total timeout: a big mod takes minutes to arrive. We only
         // drop a connection that stopped answering.

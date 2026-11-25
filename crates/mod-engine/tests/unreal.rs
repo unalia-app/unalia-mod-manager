@@ -320,7 +320,7 @@ async fn the_real_ue4ss_build_lands_in_the_right_place() {
     w.publish(8000, "No Stamina", &[("NoStamina/Scripts/main.lua", b"print('hi')")])
         .await;
 
-    let github = GitHub::new(mod_engine::http_client());
+    let github = GitHub::new(mod_engine::http_client("test"));
     let done = w.install_with(8000, &github, None).await.unwrap();
 
     let binaries = w.game.join(BINARIES);

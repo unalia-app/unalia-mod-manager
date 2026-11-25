@@ -576,10 +576,10 @@ export function onPendingApplied(handler: (event: PendingApplied) => void): Prom
 export type NexusAccount = { name: string; premium: boolean; avatarUrl: string | null };
 
 /**
- * `sso`: one-click login available (Modalia approved by Nexus).
- * `offline`: key saved but Nexus unreachable, `account` is the last recognized account.
+ * `canLogin`: login available (Modalia registered by Nexus).
+ * `offline`: logged in but Nexus unreachable, `account` is the last recognized account.
  */
-export type NexusStatus = { account: NexusAccount | null; sso: boolean; offline: boolean };
+export type NexusStatus = { account: NexusAccount | null; canLogin: boolean; offline: boolean };
 
 /** Nexus requirement that Modalia doesn't install by itself. */
 export type NexusRequirement = { modId: number | null; name: string; url: string | null; notes: string };
@@ -600,11 +600,11 @@ export type NexusInstalled = {
 };
 
 export function nexusStatus(): Promise<NexusStatus> {
-	if (!isTauri()) return Promise.resolve({ account: null, sso: false, offline: false });
+	if (!isTauri()) return Promise.resolve({ account: null, canLogin: false, offline: false });
 	return invoke("nexus_status");
 }
 
-/** One-click login: Nexus's authorization page opens, the key comes back by itself. */
+/** Login: Nexus's authorization page opens, the answer comes back by itself. */
 export function nexusLogin(): Promise<NexusAccount> {
 	return invoke("nexus_login");
 }

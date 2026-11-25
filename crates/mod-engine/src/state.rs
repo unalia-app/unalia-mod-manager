@@ -632,8 +632,7 @@ impl State {
         Ok(())
     }
 
-    /// App setting (e.g. the user's Nexus API key, which never leaves their
-    /// machine).
+    /// App setting (e.g. the last known Nexus account).
     pub fn setting(&self, key: &str) -> Result<Option<String>, StateError> {
         Ok(self
             .conn

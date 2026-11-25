@@ -131,7 +131,7 @@ function NexusCard() {
 							Disconnect
 						</Button>
 					)
-				) : status?.sso ? (
+				) : status?.canLogin ? (
 					<Button size="sm" disabled={busy} onClick={() => void connect()}>
 						{busy ? "Waiting for Nexus…" : "Connect Nexus Mods"}
 					</Button>
@@ -143,7 +143,7 @@ function NexusCard() {
 						browse Nexus mods and see their updates, but not download them from Unalia.
 					</p>
 				)}
-				{busy && status?.sso && (
+				{busy && status?.canLogin && (
 					<p className="mt-2 text-xs text-fg-subtle">Click Authorise on the Nexus Mods page that opened in your browser.</p>
 				)}
 			</div>

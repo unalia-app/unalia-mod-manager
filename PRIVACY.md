@@ -9,7 +9,7 @@
 - Your settings (interface size, recent games).
 - A log file of what the app did and the errors it met, kept small (`logs` folder).
 
-None of it is sent anywhere without you. **Settings > Support > Copy report** puts a report in your clipboard for a bug report: your versions, games, mods and recent logs, without your account name, API key or Windows user name. You decide where to paste it.
+None of it is sent anywhere without you. **Settings > Support > Copy report** puts a report in your clipboard for a bug report: your versions, games, mods and recent logs, without your account name, Nexus login or Windows user name. You decide where to paste it.
 
 A **Bug report** sent from Help & Feedback attaches the same report, so we can understand the bug. It is on by default, you see it before sending, and you can turn it off for that message.
 

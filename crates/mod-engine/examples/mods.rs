@@ -14,7 +14,7 @@ async fn main() {
     let app_id: u32 = args.next().and_then(|a| a.parse().ok()).unwrap_or(1030300);
     let text = args.next().unwrap_or_default();
 
-    let client = mod_engine::http_client();
+    let client = mod_engine::http_client("test");
     let cache = std::env::temp_dir().join("modalia-schema.json");
     let catalog = load_catalog(&client, SCHEMA_URL, &cache, Duration::from_secs(86_400))
         .await

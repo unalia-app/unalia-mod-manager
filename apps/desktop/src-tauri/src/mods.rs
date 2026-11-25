@@ -6,7 +6,7 @@
 
 use std::collections::{HashMap, HashSet};
 use std::path::{Path, PathBuf};
-use std::sync::Mutex as SyncMutex;
+use std::sync::{Arc, Mutex as SyncMutex};
 use std::time::{Duration, Instant};
 
 use mod_engine::download::Cancel;
@@ -18,6 +18,7 @@ use mod_engine::installer::{
 use mod_engine::launch::{self, LaunchTarget, PendingOp, ProcessWatcher};
 use mod_engine::sources::SourceError;
 use mod_engine::sources::nexus::{self as nexus_source, Account, NxmLink, Requirement};
+use mod_engine::sources::nexus_oauth::{OAuth, Session, Tokens};
 use mod_engine::state::{InstalledMod, ManualGame, ModProfile, State as ModState};
 use serde::{Deserialize, Serialize};
 use tauri::async_runtime::Mutex;
@@ -25,8 +26,8 @@ use tauri::{AppHandle, Emitter, Manager, State};
 use tauri_plugin_deep_link::DeepLinkExt;
 use tauri_plugin_opener::OpenerExt;
 
-use crate::catalog::Catalog;
-use crate::{KnownGame, Library};
+use crate::catalog::{APP_VERSION, Catalog};
+use crate::{KnownGame, Library, vault};
 
 /// How long a launched game stays "starting" before it shows up among the
 /// processes (Steam can take a while to launch it).
@@ -250,9 +251,11 @@ fn game_key(app_id: u32) -> String {
     format!("steam:{app_id}")
 }
 
-/// Removes the mods from every game (Unalia uninstalled, data deleted). A
+/// Removes the mods from every game (Unalia uninstalled, data deleted), and
+/// the Nexus login, which the system keeps outside the app data. A
 /// game that can't be found is skipped: it has no files left to clean.
 pub fn remove_all(data: &Path, steam_dirs: HashMap<u32, PathBuf>) {
+    vault::forget_nexus();
     let db = data.join("modalia.db");
     if !db.is_file() {
         return;
@@ -1937,7 +1940,8 @@ fn error_message(error: &(dyn std::error::Error + 'static)) -> String {
 
 // ---------------------------------------------------------------- Nexus
 
-/// Setting where the user's Nexus API key lives.
+/// Setting where a personal API key lived, until 0.1.7. Now empty after a
+/// deliberate logout, so that the dev `.env` key doesn't come back.
 const NEXUS_KEY: &str = "nexus_api_key";
 
 /// Last account recognized by Nexus: shown as is when offline.
@@ -1948,12 +1952,11 @@ async fn remember_account(mods: &Mods, account: Option<&Account>) {
     let _ = mods.state.lock().await.set_setting(NEXUS_ACCOUNT, value.as_deref());
 }
 
-/// At startup: the Nexus key (only in dev, `NEXUS_API_KEY` from the `.env`
-/// at the repo root), and `nxm://` links.
+/// At startup: the Nexus login (else, only in dev, `NEXUS_API_KEY` from the
+/// `.env` at the repo root), and `nxm://` links.
 ///
 /// Nexus doesn't allow personal API keys in apps: they must use its OAuth
-/// login, which Unalia waits for. A key pasted in 0.1.7 or earlier is
-/// deleted here, never used.
+/// login. A key pasted in 0.1.7 or earlier is deleted here, never used.
 pub fn nexus_setup(app: &AppHandle) {
     let saved = tauri::async_runtime::block_on(async {
         let mods = app.state::<Mods>();
@@ -1971,9 +1974,15 @@ pub fn nexus_setup(app: &AppHandle) {
         Some(saved) if saved.is_empty() => None,
         _ => dev_env("NEXUS_API_KEY"),
     };
-    let connected = key.is_some();
-    app.state::<Catalog>().nexus.set_api_key(key);
-    if connected {
+    let catalog = app.state::<Catalog>();
+    let login = nexus_oauth(&catalog).zip(vault::load_nexus());
+    match login {
+        Some((oauth, refresh)) => catalog
+            .nexus
+            .set_session(Some(nexus_session(oauth, Tokens::from_refresh(refresh)))),
+        None => catalog.nexus.set_api_key(key),
+    }
+    if catalog.nexus.connected() {
         register_nxm(app);
     }
 
@@ -2020,18 +2029,34 @@ fn register_nxm(app: &AppHandle) {
     let _ = app;
 }
 
-/// Application id that Nexus gives to the mod managers it approves, for
-/// one-click login (SSO). Pending: while it is missing, there is no login
-/// and nothing downloads from Nexus.
-const NEXUS_SSO_APP: Option<&str> = None;
+/// Id that Nexus gives to the apps it registers, for their login. Pending:
+/// while it is missing, there is no login and nothing downloads from Nexus.
+const NEXUS_CLIENT_ID: Option<&str> = None;
+
+/// `None`: no login available.
+fn nexus_oauth(catalog: &Catalog) -> Option<OAuth> {
+    Some(OAuth::new(catalog.client.clone(), NEXUS_CLIENT_ID?, APP_VERSION))
+}
+
+/// Login whose renewals go to the system's vault.
+fn nexus_session(oauth: OAuth, tokens: Tokens) -> Arc<Session> {
+    Session::new(oauth, tokens, |tokens| match tokens {
+        Some(tokens) => {
+            if let Err(error) = vault::save_nexus(tokens.refresh_token()) {
+                log::warn!("couldn't keep the Nexus login in the system's vault: {error}");
+            }
+        }
+        None => vault::forget_nexus(),
+    })
+}
 
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct NexusStatus {
     account: Option<Account>,
-    /// One-click login available (Modalia approved by Nexus).
-    sso: bool,
-    /// Key saved but Nexus unreachable: `account` is the last recognized
+    /// Login available (Modalia registered by Nexus).
+    can_login: bool,
+    /// Logged in but Nexus unreachable: `account` is the last recognized
     /// account (missing if it was never checked).
     offline: bool,
 }
@@ -2043,7 +2068,7 @@ pub async fn nexus_status(
 ) -> Result<NexusStatus, String> {
     let mut status = NexusStatus {
         account: None,
-        sso: NEXUS_SSO_APP.is_some(),
+        can_login: NEXUS_CLIENT_ID.is_some(),
         offline: false,
     };
     if !catalog.nexus.connected() {
@@ -2059,59 +2084,60 @@ pub async fn nexus_status(
             status.account = saved.and_then(|s| serde_json::from_str(&s).ok());
             status.offline = true;
         }
+        // Login ended by Nexus: logged out, free to log in again.
+        Err(SourceError::Unauthorized { .. }) => remember_account(&mods, None).await,
         Err(error) => return Err(error.to_string()),
     }
     Ok(status)
 }
 
-/// One-click login: Nexus's authorization page opens in the browser, the
-/// key comes back by itself.
+/// Login: Nexus's authorization page opens in the browser, the answer comes
+/// back by itself.
 #[tauri::command]
 pub async fn nexus_login(
     app: AppHandle,
     catalog: State<'_, Catalog>,
     mods: State<'_, Mods>,
 ) -> Result<Account, String> {
-    let application = NEXUS_SSO_APP.ok_or("Nexus Mods hasn't approved Unalia's login yet.")?;
+    let oauth = nexus_oauth(&catalog).ok_or("Nexus Mods hasn't approved Unalia's login yet.")?;
     let opener = app.clone();
-    let key = mod_engine::sources::nexus_sso::login(
-        mod_engine::sources::nexus_sso::SSO_URL,
-        application,
-        move |url| {
+    let tokens = oauth
+        .login(move |url| {
             let _ = opener.opener().open_url(url, None::<&str>);
-        },
-    )
-    .await
-    .map_err(|e| error_message(&e))?;
-    save_nexus_key(&app, &catalog, &mods, key).await
-}
-
-/// Keeps a key only if Nexus recognizes it.
-async fn save_nexus_key(
-    app: &AppHandle,
-    catalog: &Catalog,
-    mods: &Mods,
-    key: String,
-) -> Result<Account, String> {
-    let previous = catalog.nexus.connected();
-    catalog.nexus.set_api_key(Some(key.clone()));
-    let account = match catalog.nexus.account().await {
+        })
+        .await
+        .map_err(|e| error_message(&e))?;
+    let refresh = tokens.refresh_token().to_owned();
+    let session = nexus_session(oauth, tokens);
+    end_nexus_session(&catalog).await;
+    // Kept before its first use, which could already renew it.
+    let checked = match vault::save_nexus(&refresh) {
+        Ok(()) => session.account().await.map_err(|e| error_message(&e)),
+        Err(error) => Err(error_message(&error)),
+    };
+    let account = match checked {
         Ok(account) => account,
-        Err(error) => {
-            if !previous {
-                catalog.nexus.set_api_key(None);
-            }
-            return Err(error.to_string());
+        Err(message) => {
+            let _ = session.log_out().await;
+            return Err(message);
         }
     };
-    mods.state
-        .lock()
-        .await
-        .set_setting(NEXUS_KEY, Some(&key))
-        .map_err(crate::support::logged)?;
-    remember_account(mods, Some(&account)).await;
-    register_nxm(app);
+    catalog.nexus.set_session(Some(session));
+    remember_account(&mods, Some(&account)).await;
+    register_nxm(&app);
     Ok(account)
+}
+
+/// Logs out of Nexus, here and on its side. Nexus unreachable: this computer
+/// forgets the login all the same.
+async fn end_nexus_session(catalog: &Catalog) {
+    let session = catalog.nexus.session();
+    catalog.nexus.set_session(None);
+    if let Some(session) = session
+        && let Err(error) = session.log_out().await
+    {
+        log::warn!("couldn't revoke the Nexus login: {error}");
+    }
 }
 
 #[tauri::command]
@@ -2119,7 +2145,7 @@ pub async fn nexus_disconnect(
     catalog: State<'_, Catalog>,
     mods: State<'_, Mods>,
 ) -> Result<(), String> {
-    catalog.nexus.set_api_key(None);
+    end_nexus_session(&catalog).await;
     remember_account(&mods, None).await;
     // Empty rather than missing: a deliberate logout holds, even in dev
     // with a key in the `.env`.

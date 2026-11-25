@@ -6,7 +6,7 @@
 pub mod github;
 pub mod hexium;
 pub mod nexus;
-pub mod nexus_sso;
+pub mod nexus_oauth;
 pub mod thunderstore;
 
 use std::future::Future;
@@ -149,7 +149,7 @@ pub enum SourceError {
     NotFound { source_name: &'static str },
     #[error("downloads from {source_name} are paused until it approves Unalia's login")]
     NotConnected { source_name: &'static str },
-    #[error("{source_name} refused your API key")]
+    #[error("{source_name} ended your login")]
     Unauthorized { source_name: &'static str },
     #[error("{source_name} limits requests per hour: try again in {minutes} min")]
     RateLimited {

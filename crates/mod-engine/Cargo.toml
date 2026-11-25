@@ -9,21 +9,20 @@ description = "Modalia engine: game detection, sources, loaders, mod deployment"
 [dependencies]
 flate2 = "1"
 fs4 = "1"
-reqwest = { version = "0.13", features = ["json", "query", "gzip"] }
+reqwest = { version = "0.13", features = ["form", "json", "query", "gzip"] }
 rusqlite = { version = "0.40", features = ["bundled"] }
 serde.workspace = true
 serde_json.workspace = true
 sha2 = "0.11"
 sysinfo = { version = "0.39", default-features = false, features = ["system"] }
 thiserror.workspace = true
-tokio = { version = "1", features = ["rt", "sync", "time", "macros"] }
+tokio = { version = "1", features = ["rt", "sync", "time", "macros", "net", "io-util"] }
 zip = { version = "9", default-features = false, features = ["deflate"] }
 image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
 sevenz-rust2 = { version = "0.24.1", default-features = false, features = ["bzip2", "ppmd"] }
 toml = "1.1.8"
-tokio-tungstenite = { version = "0.30.0", features = ["rustls-tls-webpki-roots"] }
+base64 = "0.22"
 uuid = { version = "1.28.0", features = ["v4"] }
-futures-util = { version = "0.3.34", default-features = false, features = ["sink"] }
 md-5 = "0.11.0"
 unrar = "0.5.8"
 trash = "5.2.9"

@@ -19,9 +19,9 @@ function subscribe(listener: () => void) {
 
 function load() {
 	if (loading) return;
-	// Key refused: behave as logged out.
+	// Login refused: behave as logged out.
 	loading = nexusStatus()
-		.then(set, () => set({ account: null, sso: false, offline: false }))
+		.then(set, () => set({ account: null, canLogin: false, offline: false }))
 		.finally(() => {
 			loading = null;
 		});
@@ -53,7 +53,7 @@ export function useNexusAccount(): NexusAccount | null | undefined {
 }
 
 function connected(account: NexusAccount) {
-	set({ sso: status?.sso ?? false, offline: false, account });
+	set({ canLogin: status?.canLogin ?? false, offline: false, account });
 	return account;
 }
 
@@ -63,5 +63,5 @@ export async function loginNexus(): Promise<NexusAccount> {
 
 export async function disconnectNexus() {
 	await nexusDisconnect();
-	set({ sso: status?.sso ?? false, offline: false, account: null });
+	set({ canLogin: status?.canLogin ?? false, offline: false, account: null });
 }

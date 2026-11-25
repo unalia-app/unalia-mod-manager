@@ -23,7 +23,7 @@ fn catalog() -> GameCatalog {
 #[tokio::test]
 #[ignore]
 async fn nexus_queries_match_the_real_schema() {
-    let nexus = Nexus::new(mod_engine::http_client());
+    let nexus = Nexus::new(mod_engine::http_client("test"), "test");
     for sort in [Sort::Popular, Sort::Downloads, Sort::Newest, Sort::Updated] {
         let page = nexus
             .search(
@@ -90,7 +90,7 @@ async fn nexus_account_and_free_download_rules() {
         eprintln!("NEXUS_API_KEY not set: skipped");
         return;
     };
-    let nexus = Nexus::new(mod_engine::http_client());
+    let nexus = Nexus::new(mod_engine::http_client("test"), "test");
     nexus.set_api_key(Some(key));
     let account = nexus.account().await.unwrap();
     let info = nexus.mod_info("cyberpunk2077", 4198).await.unwrap();
@@ -110,7 +110,7 @@ async fn nexus_account_and_free_download_rules() {
 #[ignore]
 async fn every_framework_has_a_github_release_asset() {
     let catalog = catalog();
-    let github = GitHub::new(mod_engine::http_client());
+    let github = GitHub::new(mod_engine::http_client("test"));
     // Every hand-written profile (Cyberpunk, Phantom Blade Zero…).
     let frameworks = catalog.games().iter().flat_map(|g| g.frameworks.iter());
     for framework in frameworks {
@@ -139,8 +139,8 @@ async fn real_framework_archives_land_in_the_right_place() {
     let tmp = tempfile::tempdir().unwrap();
     let game = tmp.path().join("Cyberpunk 2077");
     std::fs::create_dir_all(game.join("bin/x64")).unwrap();
-    let client = mod_engine::http_client();
-    let nexus = Nexus::new(client.clone());
+    let client = mod_engine::http_client("test");
+    let nexus = Nexus::new(client.clone(), "test");
     let github = GitHub::new(client.clone());
     let paths = Paths {
         store: tmp.path().join("store"),
@@ -205,8 +205,8 @@ async fn verified_github_copies_spare_the_website() {
     };
     let catalog = catalog();
     let cyberpunk = catalog.by_steam_app_id(1091500).unwrap().clone();
-    let client = mod_engine::http_client();
-    let nexus = Nexus::new(client.clone());
+    let client = mod_engine::http_client("test");
+    let nexus = Nexus::new(client.clone(), "test");
     nexus.set_api_key(Some(key));
     let github = GitHub::new(client.clone());
     for mod_id in [4885, 4575] {
@@ -258,7 +258,7 @@ async fn hexium_catalog_matches_the_real_api() {
     use mod_engine::sources::hexium::Hexium;
     use mod_engine::sources::thunderstore::Thunderstore;
 
-    let client = mod_engine::http_client();
+    let client = mod_engine::http_client("test");
     let hexium = Hexium::new(client.clone(), Thunderstore::new(client));
     let communities = hexium.communities().await.unwrap();
     assert!(communities.iter().any(|c| c == "valheim"));

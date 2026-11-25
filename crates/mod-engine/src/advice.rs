@@ -224,7 +224,7 @@ mod tests {
         let error = InstallError::Source(SourceError::Unauthorized { source_name: "Nexus Mods" });
         assert_eq!(
             explain(&error),
-            "Nexus Mods refused your API key. Link your account again in Settings > Connections."
+            "Nexus Mods ended your login. Link your account again in Settings > Connections."
         );
         let error = InstallError::Archive {
             name: "Pack".into(),

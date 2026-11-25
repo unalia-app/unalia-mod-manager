@@ -65,7 +65,7 @@ export function Support() {
 				<h3 className="text-sm font-semibold text-fg">Report a problem</h3>
 				<p className="mt-0.5 max-w-xl text-xs leading-relaxed text-fg-subtle">
 					Copies your app and Windows versions, your games and their mods, and the recent logs. Paste it in your bug
-					report. It never includes your account name, your API key or your Windows user name.
+					report. It never includes your account name, your Nexus login or your Windows user name.
 				</p>
 				<div className="mt-4 flex flex-wrap items-center gap-2">
 					<Button

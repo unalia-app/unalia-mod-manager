@@ -24,6 +24,9 @@ use tauri::{AppHandle, Manager, State};
 /// The schema rarely moves: one update a day is enough.
 const SCHEMA_MAX_AGE: Duration = Duration::from_secs(24 * 3600);
 
+/// Told to the sources with each request.
+pub(crate) const APP_VERSION: &str = env!("CARGO_PKG_VERSION");
+
 pub struct Catalog {
     pub(crate) client: HttpClient,
     pub(crate) thunderstore: Thunderstore,
@@ -38,11 +41,11 @@ pub struct Catalog {
 impl Catalog {
     /// `cache_dir`: where to keep GitHub answers (hourly limit).
     pub fn new(cache_dir: &std::path::Path) -> Self {
-        let client = mod_engine::http_client();
+        let client = mod_engine::http_client(APP_VERSION);
         Self {
             thunderstore: Thunderstore::new(client.clone()),
             hexium: Hexium::new(client.clone(), Thunderstore::new(client.clone())),
-            nexus: Nexus::new(client.clone()),
+            nexus: Nexus::new(client.clone(), APP_VERSION),
             github: GitHub::new(client.clone())
                 .with_cache_file(cache_dir.join("github-releases.json"))
                 .with_token(crate::mods::dev_env("GITHUB_TOKEN")),
