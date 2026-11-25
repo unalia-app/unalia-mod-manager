@@ -59,7 +59,7 @@ Reads `.rar` archives. Bundled through the `unrar_sys` crate.
 
 ### Apache-2.0
 
-Used by: async-compression 0.4.51, atomic-waker 1.1.2, autocfg 1.5.1, base64 0.22.1, base64 0.23.1, bitflags 1.3.2, bitflags 2.13.2, bumpalo 3.20.3, bzip2 0.6.1, camino 1.2.6, cc 1.9.0, cfg-if 1.0.5, cmake 0.1.58, compression-codecs 0.4.46, compression-core 0.4.34, crossbeam-channel 0.5.17, crossbeam-utils 0.8.23, displaydoc 0.2.7, equivalent 1.0.3, fastrand 2.5.0, find-msvc-tools 0.1.15, flate2 1.1.10, fnv 1.0.7, form_urlencoded 1.2.2, fs4 1.1.0, glob 0.3.4, hashbrown 0.12.3, hashbrown 0.17.1, heck 0.5.0, html5ever 0.39.0, httparse 1.10.1, hyper-rustls 0.27.10, idna 1.1.0, idna_adapter 1.2.2, indexmap 1.9.3, indexmap 2.14.2, jobserver 0.1.35, lock_api 0.4.14, log 0.4.34, markup5ever 0.39.0, mime 0.3.17, muda 0.20.0, num-traits 0.2.19, once_cell 1.21.4, parking_lot 0.12.5, parking_lot_core 0.9.12, percent-encoding 2.3.2, pkg-config 0.3.34, png 0.17.16, png 0.18.1, regex 1.13.1, regex-automata 0.4.18, regex-syntax 0.8.11, ring 0.17.14, rustc_version 0.4.1, rustls 0.23.46, scopeguard 1.2.0, serde_with 3.24.0, serde_with_macros 3.24.0, servo_arc 0.4.3, smallvec 1.16.3, socket2 0.6.5, stable_deref_trait 1.2.1, string_cache 0.9.0, string_cache_codegen 0.6.1, tempfile 3.27.0, tendril 0.5.1, unicode-segmentation 1.13.3, url 2.5.8, uuid 1.28.0, version_check 0.9.5, web_atoms 0.2.6, window-vibrancy 0.8.1, wry 0.57.0.
+Used by: async-compression 0.4.51, atomic-waker 1.1.2, autocfg 1.5.1, base64 0.22.1, base64 0.23.1, bitflags 1.3.2, bitflags 2.13.2, bumpalo 3.20.3, bzip2 0.6.1, camino 1.2.6, cc 1.9.0, cfg-if 1.0.5, cmake 0.1.58, compression-codecs 0.4.46, compression-core 0.4.34, crossbeam-channel 0.5.17, crossbeam-utils 0.8.23, displaydoc 0.2.7, equivalent 1.0.3, fastrand 2.5.0, find-msvc-tools 0.1.15, flate2 1.1.10, fnv 1.0.7, form_urlencoded 1.2.3, fs4 1.1.0, glob 0.3.4, hashbrown 0.12.3, hashbrown 0.17.1, heck 0.5.0, html5ever 0.39.0, httparse 1.10.1, hyper-rustls 0.27.10, idna 1.1.0, idna_adapter 1.2.2, indexmap 1.9.3, indexmap 2.14.2, jobserver 0.1.35, lock_api 0.4.14, log 0.4.34, markup5ever 0.39.0, mime 0.3.17, muda 0.20.0, num-traits 0.2.19, once_cell 1.21.4, parking_lot 0.12.5, parking_lot_core 0.9.12, percent-encoding 2.3.2, pkg-config 0.3.34, png 0.17.16, png 0.18.1, regex 1.13.1, regex-automata 0.4.18, regex-syntax 0.8.11, ring 0.17.14, rustc_version 0.4.1, rustls 0.23.46, scopeguard 1.2.0, serde_with 3.24.0, serde_with_macros 3.24.0, servo_arc 0.4.3, smallvec 1.16.3, socket2 0.6.5, stable_deref_trait 1.2.1, string_cache 0.9.0, string_cache_codegen 0.6.1, tempfile 3.27.0, tendril 0.5.1, unicode-segmentation 1.13.3, url 2.5.9, uuid 1.28.0, version_check 0.9.5, web_atoms 0.2.6, window-vibrancy 0.8.1, wry 0.57.0.
 
 ```text
                               Apache License
@@ -5894,7 +5894,7 @@ limitations under the License.
 
 ### Apache-2.0
 
-Used by: cookie 0.18.2.
+Used by: cookie 0.18.3.
 
 ```text
                               Apache License
@@ -8900,7 +8900,7 @@ SOFTWARE.
 
 ### MIT
 
-Used by: libsqlite3-sys 0.38.2, rusqlite 0.40.2.
+Used by: libsqlite3-sys 0.40.0, rusqlite 0.43.0.
 
 ```text
 Copyright (c) 2014 The rusqlite developers
